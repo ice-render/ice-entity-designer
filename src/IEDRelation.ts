@@ -6,9 +6,9 @@
  *
  */
 /**
- * @class ICEEntity 实体
+ * @class IEDRelation 关系
  * @author 大漠穷秋<damoqiongqiu@126.com>
  */
-export default class ICEEntity {
+export default class IEDRelation {
   constructor() {}
 }

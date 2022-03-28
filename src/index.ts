@@ -5,5 +5,5 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-export { default as ICEEntity } from './ICEEntity';
-export { default as ICERelation } from './ICERelation';
+export { default as IEDEntity } from './IEDEntity';
+export { default as IEDRelation } from './IEDRelation';

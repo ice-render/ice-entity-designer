@@ -22,7 +22,7 @@
     "types:watch": "npm run types:check -- --watch"
   },
   "dependencies": {
-    "ice-render": "^0.0.4"
+    "ice-render": "^0.0.6"
   },
   "devDependencies": {
     "@babel/core": "7.17.8",
