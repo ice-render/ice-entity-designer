@@ -5,5 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-export { default as ICEEntity } from './ICEEntity';
-export { default as ICERelation } from './ICERelation';
+/**
+ * @class ICEEntity 实体
+ * @author 大漠穷秋<damoqiongqiu@126.com>
+ */
+export default class ICEEntity {
+  constructor() {}
+}
