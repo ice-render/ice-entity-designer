@@ -16,6 +16,7 @@
   </body>
   <script type="text/javascript">
         let ice = new ICE.ICE().init('canvas-1');
+        console.log(ice);
 
         document.querySelector('#btn-1').addEventListener('click', (evt) => {
           const jsonStr = ice.toJSON();
@@ -30,16 +31,34 @@
           ice.clearAll();
         });
 
+        // for(let i=0;i<100;i++){
+        //   let star=new ICE.ICEStar({
+        //     left:1024*Math.random(),
+        //     top: 768*Math.random(),
+        //     outerRadius: 50, //外圆半径
+        //     innerRadius: 20, //内圆半径
+        //     spikes: i%10,
+        //     style:{
+        //       strokeStyle:'#ff3300',
+        //       fillStyle:'#00eeff',
+        //     },
+        //     // transformable:false
+        //   });
+        //   ice.addChild(star);
+        // }
+
         let entity=new IED.IEDEntity({
-            left:1024*Math.random(),
-            top: 768*Math.random(),
-            width:100,
-            height:100,
+            left:100,
+            top: 100,
+            width:150,
+            height:200,
             style:{
               strokeStyle:'#ff3300',
               fillStyle:'#00eeff',
             },
           })
           ice.addChild(entity);
+
+          console.log(entity instanceof ICE.ICEGroup); 
   </script>
 </html>
