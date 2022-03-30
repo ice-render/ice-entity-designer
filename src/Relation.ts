@@ -5,14 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import { ICEGroup } from 'ice-render';
-
 /**
- * @class IEDEntity 实体
+ * @class Relation 关系
  * @author 大漠穷秋<damoqiongqiu@126.com>
  */
-export default class IEDEntity extends ICEGroup {
-  constructor(props) {
-    super(props);
-  }
+export default class Relation {
+  constructor() {}
 }

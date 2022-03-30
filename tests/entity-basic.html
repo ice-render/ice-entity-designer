@@ -16,13 +16,14 @@
   </body>
   <script type="text/javascript">
         let ice = new ICE.ICE().init('canvas-1');
-        console.log(ice);
-
         document.querySelector('#btn-1').addEventListener('click', (evt) => {
           const jsonStr = ice.toJSON();
           window.localStorage.setItem('json-data', jsonStr);
         });
         document.querySelector('#btn-2').addEventListener('click', (evt) => {
+          //FIXME:找一个合适的时机自动注册类型？
+          ice.registerType("Entity",IED.Entity);
+
           const jsonStr = window.localStorage.getItem('json-data');
           ice.fromJSON(jsonStr);
         });
@@ -31,23 +32,7 @@
           ice.clearAll();
         });
 
-        // for(let i=0;i<100;i++){
-        //   let star=new ICE.ICEStar({
-        //     left:1024*Math.random(),
-        //     top: 768*Math.random(),
-        //     outerRadius: 50, //外圆半径
-        //     innerRadius: 20, //内圆半径
-        //     spikes: i%10,
-        //     style:{
-        //       strokeStyle:'#ff3300',
-        //       fillStyle:'#00eeff',
-        //     },
-        //     // transformable:false
-        //   });
-        //   ice.addChild(star);
-        // }
-
-        let entity=new IED.IEDEntity({
+        let entity1=new IED.Entity({
             left:100,
             top: 100,
             width:150,
@@ -57,8 +42,32 @@
               fillStyle:'#00eeff',
             },
           })
-          ice.addChild(entity);
+          ice.addChild(entity1);
 
-          console.log(entity instanceof ICE.ICEGroup); 
+
+          let entity2=new IED.Entity({
+            left:500,
+            top: 100,
+            width:150,
+            height:200,
+            style:{
+              strokeStyle:'#ff3300',
+              fillStyle:'#00eeff',
+            },
+          })
+          ice.addChild(entity2);
+
+          let link1=new ICE.ICEVisioLink({
+            left: 0,
+            top: 0,
+            startPoint: [300, 300],
+            endPoint: [400, 400],
+            style: {
+              strokeStyle: '#08ee00',
+              fillStyle: '#008000',
+              lineWidth: 2,
+            },
+          });
+          ice.addChild(link1);
   </script>
 </html>
