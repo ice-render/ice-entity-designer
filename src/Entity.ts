@@ -25,7 +25,7 @@ export default class Entity extends ICEGroup {
   protected static arrangeParam(props) {
     let param = merge(
       {
-        entityName: 'Entity',
+        entityName: 'Entity Name',
         fields: [],
       },
       props,
@@ -33,15 +33,21 @@ export default class Entity extends ICEGroup {
         transformable: false,
       }
     );
+    if (isNil(param.entityName)) {
+      param.entityName = 'Entity Name';
+    }
+    if (isNil(param.fields)) {
+      param.fields = [];
+    }
     return param;
   }
 
   protected doRender(): void {
-    super.doRender();
     if (this.dirty) {
       this.syncEntityNameAndFields();
     }
     this.doLayout();
+    super.doRender();
   }
 
   protected syncEntityNameAndFields() {
@@ -51,18 +57,21 @@ export default class Entity extends ICEGroup {
         top: 0,
         text: this.state.entityName,
         style: {
-          strokeStyle: '#ff3300',
-          fillStyle: '#ff3300',
+          strokeStyle: '#333',
+          fillStyle: '#333',
           // lineWidth: 5,
           fontSize: 18,
           fontWeight: 'bold',
         },
+        interactive: false,
         stroke: false,
         // fill: false,
         showMinBoundingBox: true,
         showMaxBoundingBox: true,
       });
       this.addChild(this.entityNameComponent);
+
+      //分割线
     }
     if (!isNil(this.state.fields) && !this.entityFieldsComponent.length) {
       for (let i = 0; i < this.state.fields.length; i++) {
@@ -70,14 +79,15 @@ export default class Entity extends ICEGroup {
         let text = new ICEText({
           left: 0,
           top: 0,
-          text: `${field.name}: ${field.type}: ${field.length}`,
+          text: `${field.name}  ${field.type}  ${field.length}`,
           style: {
-            strokeStyle: '#ff3300',
-            fillStyle: '#ff3300',
+            strokeStyle: '#333',
+            fillStyle: '#333',
             // lineWidth: 5,
             fontSize: 18,
             fontWeight: 'normal',
           },
+          interactive: false,
           stroke: false,
           // fill: false,
           showMinBoundingBox: true,
@@ -90,9 +100,11 @@ export default class Entity extends ICEGroup {
   }
 
   protected doLayout() {
+    let maxWidth = this.state.width;
     let lastY = 0;
     if (this.entityNameComponent) {
       lastY = this.childNodes[0].state.height;
+      maxWidth = Math.max(maxWidth, this.childNodes[0].state.width);
     }
     for (let i = 0; i < this.entityFieldsComponent.length; i++) {
       const fieldComponent = this.entityFieldsComponent[i];
@@ -101,8 +113,11 @@ export default class Entity extends ICEGroup {
         top: lastY,
       });
       lastY += fieldComponent.state.height;
+      maxWidth = Math.max(maxWidth, fieldComponent.state.width);
     }
-    this.dirty = true;
-    this.ice && (this.ice.dirty = true);
+    this.setState({
+      height: Math.max(lastY, this.state.height),
+      width: maxWidth,
+    });
   }
 }

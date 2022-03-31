@@ -46,35 +46,66 @@
             entityName:'User',
             fields:[
               {
-                name:'name',
-                type:'string',
-                value:'大漠穷秋',
-                length:120,
+                name:'id',
+                type:'number',
+                length:64,
               },
               {
-                name:'age',
-                type:'number',
-                value:18,
-                length:120,
+                name:'userName',
+                type:'string',
+                length:64,
+              },
+              {
+                name:'password',
+                type:'string',
+                length:64,
+              },
+              {
+                name:'email',
+                type:'string',
+                length:128,
+              },
+              {
+                name:'cellPhone',
+                type:'string',
+                length:32,
               }
             ]
           })
           ice.addChild(entity1);
 
 
-          // let entity2=new IED.Entity({
-          //   left:500,
-          //   top: 100,
-          //   width:150,
-          //   height:200,
-          //   style:{
-          //     strokeStyle:'#ff3300',
-          //     fillStyle:'#00eeff',
-          //   },
-          //   showMinBoundingBox: true,
-          //   showMaxBoundingBox: true,
-          // })
-          // ice.addChild(entity2);
+          let entity2=new IED.Entity({
+            left:500,
+            top: 100,
+            width:150,
+            height:200,
+            style:{
+              strokeStyle:'#ff3300',
+              fillStyle:'#00eeff',
+            },
+            showMinBoundingBox: true,
+            showMaxBoundingBox: true,
+            entityName:'Role',
+            fields:[
+              {
+                name:'id',
+                type:'number',
+                length:64,
+              },
+              {
+                name:'roleName',
+                type:'string',
+                length:64,
+              },
+              {
+                name:'roleCode',
+                type:'string',
+                length:64,
+              }
+            ]
+          })
+          ice.addChild(entity2);
 
           let link1=new ICE.ICEVisioLink({
             left: 0,
