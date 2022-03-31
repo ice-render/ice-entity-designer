@@ -52,42 +52,53 @@ export default class Entity extends ICEGroup {
   }
 
   protected syncEntityNameAndFields() {
-    if (this.state.entityName && !this.entityNameComponent) {
-      this.entityNameComponent = new ICEText({
-        left: 0,
-        top: 0,
-        text: this.state.entityName,
-        style: {
-          strokeStyle: '#333',
-          fillStyle: '#333',
-          fontSize: 18,
-          fontWeight: 'bold',
-        },
-        interactive: false,
-        stroke: false,
-        showMinBoundingBox: false,
-        showMaxBoundingBox: false,
-      });
-      this.addChild(this.entityNameComponent);
+    if (this.state.entityName) {
+      if (!this.entityNameComponent) {
+        this.entityNameComponent = new ICEText({
+          left: 0,
+          top: 0,
+          text: this.state.entityName,
+          style: {
+            strokeStyle: '#333',
+            fillStyle: '#333',
+            fontSize: 18,
+            fontWeight: 'bold',
+            paddingTop: 10,
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingBottom: 10,
+          },
+          interactive: false,
+          stroke: false,
+          showMinBoundingBox: false,
+          showMaxBoundingBox: false,
+        });
+        this.addChild(this.entityNameComponent);
+      }
 
       //分隔线
-      this.deviderLine = new ICEPolyLine({
-        left: 0,
-        top: 0,
-        points: [
-          [0, 0],
-          [this.state.width, 0],
-        ],
-        style: {
-          strokeStyle: '#000',
-          fillStyle: '#000',
-          lineWidth: 2,
-        },
-      });
-      this.addChild(this.deviderLine);
+      if (!this.deviderLine) {
+        this.deviderLine = new ICEPolyLine({
+          left: 0,
+          top: 0,
+          points: [
+            [0, 0],
+            [this.state.width, 0],
+          ],
+          style: {
+            strokeStyle: '#000',
+            fillStyle: '#000',
+            lineWidth: 2,
+          },
+          interactive: false,
+        });
+        this.addChild(this.deviderLine);
+      }
     }
+
     if (!isNil(this.state.fields) && !this.entityFieldsComponent.length) {
-      for (let i = 0; i < this.state.fields.length; i++) {
+      const len = this.state.fields.length;
+      for (let i = 0; i < len; i++) {
         const field = this.state.fields[i];
         let text = new ICEText({
           left: 0,
@@ -98,6 +109,10 @@ export default class Entity extends ICEGroup {
             fillStyle: '#333',
             fontSize: 18,
             fontWeight: 'normal',
+            paddingTop: 10,
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingBottom: i === len - 1 ? 10 : 0,
           },
           interactive: false,
           stroke: false,
