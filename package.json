@@ -1,19 +1,19 @@
 {
   "author": "大漠穷秋",
   "name": "ice-entity-designer",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "An entity designer based on ice-render.",
   "repository": "https://gitee.com/ice-render/ice-entity-designer",
   "browser": "dist/index.umd.js",
   "main": "dist/index.cjs.js",
-  "module": "dist/index.esm.js",
+  "module": "dist/index.js",
   "types": "dist/types/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
     "start": "rollup -c -w  --environment NODE_ENV:development",
-    "build": "npm run clean && npm run build:js",
+    "build": "npm run clean && npm run build:types && npm run build:js",
     "build:js": "rollup -c --environment NODE_ENV:production",
     "build:types": "tsc --emitDeclarationOnly",
     "clean": "rimraf dist",
@@ -22,14 +22,14 @@
     "types:watch": "npm run types:check -- --watch"
   },
   "dependencies": {
-    "ice-render": "^0.0.31",
-    "lodash": "^4.17.21"
+    "ice-render": "^0.0.33",
+    "lodash": "4.17.21"
   },
   "devDependencies": {
     "@babel/core": "7.17.8",
     "@babel/plugin-proposal-class-properties": "7.16.7",
     "@babel/plugin-proposal-decorators": "7.17.8",
-    "@babel/preset-env": "^7.16.11",
+    "@babel/preset-env": "7.16.11",
     "@babel/preset-typescript": "7.9.0",
     "@commitlint/cli": "8.3.5",
     "@commitlint/config-conventional": "8.3.4",

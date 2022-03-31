@@ -5,3 +5,4 @@
 <h1 align="center">ice entity designer</h1>
 
 ## 简介
+Entity Designer based on ice-render.
