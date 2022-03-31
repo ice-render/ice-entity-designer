@@ -28,6 +28,10 @@ export default class Entity extends ICEGroup {
       {
         entityName: 'Entity Name',
         fields: [],
+        style: {
+          strokeStyle: '#000',
+          fillStyle: '#00eeff',
+        },
       },
       props,
       {
@@ -59,8 +63,8 @@ export default class Entity extends ICEGroup {
           top: 0,
           text: this.state.entityName,
           style: {
-            strokeStyle: '#333',
-            fillStyle: '#333',
+            strokeStyle: '#222',
+            fillStyle: '#222',
             fontSize: 18,
             fontWeight: 'bold',
             paddingTop: 10,
@@ -86,8 +90,8 @@ export default class Entity extends ICEGroup {
             [this.state.width, 0],
           ],
           style: {
-            strokeStyle: '#000',
-            fillStyle: '#000',
+            strokeStyle: '#333',
+            fillStyle: '#333',
             lineWidth: 2,
           },
           interactive: false,
@@ -105,8 +109,8 @@ export default class Entity extends ICEGroup {
           top: 0,
           text: `${field.name}  ${field.type}  ${field.length}`,
           style: {
-            strokeStyle: '#333',
-            fillStyle: '#333',
+            strokeStyle: '#222',
+            fillStyle: '#222',
             fontSize: 18,
             fontWeight: 'normal',
             paddingTop: 10,
