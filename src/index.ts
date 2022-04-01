@@ -5,5 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-export { default as Entity } from './Entity';
-export { default as Relation } from './Relation';
+export { default as Entity } from './er-component/Entity';
+export { default as Relation } from './er-component/Relation';
+export { default as toJSONObject } from './utils/serialization_util';

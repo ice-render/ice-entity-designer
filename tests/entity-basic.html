@@ -2,7 +2,7 @@
 
 <html lang="en">
   <meta charset="utf-8" />
-  <title>IED-index</title>
+  <title>IED-entity-relation</title>
   <body>
     <div>
       <button id="btn-1">保存</button>
@@ -18,7 +18,11 @@
         let ice = new ICE.ICE().init('canvas-1');
         document.querySelector('#btn-1').addEventListener('click', (evt) => {
           const jsonStr = ice.toJSON();
-          window.localStorage.setItem('json-data', jsonStr);
+          console.log(jsonStr);
+
+          const erObject=IED.toJSONObject(ice.childNodes);
+          console.log(erObject);
+          // window.localStorage.setItem('json-data', jsonStr);
         });
         document.querySelector('#btn-2').addEventListener('click', (evt) => {
           //FIXME:找一个合适的时机自动注册类型？
@@ -99,7 +103,7 @@
           })
           ice.addChild(entity2);
 
-          let link1=new ICE.ICEVisioLink({
+          let link1=new IED.Relation({
             left: 0,
             top: 0,
             startPoint: [300, 300],

@@ -11,6 +11,10 @@ import merge from 'lodash/merge';
 
 /**
  * @class Entity 实体
+ *
+ * 所有参数按照 typeorm 要求的格式传入。
+ *
+ * @see https://typeorm.io/#/separating-entity-definition
  * @author 大漠穷秋<damoqiongqiu@126.com>
  */
 export default class Entity extends ICEGroup {
@@ -174,5 +178,35 @@ export default class Entity extends ICEGroup {
       height: Math.max(lastY, this.state.height),
       width: maxWidth,
     });
+  }
+
+  /**
+   * 实体类的 JSON 格式描述，与 type-orm 规定的格式对应
+   *
+   * {
+   *     name: "category",
+   *     columns: {
+   *         id: {
+   *             type: Number,
+   *             primary: true,
+   *             generated: true
+   *         },
+   *         name: {
+   *             type: String
+   *         }
+   *     }
+   * }
+   *
+   * @see https://orkhan.gitbook.io/typeorm/docs/separating-entity-definition
+   */
+  public toEntityObject(): any {
+    let result = {
+      name: this.state.entityName,
+      columns: {},
+    };
+    this.state.fields.forEach((field, index) => {
+      result.columns[field.name] = { ...field };
+    });
+    return result;
   }
 }
