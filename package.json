@@ -1,9 +1,9 @@
 {
   "author": "大漠穷秋",
   "name": "ice-entity-designer",
-  "version": "0.0.6",
+  "version": "0.0.8",
   "description": "An entity designer based on ice-render.",
-  "repository": "https://gitee.com/ice-render/ice-entity-designer",
+  "repository": "https://github.com/ice-render/ice-entity-designer",
   "browser": "dist/index.umd.js",
   "main": "dist/index.cjs.js",
   "module": "dist/index.js",
@@ -22,7 +22,7 @@
     "types:watch": "npm run types:check -- --watch"
   },
   "dependencies": {
-    "ice-render": "^0.0.38",
+    "ice-render": "0.0.42",
     "lodash": "4.17.21"
   },
   "devDependencies": {
@@ -36,6 +36,7 @@
     "@rollup/plugin-commonjs": "21.0.2",
     "@rollup/plugin-json": "4.1.0",
     "@rollup/plugin-node-resolve": "13.1.3",
+    "@rollup/plugin-strip": "^2.1.0",
     "@types/jest": "25.2.1",
     "@types/lodash": "4.14.180",
     "@typescript-eslint/eslint-plugin": "2.29.0",

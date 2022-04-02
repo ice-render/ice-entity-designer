@@ -19,14 +19,14 @@
         document.querySelector('#btn-1').addEventListener('click', (evt) => {
           const jsonStr = ice.toJSON();
           console.log(jsonStr);
+          window.localStorage.setItem('json-data', jsonStr);
 
           const erObject=IED.toJSONObject(ice.childNodes);
           console.log(erObject);
-          // window.localStorage.setItem('json-data', jsonStr);
         });
         document.querySelector('#btn-2').addEventListener('click', (evt) => {
-          //FIXME:找一个合适的时机自动注册类型？
           ice.registerType("Entity",IED.Entity);
+          ice.registerType("Relation",IED.Relation);
 
           const jsonStr = window.localStorage.getItem('json-data');
           ice.fromJSON(jsonStr);
