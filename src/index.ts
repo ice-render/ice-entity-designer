@@ -7,4 +7,4 @@
  */
 export { default as Entity } from './er-component/Entity';
 export { default as Relation } from './er-component/Relation';
-export { default as toJSONObject } from './utils/serialization_util';
+export { toSchemaObject, toSchemaString } from './utils/serialization_util';

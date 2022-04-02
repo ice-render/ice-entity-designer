@@ -1,7 +1,7 @@
 import { camelCase } from './camelcase_util';
 import { pluralize } from './pluralize_util';
 
-export default function toJSONObject(componentList): any {
+export function toSchemaObject(componentList): object {
   let _objs = [...componentList];
   let entities = [];
   let relations = [];
@@ -79,4 +79,8 @@ export default function toJSONObject(componentList): any {
     result.push(cache[p]);
   }
   return result;
+}
+
+export function toSchemaString(componentList): string {
+  return JSON.stringify(toSchemaObject(componentList));
 }
