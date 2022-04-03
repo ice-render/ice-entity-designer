@@ -61,50 +61,58 @@ export default class Entity extends ICEGroup {
 
   protected syncEntityNameAndFields() {
     if (this.state.entityName) {
-      if (!this.entityNameComponent) {
-        this.entityNameComponent = new ICEText({
-          left: 0,
-          top: 0,
-          text: this.state.entityName,
-          style: {
-            strokeStyle: '#222',
-            fillStyle: '#222',
-            fontSize: 18,
-            fontWeight: 'bold',
-            paddingTop: 10,
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingBottom: 10,
-          },
-          interactive: false,
-          stroke: false,
-          showMinBoundingBox: false,
-          showMaxBoundingBox: false,
-        });
-        this.addChild(this.entityNameComponent);
+      //Entity 名称，先删再加
+      if (this.entityNameComponent) {
+        this.removeChild(this.entityNameComponent);
       }
+      this.entityNameComponent = new ICEText({
+        left: 0,
+        top: 0,
+        text: this.state.entityName,
+        style: {
+          strokeStyle: '#222',
+          fillStyle: '#222',
+          fontSize: 18,
+          fontWeight: 'bold',
+          paddingTop: 10,
+          paddingLeft: 10,
+          paddingRight: 10,
+          paddingBottom: 10,
+        },
+        interactive: false,
+        stroke: false,
+        showMinBoundingBox: false,
+        showMaxBoundingBox: false,
+      });
+      this.addChild(this.entityNameComponent);
 
-      //分隔线
-      if (!this.deviderLine) {
-        this.deviderLine = new ICEPolyLine({
-          left: 0,
-          top: 0,
-          points: [
-            [0, 0],
-            [this.state.width, 0],
-          ],
-          style: {
-            strokeStyle: '#333',
-            fillStyle: '#333',
-            lineWidth: 2,
-          },
-          interactive: false,
-        });
-        this.addChild(this.deviderLine);
+      //分隔线，先删再加
+      if (this.deviderLine) {
+        this.removeChild(this.deviderLine);
       }
+      this.deviderLine = new ICEPolyLine({
+        left: 0,
+        top: 0,
+        points: [
+          [0, 0],
+          [this.state.width, 0],
+        ],
+        style: {
+          strokeStyle: '#333',
+          fillStyle: '#333',
+          lineWidth: 2,
+        },
+        interactive: false,
+      });
+      this.addChild(this.deviderLine);
     }
 
-    if (!isNil(this.state.fields) && !this.entityFieldsComponent.length) {
+    //字段，先删再加
+    if (this.entityFieldsComponent.length) {
+      this.removeChildren(this.entityFieldsComponent);
+      this.entityFieldsComponent.length = 0;
+    }
+    if (!isNil(this.state.fields)) {
       const len = this.state.fields.length;
       for (let i = 0; i < len; i++) {
         const field = this.state.fields[i];
@@ -208,5 +216,13 @@ export default class Entity extends ICEGroup {
       result.columns[field.name] = { ...field };
     });
     return result;
+  }
+
+  public setState(newState: any): void {
+    this.state = { ...this.state, ...newState };
+    this.dirty = true;
+    if (this.ice) {
+      this.ice.dirty = true;
+    }
   }
 }

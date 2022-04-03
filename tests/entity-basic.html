@@ -115,5 +115,19 @@
           arrow:'end',
         });
         ice.addChild(link1);
+
+        setTimeout(() => {
+          console.log("update entity...");
+          entity1.setState({
+            entityName:"New Name",
+            fields:[
+              {
+                name:'id',
+                type:'number',
+                length:64,
+              }
+            ]
+          });
+        }, 3000);
   </script>
 </html>

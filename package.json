@@ -1,7 +1,7 @@
 {
   "author": "大漠穷秋",
   "name": "ice-entity-designer",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "An entity designer based on ice-render.",
   "repository": "https://github.com/ice-render/ice-entity-designer",
   "browser": "dist/index.umd.js",
