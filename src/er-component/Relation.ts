@@ -7,7 +7,6 @@
  */
 
 import { ICEVisioLink } from 'ice-render';
-import Entity from './Entity';
 
 /**
  * @class Relation
@@ -33,12 +32,18 @@ export default class Relation extends ICEVisioLink {
    */
   public toEntityObject(): any {
     let { title, relationType, referencedColumnName } = this.state;
-    let fromComponent = this.links.start.component as Entity;
-    let toComponent = this.links.end.component as Entity;
-    let fromId = fromComponent.state.id;
-    let fromName = fromComponent.state.entityName;
-    let toId = toComponent.state.id;
-    let toName = toComponent.state.entityName;
+    let fromComponent, toComponent, fromId, fromName, toId, toName;
+    if (this.state.links && this.state.links.start && this.state.links.start.id) {
+      fromId = this.state.links.start.id;
+      fromComponent = this.ice.findComponent(fromId);
+      fromName = fromComponent.state.entityName;
+    }
+    if (this.state.links && this.state.links.end && this.state.links.end.id) {
+      toId = this.state.links.end.id;
+      toComponent = this.ice.findComponent(toId);
+      toName = toComponent.state.entityName;
+    }
+
     let result = {
       title,
       fromId,
