@@ -25,6 +25,7 @@ export default class Entity extends ICEGroup {
   constructor(props) {
     let param = Entity.arrangeParam(props);
     super(param);
+    this.syncEntityNameAndFields();
   }
 
   protected static arrangeParam(props) {
@@ -51,20 +52,29 @@ export default class Entity extends ICEGroup {
     return param;
   }
 
-  protected doRender(): void {
-    if (this.dirty) {
-      this.syncEntityNameAndFields();
-    }
-    this.doLayout();
-    super.doRender();
-  }
-
+  /**
+   * @method syncEntityNameAndFields 同步实体名称和字段
+   * 实体名称和字段随时可能发生变化，当变化发生时，会把原有的实体名称和字段全部删除，然后重新创建新的实例。
+   * 此方法会在 constructor 和 setState 中被调用。
+   * @see setState
+   */
   protected syncEntityNameAndFields() {
+    //Entity 名称，先删除
+    if (this.entityNameComponent) {
+      this.removeChild(this.entityNameComponent);
+    }
+    //分隔线，先删除
+    if (this.deviderLine) {
+      this.removeChild(this.deviderLine);
+    }
+
+    //字段，先删除
+    if (this.entityFieldsComponent.length) {
+      this.removeChildren(this.entityFieldsComponent);
+      this.entityFieldsComponent.length = 0;
+    }
+
     if (this.state.entityName) {
-      //Entity 名称，先删再加
-      if (this.entityNameComponent) {
-        this.removeChild(this.entityNameComponent);
-      }
       this.entityNameComponent = new ICEText({
         left: 0,
         top: 0,
@@ -86,10 +96,6 @@ export default class Entity extends ICEGroup {
       });
       this.addChild(this.entityNameComponent);
 
-      //分隔线，先删再加
-      if (this.deviderLine) {
-        this.removeChild(this.deviderLine);
-      }
       this.deviderLine = new ICEPolyLine({
         left: 0,
         top: 0,
@@ -107,11 +113,6 @@ export default class Entity extends ICEGroup {
       this.addChild(this.deviderLine);
     }
 
-    //字段，先删再加
-    if (this.entityFieldsComponent.length) {
-      this.removeChildren(this.entityFieldsComponent);
-      this.entityFieldsComponent.length = 0;
-    }
     if (!isNil(this.state.fields)) {
       const len = this.state.fields.length;
       for (let i = 0; i < len; i++) {
@@ -142,18 +143,18 @@ export default class Entity extends ICEGroup {
   }
 
   /**
-   * @method doLayout 布局
+   * @overwrite
+   * @method calcComponentParams
    *
-   * 重新计算位置和尺寸
-   *
+   * @see ICEComponent.calcComponentParams
    * @author 大漠穷秋<damoqiongqiu@126.com>
    */
-  protected doLayout() {
+  protected calcComponentParams() {
     let maxWidth = this.state.width;
     let lastY = 0;
     let deviderLineY = 0;
 
-    //调整实体名称的位置和尺寸
+    //计算实体名称的位置和尺寸
     if (this.entityNameComponent) {
       lastY = this.childNodes[0].state.height;
       maxWidth = Math.max(maxWidth, this.childNodes[0].state.width);
@@ -161,7 +162,7 @@ export default class Entity extends ICEGroup {
       deviderLineY = lastY;
     }
 
-    //调整每个 ICEText 实例的位置和尺寸
+    //计算每个 ICEText 实例的位置和尺寸
     for (let i = 0; i < this.entityFieldsComponent.length; i++) {
       const fieldComponent = this.entityFieldsComponent[i];
       fieldComponent.setState({
@@ -172,7 +173,7 @@ export default class Entity extends ICEGroup {
       maxWidth = Math.max(maxWidth, fieldComponent.state.width);
     }
 
-    //调整分割线的位置和尺寸
+    //计算分割线的位置和尺寸
     if (this.deviderLine) {
       this.deviderLine.setState({
         points: [
@@ -182,10 +183,12 @@ export default class Entity extends ICEGroup {
       });
     }
 
-    this.setState({
-      height: Math.max(lastY, this.state.height),
-      width: maxWidth,
-    });
+    //根据计算出来的宽高调整容器的尺寸
+    const width = maxWidth;
+    const height = Math.max(lastY, this.state.height);
+    this.state.width = width;
+    this.state.height = height;
+    return { width, height };
   }
 
   /**
@@ -219,10 +222,18 @@ export default class Entity extends ICEGroup {
   }
 
   public setState(newState: any): void {
-    this.state = { ...this.state, ...newState };
-    this.dirty = true;
-    if (this.ice) {
-      this.ice.dirty = true;
+    let needSync = false;
+    if (!isNil(newState.fields)) {
+      this.state.fields = newState.fields;
+      needSync = true;
     }
+    if (!isNil(newState.entityName)) {
+      this.state.entityName = newState.entityName;
+      needSync = true;
+    }
+    if (needSync) {
+      this.syncEntityNameAndFields();
+    }
+    super.setState(newState);
   }
 }

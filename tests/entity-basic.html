@@ -116,7 +116,8 @@
         });
         ice.addChild(link1);
 
-        setTimeout(() => {
+        //双击动态修改 entityName 和 fields
+        ice.evtBus.on("dblclick",() => {
           console.log("update entity...");
           entity1.setState({
             entityName:"New Name",
@@ -128,6 +129,6 @@
               }
             ]
           });
-        }, 3000);
+        });
   </script>
 </html>
