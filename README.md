@@ -1,5 +1,5 @@
 <p align="center">
-<img width="150" src="./tests/assets/ice-render.png">
+<img width="150" src="./tests/assets/ice-entity-designer.png">
 </p>
 
 <h1 align="center">IED: ice entity designer</h1>
