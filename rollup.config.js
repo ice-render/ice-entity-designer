@@ -4,7 +4,6 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import strip from '@rollup/plugin-strip';
 import babel from 'rollup-plugin-babel';
 import { terser } from 'rollup-plugin-terser';
-import { uglify } from 'rollup-plugin-uglify';
 import pkg from './package.json';
 
 const { visualizer } = require('rollup-plugin-visualizer');
@@ -31,19 +30,6 @@ const CommonPlugins = [
     terser({
       keep_classnames: true,
       keep_fnames: true,
-    }),
-  env === 'production' &&
-    uglify({
-      keep_fnames: true,
-      output: {
-        comments: function (node, comment) {
-          if (comment.type === 'comment2') {
-            // multiline comment
-            return /@preserve|@license|@cc_on/i.test(comment.value);
-          }
-          return false;
-        },
-      },
     }),
   license({
     sourcemap: true,
