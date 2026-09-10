@@ -1,6 +1,6 @@
 import { createElement, forwardRef, Fragment, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { EntityDesignerContext } from './context';
-import { createDesignerSession } from './session';
+import { EntityDesignerProvider } from './context';
+import { createDesignerSession, shouldApplyControlledValue } from './session';
 import type { DesignerSession } from './session';
 import type { EntityDesignerCanvasProps, EntityDesignerHandle } from './types';
 
@@ -8,8 +8,10 @@ import type { EntityDesignerCanvasProps, EntityDesignerHandle } from './types';
  * <EntityDesignerCanvas> —— 在 React 中承载 ER 图设计器的画布组件。
  *
  * - 挂载时自动创建 ICE + EntityDesigner 会话，卸载时销毁（StrictMode 双挂载安全）。
- * - 通过 ref 暴露命令式 API；通过 onChange 回调输出项目快照与 TypeORM Schema。
- * - 子节点渲染在上下文内，可直接 useEntityDesigner() 取到底层 EntityDesigner。
+ * - 受控 / 非受控两种用法：
+ *     非受控：`defaultValue` 作初始快照；
+ *     受控：  `value` 变化时同步进画布，内部变更通过 `onChange` 向上汇报（带循环保护）。
+ * - 通过 ref 暴露命令式 API；子节点渲染在上下文内，可直接 useEntityDesigner()。
  */
 const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function EntityDesignerCanvas(props, ref) {
   const canvasRef = useRef<any>(null);
@@ -22,8 +24,12 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
   const onReadyRef = useRef(props.onReady);
   onReadyRef.current = props.onReady;
 
+  /** 最近一次「已同步进画布」的快照，用于受控模式的循环保护 */
+  const lastAppliedRef = useRef<string | null>(null);
+
   const width = props.width || 1200;
   const height = props.height || 800;
+  const initialProject = props.value !== undefined ? props.value : props.defaultValue;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,8 +39,9 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
 
     const session = createDesignerSession(canvas, {
       renderMode: props.renderMode,
-      initialProject: props.defaultValue,
+      initialProject,
       onChange: (snapshot) => {
+        lastAppliedRef.current = snapshot;
         const callback = onChangeRef.current;
         if (callback) {
           callback({ snapshot, schema: session.designer.toSchemaObject() });
@@ -42,6 +49,7 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
       },
     });
 
+    lastAppliedRef.current = initialProject !== undefined ? initialProject : null;
     sessionRef.current = session;
     setDesigner(session.designer);
     if (onReadyRef.current) {
@@ -53,9 +61,22 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
       sessionRef.current = null;
       setDesigner(null);
     };
-    // 只在挂载/卸载时执行；renderMode / defaultValue 属于初始参数，不参与重建
+    // 只在挂载/卸载时执行；renderMode / 初始快照属于初始参数，不参与重建
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 受控模式：外部 value 变化时同步进画布。
+  // 由内部变更触发的那次 onChange 会把 lastApplied 更新为同一值，因此这里会跳过，不会形成回环。
+  useEffect(() => {
+    if (!designer) {
+      return;
+    }
+    if (!shouldApplyControlledValue(props.value, lastAppliedRef.current)) {
+      return;
+    }
+    lastAppliedRef.current = props.value as string;
+    designer.loadProject(props.value as string);
+  }, [props.value, designer]);
 
   useImperativeHandle(ref, () => createHandle(sessionRef.current), [designer]);
 
@@ -77,7 +98,7 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
     ),
     // children 渲染在上下文内部，可直接用 useEntityDesigner() 操控同一实例；
     // 放在画布盒子之外，方便把工具条 / 侧栏排布在画布周围。
-    createElement(EntityDesignerContext.Provider, { value: designer }, props.children)
+    createElement(EntityDesignerProvider, { designer, children: props.children })
   );
 });
 

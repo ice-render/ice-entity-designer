@@ -78,11 +78,12 @@ npm install
 npm run build
 ```
 
-示例页面位于 `tests/`（会加载同级 `dist` 与 `node_modules`，建议通过静态服务器打开）：
+可运行的示例（`tests/` 下的页面会加载同级 `dist` 与 `node_modules`，建议通过静态服务器打开）：
 
 | 示例 | 说明 |
 |---|---|
 | `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
+| [`examples/react`](./examples/react) | React 集成示例工程（webpack + ts-loader）：ref / hook / onChange / 受控模式 |
 
 ```bash
 python3 -m http.server 8899   # 然后访问 http://localhost:8899/tests/entity-editor.html
@@ -176,13 +177,54 @@ export default function App() {
 }
 ```
 
-要点：
+### 6.1 取用实例的两种方式
 
-- **生命周期**：`<EntityDesignerCanvas>` 挂载时创建 ICE + EntityDesigner，卸载时销毁。引擎侧 `init` 幂等、`destroy` 会解绑全局监听与帧循环，因此 **React StrictMode 双挂载安全**。
-- **两种取用方式**：`ref`（命令式 API：`addEntity` / `connect` / `updateEntity` / `updateRelation` / `remove` / `undo` / `redo` / `loadProject` / `toSchemaObject` / `toSchemaString` / `validate` / `serializeProject`），或子树内的 `useEntityDesigner()`。
-- **变更回调**：`onChange({ snapshot, schema })` 在增删改 / 载入 / undo / redo 之后触发，`snapshot` 可直接用于自动保存。
+- **`ref`**：命令式 API —— `addEntity` / `connect` / `updateEntity` / `updateRelation` / `remove` / `loadProject` / `undo` / `redo` / `toSchemaObject` / `toSchemaString` / `validate` / `serializeProject`。
+- **`useEntityDesigner()`**：在 `<EntityDesignerCanvas>` 子树内直接取到底层 `EntityDesigner` 实例（如上例的 `Stats`）。
+
+### 6.2 组件属性
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `value` | `string` | **受控**：项目快照，变化时同步进画布（内部变更经 `onChange` 上报，带循环保护） |
+| `defaultValue` | `string` | **非受控**：初始项目快照 |
+| `onChange` | `(payload: { snapshot, schema }) => void` | 模型变更（增删改 / 载入 / undo / redo）后触发，`snapshot` 可直接用于自动保存 |
+| `onReady` | `(handle) => void` | 实例就绪，回调里拿到命令式句柄 |
+| `width` / `height` | `number` | 画布尺寸，默认 `1200 × 800` |
+| `renderMode` | `'dirty-rect' \| 'full'` | 渲染模式，默认 `dirty-rect` |
+| `style` / `className` | — | 作用于画布容器 |
+| `children` | `ReactNode` | 渲染在上下文内，可直接 `useEntityDesigner()` |
+
+### 6.3 受控用法
+
+```tsx
+const [project, setProject] = useState(initialJson);
+
+<EntityDesignerCanvas
+  value={project} // 外部改这个 → 同步进画布
+  onChange={({ snapshot }) => setProject(snapshot)} // 内部变更上报（同值回传不会重复载入，无回环）
+  width={1200}
+  height={800}
+/>
+```
+
+### 6.4 手动提供上下文
+
+如果自己创建会话（例如画布在别处、只共享实例），用 `EntityDesignerProvider` 把实例交给任意子树：
+
+```tsx
+import { createDesignerSession, EntityDesignerProvider } from 'ice-entity-designer/react';
+
+const session = createDesignerSession(canvasEl);
+// <EntityDesignerProvider designer={session.designer}><Toolbar /></EntityDesignerProvider>
+```
+
+### 6.5 注意事项
+
+- **生命周期 / StrictMode**：`<EntityDesignerCanvas>` 挂载时创建 ICE + EntityDesigner，卸载时销毁。引擎侧 `init` 幂等、`destroy` 会解绑全局监听与帧循环，因此 **React StrictMode 双挂载安全**。
 - **仅客户端渲染**：组件依赖 canvas，SSR（如 Next.js）请按客户端组件使用，例如 `dynamic(() => import('./Designer'), { ssr: false })`。
 - React 是**可选 peerDependency**（`^18 || ^19`），不使用 React 的项目不受影响。
+- **子路径解析**：现代解析器（webpack 5 / Vite / Node ESM）走 `exports`；老版本 TypeScript（< 4.7，或 `moduleResolution: "node"`）建议改用 `node16` / `bundler`，包内另提供 `react.d.ts` 垫片以兼容旧解析器。
 
 > 完整可运行示例（**webpack** 构建）：[`examples/react`](./examples/react)
 

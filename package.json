@@ -22,7 +22,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "react.js",
+    "react.d.ts"
   ],
   "scripts": {
     "start": "rollup -c -w  --environment NODE_ENV:development",

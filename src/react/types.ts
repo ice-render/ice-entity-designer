@@ -30,7 +30,12 @@ export type EntityDesignerHandle = {
 };
 
 export type EntityDesignerCanvasProps = {
-  /** 初始项目快照（非受控）：等价于 loadProject(defaultValue) */
+  /**
+   * 受控模式：项目快照。变化时会同步进画布（内部变更通过 onChange 上报，带循环保护）。
+   * 与 defaultValue 互斥，value 优先。
+   */
+  value?: string;
+  /** 非受控模式：初始项目快照（等价于 loadProject(defaultValue)） */
   defaultValue?: string;
   /** 渲染模式，默认 dirty-rect */
   renderMode?: 'dirty-rect' | 'full';

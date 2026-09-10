@@ -8,8 +8,9 @@
  * 也一并从这里导出，React 项目只需这一个导入点。
  */
 export { default as EntityDesignerCanvas } from './EntityDesignerCanvas';
-export { EntityDesignerContext, useEntityDesigner } from './context';
-export { createDesignerSession } from './session';
+export { EntityDesignerContext, EntityDesignerProvider, useEntityDesigner } from './context';
+export type { EntityDesignerProviderProps } from './context';
+export { createDesignerSession, shouldApplyControlledValue } from './session';
 export type { DesignerSession, DesignerSessionOptions } from './session';
 export type { EntityDesignerCanvasProps, EntityDesignerChangePayload, EntityDesignerHandle } from './types';
 

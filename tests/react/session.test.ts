@@ -38,7 +38,7 @@ jest.mock('../../src/index', () => {
   };
 });
 
-import { createDesignerSession } from '../../src/react/session';
+import { createDesignerSession, shouldApplyControlledValue } from '../../src/react/session';
 
 const MockICE: any = require('ice-render').ICE;
 const MockEntityDesigner: any = require('../../src/index').EntityDesigner;
@@ -104,5 +104,24 @@ describe('createDesignerSession', () => {
   it('没有 onChange 时不订阅', () => {
     createDesignerSession(fakeCanvas());
     expect(MockEntityDesigner.instances[0].subscribe).not.toHaveBeenCalled();
+  });
+});
+
+describe('受控模式的同步判定（shouldApplyControlledValue）', () => {
+  it('非受控（value 为 undefined）时不应用', () => {
+    expect(shouldApplyControlledValue(undefined, null)).toBe(false);
+    expect(shouldApplyControlledValue(undefined, '{"a":1}')).toBe(false);
+  });
+
+  it('外部新值与已应用值不同 → 应用', () => {
+    expect(shouldApplyControlledValue('{"b":2}', '{"a":1}')).toBe(true);
+  });
+
+  it('首次挂载（尚未应用过任何值）→ 应用', () => {
+    expect(shouldApplyControlledValue('{"a":1}', null)).toBe(true);
+  });
+
+  it('与最近一次已应用值相同（内部变更回传）→ 不应用，避免回环', () => {
+    expect(shouldApplyControlledValue('{"a":1}', '{"a":1}')).toBe(false);
   });
 });

@@ -52,3 +52,13 @@ export function createDesignerSession(canvas: any, options: DesignerSessionOptio
     },
   };
 }
+
+/**
+ * 受控模式：判断是否需要把外部 `value` 同步进画布。
+ *
+ * 内部变更会经 onChange 把同一份快照回传给外部（外部的 value 随之变成它），
+ * 此时 lastApplied 已经等于该值，因此这里返回 false，避免「onChange → setState → 再 loadProject」的回环。
+ */
+export function shouldApplyControlledValue(value: string | undefined, lastApplied: string | null | undefined): boolean {
+  return value !== undefined && value !== lastApplied;
+}
