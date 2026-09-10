@@ -64,10 +64,14 @@ export default class EntityDesigner {
 
   public createRelation(props: any = {}): any {
     this.captureHistory();
-    const sourceId = props.sourceId || props.fromId;
-    const targetId = props.targetId || props.toId;
-    const startPosition = props.startPosition || 'R';
-    const endPosition = props.endPosition || 'L';
+    const links = props.links || {
+      start: { id: props.sourceId || props.fromId, position: props.startPosition || 'R' },
+      end: { id: props.targetId || props.toId, position: props.endPosition || 'L' },
+    };
+    const sourceId = props.sourceId || props.fromId || (links.start && links.start.id);
+    const targetId = props.targetId || props.toId || (links.end && links.end.id);
+    const startPosition = (links.start && links.start.position) || props.startPosition || 'R';
+    const endPosition = (links.end && links.end.position) || props.endPosition || 'L';
     const source = sourceId ? this.ice.findComponent(sourceId) : null;
     const target = targetId ? this.ice.findComponent(targetId) : null;
     const startPoint = source ? this.__slotPoint(source, startPosition) : null;
@@ -77,10 +81,7 @@ export default class EntityDesigner {
       relationType: props.relationType || 'one-to-many',
       sourceField: props.sourceField || 'id',
       targetField: props.targetField || 'id',
-      links: props.links || {
-        start: { id: sourceId, position: startPosition },
-        end: { id: targetId, position: endPosition },
-      },
+      links,
       startPoint: startPoint || [0, 0],
       endPoint: endPoint || [10, 10],
       ...props,

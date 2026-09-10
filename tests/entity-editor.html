@@ -3,6 +3,11 @@
 <html lang="en">
   <meta charset="utf-8" />
   <title>IED-entity-editor</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5.26.5/dist/reset.css" />
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/antd@5.26.5/dist/antd.min.js"></script>
   <style>
     html,
     body {
@@ -20,12 +25,21 @@
       flex: 1;
       padding: 12px;
       min-width: 0;
+      overflow: auto;
     }
     .toolbar {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
       margin-bottom: 10px;
+    }
+    .toolbar-divider {
+      width: 1px;
+      height: 26px;
+      background: #cbd5e1;
+      margin: 0 2px;
+      align-self: center;
+      flex: 0 0 auto;
     }
     button,
     select,
@@ -55,7 +69,8 @@
     }
     canvas {
       display: block;
-      width: 100%;
+      width: 2200px;
+      height: 1700px;
       border: 1px solid #e2e8f0;
       border-radius: 12px;
       background: #f8fafc;
@@ -63,6 +78,7 @@
     }
     .canvas-wrap {
       position: relative;
+      overflow: auto;
     }
     .link-preview {
       position: absolute;
@@ -79,11 +95,12 @@
       fill: none;
     }
     .side {
-      width: 360px;
+      width: 560px;
       padding: 14px;
       border-left: 1px solid #e2e8f0;
       background: #ffffff;
       box-sizing: border-box;
+      overflow: auto;
     }
     .side h3 {
       margin: 0 0 10px;
@@ -132,6 +149,34 @@
       border-radius: 10px;
       white-space: pre-wrap;
     }
+    #entity-panel {
+      font-size: 12px;
+    }
+    #entity-panel .ant-table {
+      font-size: 12px;
+    }
+    #entity-panel .ant-table-thead > tr > th,
+    #entity-panel .ant-table-tbody > tr > td {
+      padding: 4px 6px !important;
+    }
+    #entity-panel .ant-table-cell .ant-input,
+    #entity-panel .ant-table-cell .ant-select-selector,
+    #entity-panel .ant-table-cell .ant-checkbox-wrapper {
+      font-size: 12px;
+    }
+    #entity-panel .ant-input,
+    #entity-panel .ant-select-selector {
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+    #entity-panel .ant-btn {
+      font-size: 12px;
+      height: 24px;
+      padding-inline: 7px;
+    }
+    #entity-panel .ant-form-item {
+      margin-bottom: 8px;
+    }
   </style>
   <body>
     <div class="app">
@@ -139,39 +184,43 @@
         <div class="toolbar">
           <button id="btn-add-entity" class="icon-btn" title="新增 Entity">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-            新增 Entity
           </button>
           <button id="btn-delete-selected" class="icon-btn" title="删除选中">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M8 6V4h8v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
-            删除选中
           </button>
           <button id="btn-undo" class="icon-btn" title="撤销">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
-            撤销
           </button>
           <button id="btn-redo" class="icon-btn" title="重做">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
-            重做
           </button>
           <button id="btn-validate" class="icon-btn" title="校验 Schema">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-            校验 Schema
           </button>
           <button id="btn-save-project" class="icon-btn" title="保存项目">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-            保存项目
           </button>
           <button id="btn-load-project" class="icon-btn" title="加载项目">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6A2 2 0 0 1 18.45 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v2" /></svg>
-            加载项目
           </button>
           <button id="btn-schema" class="icon-btn" title="输出 Schema">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
-            输出 Schema
           </button>
           <button id="btn-reset" class="icon-btn" title="重置视图">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
-            重置视图
+          </button>
+          <span class="toolbar-divider"></span>
+          <button id="btn-layout-horizontal" class="icon-btn" title="水平流程布局">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="7" r="2" /><circle cx="12" cy="17" r="2" /><circle cx="19" cy="12" r="2" /><line x1="7" y1="12" x2="10" y2="7.5" /><line x1="7" y1="12" x2="10" y2="16.5" /><line x1="14" y1="7" x2="17" y2="12" /><line x1="14" y1="17" x2="17" y2="12" /></svg>
+          </button>
+          <button id="btn-layout-vertical" class="icon-btn" title="垂直流程布局">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2" /><circle cx="7" cy="12" r="2" /><circle cx="17" cy="12" r="2" /><circle cx="12" cy="19" r="2" /><line x1="12" y1="7" x2="7.5" y2="10" /><line x1="12" y1="7" x2="16.5" y2="10" /><line x1="7" y1="14" x2="12" y2="17" /><line x1="17" y1="14" x2="12" y2="17" /></svg>
+          </button>
+          <button id="btn-layout-radial" class="icon-btn" title="径向树布局">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2" /><circle cx="12" cy="4" r="2" /><circle cx="19" cy="12" r="2" /><circle cx="12" cy="20" r="2" /><circle cx="5" cy="12" r="2" /><line x1="12" y1="10" x2="12" y2="6" /><line x1="14" y1="12" x2="17" y2="12" /><line x1="12" y1="14" x2="12" y2="18" /><line x1="10" y1="12" x2="7" y2="12" /></svg>
+          </button>
+          <button id="btn-layout-force" class="icon-btn" title="力导向布局">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="2" /><circle cx="19" cy="5" r="2" /><circle cx="5" cy="19" r="2" /><circle cx="19" cy="19" r="2" /><line x1="7" y1="6" x2="17" y2="6" /><line x1="7" y1="18" x2="17" y2="18" /><line x1="6" y1="7" x2="6" y2="17" /><line x1="18" y1="7" x2="18" y2="17" /><line x1="7" y1="6" x2="6" y2="7" /><line x1="17" y1="6" x2="18" y2="7" /></svg>
           </button>
           <select id="rel-type" title="关系类型">
             <option value="one-to-many">one-to-many</option>
@@ -181,12 +230,11 @@
           </select>
           <button id="btn-toggle-link" class="icon-btn" title="连接关系">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
-            连接关系
           </button>
         </div>
         <div class="canvas-wrap">
-          <canvas id="canvas-1" width="1200" height="760"></canvas>
-          <svg id="link-preview" class="link-preview" viewBox="0 0 1200 760" preserveAspectRatio="none">
+          <canvas id="canvas-1" width="2200" height="1700"></canvas>
+          <svg id="link-preview" class="link-preview" viewBox="0 0 2200 1700" preserveAspectRatio="none">
             <path id="link-preview-path" d="" />
           </svg>
         </div>
@@ -274,9 +322,14 @@
         return `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
       }
 
+      function canvasPoint(evt) {
+        return [evt.offsetX, evt.offsetY];
+      }
+
       canvasEl.addEventListener('mousedown', (evt) => {
         if (linkingMode) {
-          const hit = ice.hitTest(evt.offsetX, evt.offsetY);
+          const [px, py] = canvasPoint(evt);
+          const hit = ice.hitTest(px, py);
           const entity = findRootEntity(hit);
           if (entity) {
             evt.preventDefault();
@@ -306,28 +359,28 @@
           return;
         }
 
-        const blank = evt.button === 0 && !ice.hitTest(evt.offsetX, evt.offsetY);
+        const [px, py] = canvasPoint(evt);
+        const blank = evt.button === 0 && !ice.hitTest(px, py);
         if (evt.button !== 1 && !blank) return;
         evt.preventDefault();
         evt.stopPropagation();
         panning = true;
-        lastX = evt.offsetX;
-        lastY = evt.offsetY;
+        lastX = px;
+        lastY = py;
         canvasEl.style.cursor = 'grabbing';
       });
       canvasEl.addEventListener('mousemove', (evt) => {
         if (linkingMode && linkSource) {
-          const rect = canvasEl.getBoundingClientRect();
-          const mx = evt.offsetX * (canvasEl.width / rect.width);
-          const my = evt.offsetY * (canvasEl.height / rect.height);
+          const [mx, my] = canvasPoint(evt);
           const [sx, sy] = entityCenterInCanvas(linkSource);
           linkPreviewPath.setAttribute('d', orthogonalPreviewPath(sx, sy, mx, my));
         }
         if (!panning) return;
-        const dx = evt.offsetX - lastX;
-        const dy = evt.offsetY - lastY;
-        lastX = evt.offsetX;
-        lastY = evt.offsetY;
+        const [mx, my] = canvasPoint(evt);
+        const dx = mx - lastX;
+        const dy = my - lastY;
+        lastX = mx;
+        lastY = my;
         ice.setViewport(ice.viewport.scale, ice.viewport.tx + dx, ice.viewport.ty + dy);
       });
       canvasEl.addEventListener('mouseup', () => {
@@ -364,218 +417,735 @@
         }
       }
 
-      function renderPanel() {
-        const selected = designer.selected;
-        if (!selected) {
-          entityPanel.innerHTML = '点击画布中的 Entity 或 Relation 进行编辑';
-          return;
-        }
-
-        if (selected.constructor.name === 'Relation') {
-          renderRelationPanel(selected);
-          return;
-        }
-
-        const entity = selected;
-        const fields = [...(entity.state.fields || [])];
-        entityPanel.innerHTML = '';
-
-        const nameLabel = document.createElement('label');
-        nameLabel.textContent = '实体名称';
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.value = entity.state.entityName || '';
-        nameInput.style.width = '100%';
-        nameInput.addEventListener('input', () => {
-          designer.updateEntity(entity.state.id, { entityName: nameInput.value });
+      function fitViewportToContent(padding = 80) {
+        const entities = designer.entities;
+        if (!entities.length) return;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        entities.forEach((entity) => {
+          const box = entity.getMinBoundingBox(true);
+          minX = Math.min(minX, box.tl[0]);
+          minY = Math.min(minY, box.tl[1]);
+          maxX = Math.max(maxX, box.br[0]);
+          maxY = Math.max(maxY, box.br[1]);
         });
-        entityPanel.appendChild(nameLabel);
-        entityPanel.appendChild(nameInput);
+        const contentWidth = maxX - minX;
+        const contentHeight = maxY - minY;
+        if (contentWidth <= 0 || contentHeight <= 0) return;
+        const scale = Math.min(
+          (canvasEl.width - padding * 2) / contentWidth,
+          (canvasEl.height - padding * 2) / contentHeight,
+          1.25,
+        );
+        const tx = (canvasEl.width - contentWidth * scale) / 2 - minX * scale;
+        const ty = (canvasEl.height - contentHeight * scale) / 2 - minY * scale;
+        ice.setViewport(scale, tx, ty);
+      }
 
-        const fieldsTitle = document.createElement('div');
-        fieldsTitle.style.cssText = 'margin:12px 0 6px;font-weight:600;';
-        fieldsTitle.textContent = '字段列表';
-        entityPanel.appendChild(fieldsTitle);
+      function relationSlotPoint(component, position) {
+        const box = component.getMinBoundingBox(true);
+        switch (position) {
+          case 'T':
+            return [...box.tc];
+          case 'R':
+            return [...box.rc];
+          case 'B':
+            return [...box.bc];
+          case 'L':
+            return [...box.lc];
+          case 'C':
+          default:
+            return [...box.center];
+        }
+      }
 
-        fields.forEach((field, index) => {
-          const row = document.createElement('div');
-          row.className = 'field-row';
+      function routeRelations(direction) {
+        designer.relations.forEach((relation) => {
+          const startId = relation.state.links && relation.state.links.start && relation.state.links.start.id;
+          const endId = relation.state.links && relation.state.links.end && relation.state.links.end.id;
+          const source = startId ? ice.findComponent(startId) : null;
+          const target = endId ? ice.findComponent(endId) : null;
+          if (!source || !target) return;
 
-          const name = document.createElement('input');
-          name.type = 'text';
-          name.value = field.name || '';
-          name.placeholder = 'name';
+          const sourceBox = source.getMinBoundingBox(true);
+          const targetBox = target.getMinBoundingBox(true);
+          let startPosition = 'R';
+          let endPosition = 'L';
 
-          const type = document.createElement('input');
-          type.type = 'text';
-          type.value = field.type || '';
-          type.placeholder = 'type';
-
-          const length = document.createElement('input');
-          length.type = 'text';
-          length.value = field.length ?? '';
-          length.placeholder = 'len';
-
-          const remove = document.createElement('button');
-          remove.textContent = '删除';
-          remove.addEventListener('click', () => {
-            fields.splice(index, 1);
-            entity.setFields(fields);
-            renderPanel();
-          });
-
-          row.appendChild(name);
-          row.appendChild(type);
-          row.appendChild(length);
-          row.appendChild(remove);
-          entityPanel.appendChild(row);
-
-          const checks = document.createElement('div');
-          checks.className = 'checks';
-          [
-            ['primary', 'PK'],
-            ['foreignKey', 'FK'],
-            ['unique', 'UQ'],
-            ['autoIncrement', 'AI'],
-            ['nullable', 'NN'],
-            ['generated', 'GEN'],
-            ['index', 'IDX'],
-          ].forEach(([key, label]) => {
-            const labelEl = document.createElement('label');
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            if (key === 'nullable') {
-              checkbox.checked = field.nullable !== false;
+          if (source === target) {
+            startPosition = 'L';
+            endPosition = 'T';
+          } else if (direction === 'LR') {
+            startPosition = 'R';
+            endPosition = 'L';
+          } else if (direction === 'TB') {
+            startPosition = 'B';
+            endPosition = 'T';
+          } else {
+            const dx = targetBox.center[0] - sourceBox.center[0];
+            const dy = targetBox.center[1] - sourceBox.center[1];
+            if (Math.abs(dx) > Math.abs(dy)) {
+              startPosition = dx >= 0 ? 'R' : 'L';
+              endPosition = dx >= 0 ? 'L' : 'R';
             } else {
-              checkbox.checked = Boolean(field[key]);
+              startPosition = dy >= 0 ? 'B' : 'T';
+              endPosition = dy >= 0 ? 'T' : 'B';
             }
-            checkbox.addEventListener('change', () => {
-              if (key === 'nullable') {
-                field.nullable = checkbox.checked;
-              } else {
-                field[key] = checkbox.checked;
-              }
-              entity.setFields(fields);
+          }
+
+          const startPoint = relationSlotPoint(source, startPosition);
+          const endPoint = relationSlotPoint(target, endPosition);
+          relation.setState({
+            routeType: 'orthogonal',
+            routeOffset: 28,
+            links: {
+              start: { id: startId, position: startPosition },
+              end: { id: endId, position: endPosition },
+            },
+            startPoint,
+            endPoint,
+          });
+        });
+      }
+
+      function buildLayoutGraph() {
+        const nodes = designer.entities.map((entity) => ({
+          id: entity.state.id,
+          entity,
+          in: new Set(),
+          out: new Set(),
+          all: new Set(),
+        }));
+        const nodeMap = {};
+        nodes.forEach((node) => {
+          nodeMap[node.id] = node;
+        });
+
+        designer.relations.forEach((relation) => {
+          const start = relation.state.links && relation.state.links.start && relation.state.links.start.id;
+          const end = relation.state.links && relation.state.links.end && relation.state.links.end.id;
+          if (!start || !end || !nodeMap[start] || !nodeMap[end] || start === end) return;
+          nodeMap[start].out.add(end);
+          nodeMap[end].in.add(start);
+          nodeMap[start].all.add(end);
+          nodeMap[end].all.add(start);
+        });
+
+        return { nodes, nodeMap };
+      }
+
+      function computeRanks(nodes, nodeMap) {
+        const rank = {};
+        const visit = (id, stack) => {
+          if (rank[id] !== undefined) return rank[id];
+          if (stack.has(id)) return 0;
+          stack.add(id);
+          let maxPred = -1;
+          [...nodeMap[id].in].forEach((predId) => {
+            maxPred = Math.max(maxPred, visit(predId, stack));
+          });
+          rank[id] = maxPred + 1;
+          stack.delete(id);
+          return rank[id];
+        };
+        nodes.forEach((node) => visit(node.id, new Set()));
+        return rank;
+      }
+
+      function orderLayers(nodes, nodeMap, rank) {
+        const layers = {};
+        nodes.forEach((node) => {
+          (layers[rank[node.id]] = layers[rank[node.id]] || []).push(node);
+        });
+        const rankList = Object.keys(layers)
+          .map(Number)
+          .sort((a, b) => a - b);
+        rankList.forEach((r) => layers[r].forEach((node, index) => (node.order = index)));
+
+        for (let iter = 0; iter < 10; iter++) {
+          rankList.forEach((r, rankIndex) => {
+            const layer = layers[r];
+            const previousLayer = layers[rankList[rankIndex - 1]];
+            const nextLayer = layers[rankList[rankIndex + 1]];
+            const previousIds = new Set(previousLayer ? previousLayer.map((node) => node.id) : []);
+            const nextIds = new Set(nextLayer ? nextLayer.map((node) => node.id) : []);
+            layer.forEach((node) => {
+              const neighbors = [
+                ...[...node.in].filter((id) => previousIds.has(id)).map((id) => nodeMap[id]),
+                ...[...node.out].filter((id) => nextIds.has(id)).map((id) => nodeMap[id]),
+              ];
+              node.bary = neighbors.length
+                ? neighbors.reduce((sum, item) => sum + item.order, 0) / neighbors.length
+                : node.order;
             });
-            labelEl.appendChild(checkbox);
-            labelEl.appendChild(document.createTextNode(label));
-            checks.appendChild(labelEl);
+            layer.sort((a, b) => a.bary - b.bary || a.id.localeCompare(b.id));
+            layer.forEach((node, index) => (node.order = index));
           });
-          entityPanel.appendChild(checks);
+        }
 
-          const extras = document.createElement('div');
-          extras.className = 'field-extras';
-          const defaultInput = document.createElement('input');
-          defaultInput.type = 'text';
-          defaultInput.placeholder = 'default';
-          defaultInput.value = field.default ?? '';
-          const commentInput = document.createElement('input');
-          commentInput.type = 'text';
-          commentInput.placeholder = 'comment';
-          commentInput.value = field.comment ?? '';
-          extras.appendChild(defaultInput);
-          extras.appendChild(commentInput);
-          entityPanel.appendChild(extras);
+        return { layers, rankList };
+      }
 
-          const sync = () => {
-            field.name = name.value;
-            field.type = type.value || undefined;
-            field.length = length.value === '' ? undefined : length.value;
-            field.default = defaultInput.value === '' ? undefined : defaultInput.value;
-            field.comment = commentInput.value || undefined;
-            entity.setFields(fields);
+      function applyFlowLayout(direction) {
+        designer.captureHistory();
+        const { nodes, nodeMap } = buildLayoutGraph();
+        if (!nodes.length) return;
+        const rank = computeRanks(nodes, nodeMap);
+        const { layers, rankList } = orderLayers(nodes, nodeMap, rank);
+        const boxMap = {};
+        nodes.forEach((node) => {
+          boxMap[node.id] = node.entity.getMinBoundingBox(true);
+        });
+        const margin = 80;
+        const gapX = 130;
+        const gapY = 60;
+        const positions = {};
+
+        if (direction === 'LR') {
+          let x = margin;
+          rankList.forEach((r) => {
+            const layer = layers[r];
+            const maxWidth = layer.reduce((max, node) => Math.max(max, boxMap[node.id].width), 0);
+            let y = margin;
+            layer.forEach((node) => {
+              positions[node.id] = { x, y };
+              y += boxMap[node.id].height + gapY;
+            });
+            x += maxWidth + gapX;
+          });
+        } else {
+          let y = margin;
+          rankList.forEach((r) => {
+            const layer = layers[r];
+            const maxHeight = layer.reduce((max, node) => Math.max(max, boxMap[node.id].height), 0);
+            let x = margin;
+            layer.forEach((node) => {
+              positions[node.id] = { x, y };
+              x += boxMap[node.id].width + gapX;
+            });
+            y += maxHeight + gapY;
+          });
+        }
+
+        const positionList = nodes.map((node) => positions[node.id]);
+        const boxList = nodes.map((node) => boxMap[node.id]);
+        resolveOverlaps(positionList, boxList);
+        nodes.forEach((node, index) => {
+          node.entity.setPosition(positionList[index].x, positionList[index].y);
+        });
+        routeRelations(direction);
+        setLinkingMode(false);
+        fitViewportToContent();
+        refreshHistoryButtons();
+      }
+
+      function applyRadialLayout() {
+        designer.captureHistory();
+        const { nodes, nodeMap } = buildLayoutGraph();
+        if (!nodes.length) return;
+        const rootId =
+          nodes.reduce((best, node) => (node.all.size > best.all.size ? node : best), nodes[0]).id;
+        const depth = { [rootId]: 0 };
+        const queue = [rootId];
+        const visited = new Set([rootId]);
+        while (queue.length) {
+          const current = queue.shift();
+          [...nodeMap[current].all].forEach((next) => {
+            if (visited.has(next)) return;
+            visited.add(next);
+            depth[next] = depth[current] + 1;
+            queue.push(next);
+          });
+        }
+
+        const groups = {};
+        nodes.forEach((node) => {
+          const d = depth[node.id] === undefined ? 0 : depth[node.id];
+          (groups[d] = groups[d] || []).push(node);
+        });
+        const depthList = Object.keys(groups)
+          .map(Number)
+          .sort((a, b) => a - b);
+        const boxMap = {};
+        let maxW = 0;
+        let maxH = 0;
+        nodes.forEach((node) => {
+          const box = node.entity.getMinBoundingBox(true);
+          boxMap[node.id] = box;
+          maxW = Math.max(maxW, box.width);
+          maxH = Math.max(maxH, box.height);
+        });
+        const baseSpacing = Math.max(maxW, maxH) + 110;
+        const positions = {};
+
+        depthList.forEach((d) => {
+          const layer = groups[d] || [];
+          const count = layer.length;
+          const radius =
+            d === 0
+              ? 0
+              : Math.max(baseSpacing, ((Math.max(maxW, maxH) + 90) * count) / (Math.PI * 2)) +
+                (d - 1) * baseSpacing * 0.9;
+          layer.forEach((node, index) => {
+            if (d === 0) {
+              positions[node.id] = { x: -boxMap[node.id].width / 2, y: -boxMap[node.id].height / 2 };
+            } else {
+              const angle = -Math.PI / 2 + (index / count) * Math.PI * 2 + d * 0.7;
+              positions[node.id] = {
+                x: radius * Math.cos(angle) - boxMap[node.id].width / 2,
+                y: radius * Math.sin(angle) - boxMap[node.id].height / 2,
+              };
+            }
+          });
+        });
+
+        const positionList = nodes.map((node) => positions[node.id]);
+        const boxList = nodes.map((node) => boxMap[node.id]);
+        resolveOverlaps(positionList, boxList);
+        nodes.forEach((node, index) => {
+          node.entity.setPosition(positionList[index].x, positionList[index].y);
+        });
+        routeRelations(null);
+        setLinkingMode(false);
+        fitViewportToContent();
+        refreshHistoryButtons();
+      }
+
+      function resolveOverlaps(positions, boxes) {
+        let moved = false;
+        for (let iter = 0; iter < 260; iter++) {
+          moved = false;
+          for (let i = 0; i < positions.length; i++) {
+            for (let j = i + 1; j < positions.length; j++) {
+              const a = positions[i];
+              const b = positions[j];
+              const acx = a.x + boxes[i].width / 2;
+              const acy = a.y + boxes[i].height / 2;
+              const bcx = b.x + boxes[j].width / 2;
+              const bcy = b.y + boxes[j].height / 2;
+              const dx = bcx - acx;
+              const dy = bcy - acy;
+              const overlapX = (boxes[i].width + boxes[j].width) / 2 - Math.abs(dx);
+              const overlapY = (boxes[i].height + boxes[j].height) / 2 - Math.abs(dy);
+              if (overlapX <= 0 || overlapY <= 0) continue;
+              moved = true;
+              const push = overlapX < overlapY ? overlapX / 2 : overlapY / 2;
+              const length = Math.hypot(dx, dy) || 0.001;
+              const ux = dx / length;
+              const uy = dy / length;
+              if (overlapX < overlapY) {
+                a.x -= (ux >= 0 ? 1 : -1) * push;
+                b.x += (ux >= 0 ? 1 : -1) * push;
+              } else {
+                a.y -= (uy >= 0 ? 1 : -1) * push;
+                b.y += (uy >= 0 ? 1 : -1) * push;
+              }
+            }
+          }
+          if (!moved) break;
+        }
+      }
+
+      function applyForceLayout() {
+        designer.captureHistory();
+        const { nodes, nodeMap } = buildLayoutGraph();
+        if (!nodes.length) return;
+        const boxMap = {};
+        nodes.forEach((node) => {
+          boxMap[node.id] = node.entity.getMinBoundingBox(true);
+        });
+
+        const positions = nodes.map((node, index) => {
+          const col = index % 6;
+          const row = Math.floor(index / 6);
+          return {
+            id: node.id,
+            x: canvasEl.width / 2 + (col - 2.5) * 320 + Math.random() * 40,
+            y: canvasEl.height / 2 + (row - 2.5) * 260 + Math.random() * 40,
           };
-          name.addEventListener('input', sync);
-          type.addEventListener('input', sync);
-          length.addEventListener('input', sync);
-          defaultInput.addEventListener('input', sync);
-          commentInput.addEventListener('input', sync);
+        });
+        const posMap = {};
+        positions.forEach((item) => {
+          posMap[item.id] = item;
         });
 
-        const addField = document.createElement('button');
-        addField.textContent = '新增字段';
-        addField.addEventListener('click', () => {
-          entity.addField({ name: 'newField', type: 'string' });
-          renderPanel();
+        const area = canvasEl.width * canvasEl.height;
+        const ideal = Math.sqrt(area / nodes.length) * 0.9;
+        let temperature = Math.max(canvasEl.width, canvasEl.height) / 6;
+        const disp = positions.map(() => ({ x: 0, y: 0 }));
+
+        for (let iter = 0; iter < 260; iter++) {
+          disp.forEach((item) => {
+            item.x = 0;
+            item.y = 0;
+          });
+
+          for (let i = 0; i < positions.length; i++) {
+            for (let j = i + 1; j < positions.length; j++) {
+              const dx = positions[j].x - positions[i].x;
+              const dy = positions[j].y - positions[i].y;
+              const dist = Math.max(Math.hypot(dx, dy), 0.1);
+              const force = (ideal * ideal) / dist;
+              const ux = dx / dist;
+              const uy = dy / dist;
+              disp[i].x -= ux * force;
+              disp[i].y -= uy * force;
+              disp[j].x += ux * force;
+              disp[j].y += uy * force;
+            }
+          }
+
+          designer.relations.forEach((relation) => {
+            const start = relation.state.links && relation.state.links.start && relation.state.links.start.id;
+            const end = relation.state.links && relation.state.links.end && relation.state.links.end.id;
+            if (!start || !end || !posMap[start] || !posMap[end] || start === end) return;
+            const a = posMap[start];
+            const b = posMap[end];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.max(Math.hypot(dx, dy), 0.1);
+            const force = (dist * dist) / ideal;
+            const ux = dx / dist;
+            const uy = dy / dist;
+            disp[positions.indexOf(a)].x += ux * force;
+            disp[positions.indexOf(a)].y += uy * force;
+            disp[positions.indexOf(b)].x -= ux * force;
+            disp[positions.indexOf(b)].y -= uy * force;
+          });
+
+          positions.forEach((item, index) => {
+            const len = Math.hypot(disp[index].x, disp[index].y);
+            if (!len) return;
+            const capped = Math.min(len, temperature);
+            item.x += (disp[index].x / len) * capped;
+            item.y += (disp[index].y / len) * capped;
+          });
+          temperature *= 0.97;
+        }
+
+        const boxes = nodes.map((node) => boxMap[node.id]);
+        resolveOverlaps(positions, boxes);
+
+        positions.forEach((item) => {
+          const node = nodeMap[item.id];
+          node.entity.setPosition(item.x, item.y);
         });
-        entityPanel.appendChild(addField);
+        routeRelations(null);
+        setLinkingMode(false);
+        fitViewportToContent();
+        refreshHistoryButtons();
       }
 
-      function renderRelationPanel(relation) {
-        entityPanel.innerHTML = '';
-        const title = document.createElement('div');
-        title.style.cssText = 'margin-bottom:10px;font-weight:600;';
-        title.textContent = '关系属性';
-        entityPanel.appendChild(title);
+      const antdUI = window.antd || {};
+      const { Table = () => null, Input = () => null, Button = () => null, Checkbox = () => null, Space = () => null, Select = () => null, Typography = {}, Form = () => null } = antdUI;
+      let propertyPanelRoot = null;
 
-        const makeRow = (labelText, input) => {
-          const label = document.createElement('label');
-          label.textContent = labelText;
-          label.style.display = 'block';
-          label.style.marginBottom = '8px';
-          input.style.width = '100%';
-          label.appendChild(input);
-          entityPanel.appendChild(label);
-          return input;
-        };
-
-        const relationType = document.createElement('select');
-        ['one-to-many', 'many-to-one', 'one-to-one', 'many-to-many'].forEach((value) => {
-          const option = document.createElement('option');
-          option.value = value;
-          option.textContent = value;
-          relationType.appendChild(option);
-        });
-        relationType.value = relation.state.relationType || 'one-to-many';
-        relationType.addEventListener('change', () => {
-          designer.updateRelation(relation.state.id, { relationType: relationType.value });
-          renderPanel();
-        });
-        makeRow('关系类型', relationType);
-
-        const sourceField = document.createElement('input');
-        sourceField.type = 'text';
-        sourceField.value = relation.state.sourceField || 'id';
-        sourceField.addEventListener('input', () => {
-          designer.updateRelation(relation.state.id, { sourceField: sourceField.value || 'id' });
-        });
-        makeRow('源字段', sourceField);
-
-        const targetField = document.createElement('input');
-        targetField.type = 'text';
-        targetField.value = relation.state.targetField || 'id';
-        targetField.addEventListener('input', () => {
-          designer.updateRelation(relation.state.id, { targetField: targetField.value || 'id' });
-        });
-        makeRow('目标字段', targetField);
-
-        const makeActionSelect = (labelText, key) => {
-          const select = document.createElement('select');
-          ['', 'CASCADE', 'SET NULL', 'NO ACTION', 'RESTRICT'].forEach((value) => {
-            const option = document.createElement('option');
-            option.value = value;
-            option.textContent = value || '未设置';
-            select.appendChild(option);
-          });
-          select.value = relation.state[key] || '';
-          select.addEventListener('change', () => {
-            designer.updateRelation(relation.state.id, { [key]: select.value || undefined });
-          });
-          makeRow(labelText, select);
-        };
-
-        makeActionSelect('onDelete', 'onDelete');
-        makeActionSelect('onUpdate', 'onUpdate');
-
-        const joinTableName = document.createElement('input');
-        joinTableName.type = 'text';
-        joinTableName.value = relation.state.joinTableName || '';
-        joinTableName.placeholder = 'user_roles';
-        joinTableName.addEventListener('input', () => {
-          designer.updateRelation(relation.state.id, { joinTableName: joinTableName.value || undefined });
-        });
-        makeRow('joinTableName', joinTableName);
+      function commitField(entity, index, patch) {
+        const fields = [...(entity.state.fields || [])];
+        fields[index] = { ...fields[index], ...patch };
+        entity.setFields(fields);
       }
+
+      function removeField(entity, index) {
+        const fields = [...(entity.state.fields || [])];
+        fields.splice(index, 1);
+        entity.setFields(fields);
+      }
+
+      function commitFlag(entity, index, key, checked) {
+        if (key === 'nullable') {
+          commitField(entity, index, { nullable: checked });
+        } else {
+          commitField(entity, index, { [key]: checked });
+        }
+      }
+
+      function EntityFieldsTable({ entity, refresh }) {
+        const fields = (entity.state.fields || []).map((field, index) => ({ ...field, key: index }));
+        const flagDefs = [
+          ['primary', 'PK'],
+          ['foreignKey', 'FK'],
+          ['unique', 'UQ'],
+          ['autoIncrement', 'AI'],
+          ['nullable', 'NN'],
+          ['generated', 'GEN'],
+          ['index', 'IDX'],
+        ];
+
+        const inputProps = (value, placeholder, commit) => ({
+          defaultValue: value ?? '',
+          placeholder,
+          size: 'small',
+          onBlur: (evt) => {
+            commit(evt.target.value);
+            refresh();
+          },
+          onPressEnter: (evt) => evt.target.blur(),
+        });
+
+        const columns = [
+          {
+            title: '字段',
+            dataIndex: 'name',
+            width: 130,
+            render: (value, record, index) =>
+              React.createElement(
+                Input,
+                inputProps(value, 'name', (next) => commitField(entity, index, { name: next })),
+              ),
+          },
+          {
+            title: '类型',
+            dataIndex: 'type',
+            width: 90,
+            render: (value, record, index) =>
+              React.createElement(
+                Input,
+                inputProps(value, 'type', (next) => commitField(entity, index, { type: next || undefined })),
+              ),
+          },
+          {
+            title: '长度',
+            dataIndex: 'length',
+            width: 72,
+            render: (value, record, index) =>
+              React.createElement(
+                Input,
+                inputProps(value, 'len', (next) => commitField(entity, index, { length: next === '' ? undefined : next })),
+              ),
+          },
+          {
+            title: '约束',
+            dataIndex: 'constraints',
+            width: 230,
+            render: (value, record, index) =>
+              React.createElement(
+                Space,
+                { size: 4, wrap: true },
+                flagDefs.map(([key, label]) => {
+                  const checked = key === 'nullable' ? record.nullable !== false : Boolean(record[key]);
+                  return React.createElement(
+                    Checkbox,
+                    {
+                      key: label,
+                      checked,
+                      onChange: (evt) => {
+                        commitFlag(entity, index, key, evt.target.checked);
+                        refresh();
+                      },
+                    },
+                    label,
+                  );
+                }),
+              ),
+          },
+          {
+            title: '默认值',
+            dataIndex: 'default',
+            width: 110,
+            render: (value, record, index) =>
+              React.createElement(
+                Input,
+                inputProps(value, 'default', (next) => commitField(entity, index, { default: next === '' ? undefined : next })),
+              ),
+          },
+          {
+            title: '注释',
+            dataIndex: 'comment',
+            width: 150,
+            render: (value, record, index) =>
+              React.createElement(
+                Input,
+                inputProps(value, 'comment', (next) => commitField(entity, index, { comment: next || undefined })),
+              ),
+          },
+          {
+            title: '',
+            key: 'action',
+            width: 50,
+            fixed: 'right',
+            render: (value, record, index) =>
+              React.createElement(
+                Button,
+                {
+                  type: 'link',
+                  danger: true,
+                  size: 'small',
+                  onClick: () => {
+                    removeField(entity, index);
+                    refresh();
+                  },
+                },
+                '删除',
+              ),
+          },
+        ];
+
+        return React.createElement(
+          'div',
+          null,
+          React.createElement(Typography.Text, { strong: true }, '实体名称'),
+          React.createElement(Input, {
+            defaultValue: entity.state.entityName || '',
+            size: 'large',
+            style: { marginTop: 8, marginBottom: 12 },
+            onBlur: (evt) => {
+              designer.updateEntity(entity.state.id, { entityName: evt.target.value || 'Entity Name' });
+              refresh();
+            },
+            onPressEnter: (evt) => evt.target.blur(),
+          }),
+          React.createElement(Table, {
+            size: 'small',
+            columns,
+            dataSource: fields,
+            pagination: false,
+            scroll: { x: 850 },
+            rowKey: (record) => record.key,
+          }),
+          React.createElement(
+            Button,
+            {
+              type: 'dashed',
+              block: true,
+              style: { marginTop: 12 },
+              onClick: () => {
+                entity.addField({ name: 'newField', type: 'string' });
+                refresh();
+              },
+            },
+            '新增字段',
+          ),
+        );
+      }
+
+      function RelationPropertyPanel({ relation, refresh }) {
+        const relationTypeOptions = ['one-to-many', 'many-to-one', 'one-to-one', 'many-to-many'].map((value) => ({
+          value,
+          label: value,
+        }));
+        const actionOptions = ['', 'CASCADE', 'SET NULL', 'NO ACTION', 'RESTRICT'].map((value) => ({
+          value,
+          label: value || '未设置',
+        }));
+
+        const field = (label, control) =>
+          React.createElement(
+            Form.Item,
+            { label, style: { marginBottom: 12 } },
+            control,
+          );
+
+        return React.createElement(
+          Form,
+          { layout: 'vertical' },
+          React.createElement(Typography.Title, { level: 5 }, '关系属性'),
+          React.createElement(Typography.Paragraph, { type: 'secondary' }, relation.state.label || ''),
+          field(
+            '关系类型',
+            React.createElement(Select, {
+              defaultValue: relation.state.relationType || 'one-to-many',
+              options: relationTypeOptions,
+              style: { width: '100%' },
+              onChange: (value) => {
+                designer.updateRelation(relation.state.id, { relationType: value });
+                refresh();
+              },
+            }),
+          ),
+          field(
+            '源字段',
+            React.createElement(Input, {
+              defaultValue: relation.state.sourceField || 'id',
+              onBlur: (evt) => {
+                designer.updateRelation(relation.state.id, { sourceField: evt.target.value || 'id' });
+                refresh();
+              },
+              onPressEnter: (evt) => evt.target.blur(),
+            }),
+          ),
+          field(
+            '目标字段',
+            React.createElement(Input, {
+              defaultValue: relation.state.targetField || 'id',
+              onBlur: (evt) => {
+                designer.updateRelation(relation.state.id, { targetField: evt.target.value || 'id' });
+                refresh();
+              },
+              onPressEnter: (evt) => evt.target.blur(),
+            }),
+          ),
+          field(
+            'onDelete',
+            React.createElement(Select, {
+              defaultValue: relation.state.onDelete || '',
+              options: actionOptions,
+              style: { width: '100%' },
+              onChange: (value) => {
+                designer.updateRelation(relation.state.id, { onDelete: value || undefined });
+                refresh();
+              },
+            }),
+          ),
+          field(
+            'onUpdate',
+            React.createElement(Select, {
+              defaultValue: relation.state.onUpdate || '',
+              options: actionOptions,
+              style: { width: '100%' },
+              onChange: (value) => {
+                designer.updateRelation(relation.state.id, { onUpdate: value || undefined });
+                refresh();
+              },
+            }),
+          ),
+          field(
+            'joinTableName',
+            React.createElement(Input, {
+              defaultValue: relation.state.joinTableName || '',
+              placeholder: 'user_roles',
+              onBlur: (evt) => {
+                designer.updateRelation(relation.state.id, { joinTableName: evt.target.value || undefined });
+                refresh();
+              },
+              onPressEnter: (evt) => evt.target.blur(),
+            }),
+          ),
+        );
+      }
+
+      function PropertyPanel({ selected, refresh }) {
+        if (!selected) {
+          return React.createElement(
+            'div',
+            { style: { color: '#64748b', padding: '12px 0' } },
+            '点击画布中的 Entity 或 Relation 进行编辑',
+          );
+        }
+        if (selected.constructor.name === 'Relation') {
+          return React.createElement(RelationPropertyPanel, { relation: selected, refresh });
+        }
+        return React.createElement(EntityFieldsTable, { entity: selected, refresh });
+      }
+
+      function renderPanel() {
+        if (!window.React || !window.ReactDOM || !window.antd) {
+          entityPanel.innerHTML = 'React/antd 资源加载失败，请检查网络连接';
+          return;
+        }
+        if (!propertyPanelRoot) {
+          propertyPanelRoot = ReactDOM.createRoot(entityPanel);
+        }
+        propertyPanelRoot.render(
+          React.createElement(PropertyPanel, {
+            selected: designer.selected,
+            refresh: renderPanel,
+          }),
+        );
+      }
+      window.__renderPanel = renderPanel;
 
       ice.evtBus.on('mousedown', () => {
         setTimeout(() => {
@@ -659,6 +1229,11 @@
         ice.setViewport(1, 0, 0);
       });
 
+      document.getElementById('btn-layout-horizontal').addEventListener('click', () => applyFlowLayout('LR'));
+      document.getElementById('btn-layout-vertical').addEventListener('click', () => applyFlowLayout('TB'));
+      document.getElementById('btn-layout-radial').addEventListener('click', applyRadialLayout);
+      document.getElementById('btn-layout-force').addEventListener('click', applyForceLayout);
+
       function refreshHistoryButtons() {
         document.getElementById('btn-undo').disabled = !designer.canUndo();
         document.getElementById('btn-redo').disabled = !designer.canRedo();
@@ -696,27 +1271,623 @@
         }
       });
 
-      const starter = designer.createEntity({
-        left: 120,
-        top: 120,
-        entityName: 'User',
-        fields: [
-          { name: 'id', type: 'number', primary: true, autoIncrement: true, nullable: false },
-          { name: 'email', type: 'string', unique: true, nullable: false },
-        ],
-      });
-      const starterRole = designer.createEntity({
-        left: 520,
-        top: 120,
-        entityName: 'Role',
-        fields: [{ name: 'id', type: 'number', primary: true, autoIncrement: true, nullable: false }],
-      });
-      designer.createRelation({
+      const idField = {
+        name: 'id',
+        type: 'number',
+        length: 64,
+        primary: true,
+        autoIncrement: true,
+        nullable: false,
+      };
+
+      function makeEntity(props) {
+        return designer.createEntity({
+          style: {
+            fillStyle: '#ffffff',
+            strokeStyle: '#94a3b8',
+            radius: 10,
+            lineWidth: 1.5,
+          },
+          headerStyle: {
+            textColor: '#0f766e',
+            fontSize: 18,
+          },
+          fieldStyle: {
+            textColor: '#334155',
+            fontSize: 15,
+          },
+          dividerStyle: {
+            strokeStyle: '#e2e8f0',
+          },
+          ...props,
+        });
+      }
+
+      function makeRelation(props) {
+        return designer.createRelation({
+          style: {
+            strokeStyle: '#64748b',
+            fillStyle: '#334155',
+            lineWidth: 2,
+          },
+          ...props,
+        });
+      }
+
+      const fld = (name, type, length, opts = {}) => ({ name, type, length, ...opts });
+      const fk = (name, opts = {}) => ({ name, type: 'number', length: 64, foreignKey: true, index: true, nullable: false, ...opts });
+
+      function rel(source, target, props = {}) {
+        const sourceBox = source.getMinBoundingBox(true);
+        const targetBox = target.getMinBoundingBox(true);
+        const sx = sourceBox.center[0];
+        const sy = sourceBox.center[1];
+        const tx = targetBox.center[0];
+        const ty = targetBox.center[1];
+        const dx = tx - sx;
+        const dy = ty - sy;
+
+        let start = 'R';
+        let end = 'L';
+        if (Math.abs(dx) > Math.abs(dy)) {
+          start = dx >= 0 ? 'R' : 'L';
+          end = dx >= 0 ? 'L' : 'R';
+        } else {
+          start = dy >= 0 ? 'B' : 'T';
+          end = dy >= 0 ? 'T' : 'B';
+        }
+
+        return makeRelation({
+          ...props,
+          links: {
+            start: { id: source.state.id, position: start },
+            end: { id: target.state.id, position: end },
+          },
+        });
+      }
+
+      const gridCols = [40, 400, 760, 1120, 1480, 1840];
+      const gridRows = [50, 370, 690, 1010, 1330];
+      const E = {};
+
+      function put(key, col, row, entityName, fields) {
+        const entity = makeEntity({
+          left: gridCols[col],
+          top: gridRows[row],
+          entityName,
+          fields,
+        });
+        E[key] = entity;
+        return entity;
+      }
+
+      // 会员与账号
+      put('Customer', 0, 0, 'Customer', [
+        idField,
+        fld('customerNo', 'string', 32, { unique: true, nullable: false }),
+        fld('name', 'string', 128, { nullable: false }),
+        fld('email', 'string', 128, { unique: true, nullable: false }),
+        fld('phone', 'string', 32),
+        fld('membershipLevelId', 'number', 64, { foreignKey: true, index: true, nullable: true }),
+        fld('status', 'string', 32, { nullable: false, default: "'active'" }),
+        fld('createdAt', 'datetime'),
+      ]);
+
+      put('CustomerAddress', 1, 0, 'CustomerAddress', [
+        idField,
+        fk('customerId'),
+        fld('recipient', 'string', 128, { nullable: false }),
+        fld('phone', 'string', 32, { nullable: false }),
+        fld('province', 'string', 64, { nullable: false }),
+        fld('city', 'string', 64, { nullable: false }),
+        fld('detail', 'string', 255, { nullable: false }),
+        fld('isDefault', 'boolean', undefined, { nullable: false, default: false }),
+      ]);
+
+      put('MembershipLevel', 2, 0, 'MembershipLevel', [
+        idField,
+        fld('code', 'string', 32, { unique: true, nullable: false }),
+        fld('name', 'string', 64, { nullable: false }),
+        fld('minSpend', 'decimal', '12,2', { nullable: false, default: '0.00' }),
+        fld('discountRate', 'decimal', '5,2', { nullable: false, default: '1.00' }),
+        fld('description', 'string', 255),
+        fld('active', 'boolean', undefined, { nullable: false, default: true }),
+      ]);
+
+      put('UserAccount', 3, 0, 'UserAccount', [
+        idField,
+        fk('customerId', { unique: true }),
+        fld('username', 'string', 64, { unique: true, nullable: false }),
+        fld('passwordHash', 'string', 255, { nullable: false }),
+        fld('email', 'string', 128, { unique: true, nullable: false }),
+        fld('status', 'string', 32, { nullable: false, default: "'active'" }),
+        fld('lastLoginAt', 'datetime'),
+      ]);
+
+      put('Role', 4, 0, 'Role', [
+        idField,
+        fld('code', 'string', 64, { unique: true, nullable: false }),
+        fld('name', 'string', 64, { nullable: false }),
+        fld('description', 'string', 255),
+        fld('createdAt', 'datetime'),
+      ]);
+
+      put('Permission', 5, 0, 'Permission', [
+        idField,
+        fld('code', 'string', 64, { unique: true, nullable: false }),
+        fld('name', 'string', 64, { nullable: false }),
+        fld('resource', 'string', 128, { nullable: false }),
+        fld('action', 'string', 32, { nullable: false, default: "'read'" }),
+        fld('description', 'string', 255),
+      ]);
+
+      // 商品与目录
+      put('Category', 0, 1, 'Category', [
+        idField,
+        fld('parentId', 'number', 64, { foreignKey: true, index: true, nullable: true }),
+        fld('name', 'string', 128, { nullable: false }),
+        fld('slug', 'string', 128, { unique: true, nullable: false }),
+        fld('sort', 'number', 11, { nullable: false, default: 0 }),
+        fld('active', 'boolean', undefined, { nullable: false, default: true }),
+      ]);
+
+      put('Brand', 1, 1, 'Brand', [
+        idField,
+        fld('name', 'string', 128, { nullable: false }),
+        fld('slug', 'string', 128, { unique: true, nullable: false }),
+        fld('logoUrl', 'string', 255),
+        fld('description', 'string', 1000),
+        fld('active', 'boolean', undefined, { nullable: false, default: true }),
+      ]);
+
+      put('Supplier', 2, 1, 'Supplier', [
+        idField,
+        fld('name', 'string', 128, { nullable: false }),
+        fld('contactName', 'string', 64, { nullable: false }),
+        fld('phone', 'string', 32, { nullable: false }),
+        fld('email', 'string', 128),
+        fld('address', 'string', 255),
+        fld('active', 'boolean', undefined, { nullable: false, default: true }),
+      ]);
+
+      put('Product', 3, 1, 'Product', [
+        idField,
+        fld('categoryId', 'number', 64, { foreignKey: true, index: true, nullable: true }),
+        fld('brandId', 'number', 64, { foreignKey: true, index: true, nullable: true }),
+        fld('sku', 'string', 64, { unique: true, nullable: false }),
+        fld('name', 'string', 255, { nullable: false }),
+        fld('price', 'decimal', '12,2', { nullable: false }),
+        fld('compareAtPrice', 'decimal', '12,2'),
+        fld('status', 'string', 32, { nullable: false, default: "'draft'" }),
+      ]);
+
+      put('ProductImage', 4, 1, 'ProductImage', [
+        idField,
+        fk('productId'),
+        fld('url', 'string', 255, { nullable: false }),
+        fld('alt', 'string', 255),
+        fld('sort', 'number', 11, { nullable: false, default: 0 }),
+        fld('isPrimary', 'boolean', undefined, { nullable: false, default: false }),
+      ]);
+
+      put('ProductSKU', 5, 1, 'ProductSKU', [
+        idField,
+        fk('productId'),
+        fld('sku', 'string', 64, { unique: true, nullable: false }),
+        fld('color', 'string', 32),
+        fld('size', 'string', 32),
+        fld('barcode', 'string', 64),
+        fld('price', 'decimal', '12,2', { nullable: false }),
+        fld('stock', 'number', 11, { nullable: false, default: 0 }),
+      ]);
+
+      // 库存、购物车与用户互动
+      put('Warehouse', 0, 2, 'Warehouse', [
+        idField,
+        fld('code', 'string', 32, { unique: true, nullable: false }),
+        fld('name', 'string', 128, { nullable: false }),
+        fld('province', 'string', 64, { nullable: false }),
+        fld('city', 'string', 64, { nullable: false }),
+        fld('address', 'string', 255, { nullable: false }),
+        fld('status', 'string', 32, { nullable: false, default: "'active'" }),
+      ]);
+
+      put('Inventory', 1, 2, 'Inventory', [
+        idField,
+        fk('warehouseId'),
+        fk('skuId'),
+        fld('quantity', 'number', 11, { nullable: false, default: 0 }),
+        fld('reservedQuantity', 'number', 11, { nullable: false, default: 0 }),
+        fld('safetyStock', 'number', 11, { nullable: false, default: 0 }),
+        fld('updatedAt', 'datetime'),
+      ]);
+
+      put('ShoppingCart', 2, 2, 'ShoppingCart', [
+        idField,
+        fk('customerId', { unique: true }),
+        fld('status', 'string', 32, { nullable: false, default: "'active'" }),
+        fld('createdAt', 'datetime'),
+        fld('updatedAt', 'datetime'),
+      ]);
+
+      put('CartItem', 3, 2, 'CartItem', [
+        idField,
+        fk('cartId'),
+        fk('productId'),
+        fk('skuId', { nullable: true }),
+        fld('quantity', 'number', 11, { nullable: false, default: 1 }),
+        fld('selected', 'boolean', undefined, { nullable: false, default: true }),
+        fld('addedAt', 'datetime'),
+      ]);
+
+      put('Wishlist', 4, 2, 'Wishlist', [
+        idField,
+        fk('customerId'),
+        fld('name', 'string', 128, { nullable: false }),
+        fld('createdAt', 'datetime'),
+      ]);
+
+      put('Review', 5, 2, 'Review', [
+        idField,
+        fk('customerId'),
+        fk('productId'),
+        fk('orderItemId', { nullable: true }),
+        fld('rating', 'number', 3, { nullable: false, default: 5 }),
+        fld('title', 'string', 128),
+        fld('content', 'string', 1000),
+        fld('status', 'string', 32, { nullable: false, default: "'published'" }),
+      ]);
+
+      // 订单与支付
+      put('Order', 0, 3, 'Order', [
+        idField,
+        fk('customerId'),
+        fk('addressId', { nullable: true }),
+        fld('orderNo', 'string', 64, { unique: true, nullable: false }),
+        fld('status', 'string', 32, { nullable: false, default: "'created'" }),
+        fld('subtotal', 'decimal', '12,2', { nullable: false, default: '0.00' }),
+        fld('totalAmount', 'decimal', '12,2', { nullable: false, default: '0.00' }),
+        fld('placedAt', 'datetime'),
+      ]);
+
+      put('OrderItem', 1, 3, 'OrderItem', [
+        idField,
+        fk('orderId'),
+        fk('productId'),
+        fk('skuId', { nullable: true }),
+        fld('productName', 'string', 255, { nullable: false }),
+        fld('skuName', 'string', 255),
+        fld('unitPrice', 'decimal', '12,2', { nullable: false }),
+        fld('quantity', 'number', 11, { nullable: false }),
+        fld('totalAmount', 'decimal', '12,2', { nullable: false }),
+      ]);
+
+      put('OrderStatusHistory', 2, 3, 'OrderStatusHistory', [
+        idField,
+        fk('orderId'),
+        fld('status', 'string', 32, { nullable: false }),
+        fld('operator', 'string', 64),
+        fld('remark', 'string', 255),
+        fld('createdAt', 'datetime'),
+      ]);
+
+      put('Invoice', 3, 3, 'Invoice', [
+        idField,
+        fk('orderId', { unique: true }),
+        fld('invoiceNo', 'string', 64, { unique: true, nullable: false }),
+        fld('invoiceType', 'string', 32, { nullable: false }),
+        fld('title', 'string', 255, { nullable: false }),
+        fld('taxNo', 'string', 64),
+        fld('amount', 'decimal', '12,2', { nullable: false }),
+        fld('status', 'string', 32, { nullable: false, default: "'unissued'" }),
+      ]);
+
+      put('Payment', 4, 3, 'Payment', [
+        idField,
+        fk('orderId'),
+        fld('paymentNo', 'string', 64, { unique: true, nullable: false }),
+        fld('method', 'string', 32, { nullable: false }),
+        fld('status', 'string', 32, { nullable: false, default: "'pending'" }),
+        fld('amount', 'decimal', '12,2', { nullable: false }),
+        fld('transactionId', 'string', 128),
+        fld('paidAt', 'datetime'),
+      ]);
+
+      put('PaymentRefund', 5, 3, 'PaymentRefund', [
+        idField,
+        fk('paymentId'),
+        fk('orderId'),
+        fld('refundNo', 'string', 64, { unique: true, nullable: false }),
+        fld('reason', 'string', 255),
+        fld('amount', 'decimal', '12,2', { nullable: false }),
+        fld('status', 'string', 32, { nullable: false, default: "'pending'" }),
+        fld('refundedAt', 'datetime'),
+      ]);
+
+      // 物流、营销
+      put('Shipment', 0, 4, 'Shipment', [
+        idField,
+        fk('orderId'),
+        fld('shipmentNo', 'string', 64, { unique: true, nullable: false }),
+        fld('carrier', 'string', 64, { nullable: false }),
+        fld('trackingNo', 'string', 128),
+        fld('status', 'string', 32, { nullable: false, default: "'preparing'" }),
+        fld('shippedAt', 'datetime'),
+        fld('deliveredAt', 'datetime'),
+      ]);
+
+      put('ShipmentItem', 1, 4, 'ShipmentItem', [
+        idField,
+        fk('shipmentId'),
+        fk('orderItemId'),
+        fld('quantity', 'number', 11, { nullable: false }),
+      ]);
+
+      put('LogisticsTracking', 2, 4, 'LogisticsTracking', [
+        idField,
+        fk('shipmentId'),
+        fld('status', 'string', 32, { nullable: false }),
+        fld('location', 'string', 255),
+        fld('description', 'string', 255),
+        fld('trackedAt', 'datetime'),
+      ]);
+
+      put('CouponTemplate', 3, 4, 'CouponTemplate', [
+        idField,
+        fld('code', 'string', 32, { unique: true, nullable: false }),
+        fld('name', 'string', 128, { nullable: false }),
+        fld('discountType', 'string', 32, { nullable: false }),
+        fld('discountValue', 'decimal', '12,2', { nullable: false }),
+        fld('minAmount', 'decimal', '12,2', { nullable: false, default: '0.00' }),
+        fld('totalQuantity', 'number', 11, { nullable: false }),
+        fld('issuedQuantity', 'number', 11, { nullable: false, default: 0 }),
+      ]);
+
+      put('Coupon', 4, 4, 'Coupon', [
+        idField,
+        fk('templateId'),
+        fk('customerId'),
+        fk('orderId', { nullable: true }),
+        fld('couponNo', 'string', 64, { unique: true, nullable: false }),
+        fld('status', 'string', 32, { nullable: false, default: "'unused'" }),
+        fld('receivedAt', 'datetime'),
+        fld('usedAt', 'datetime'),
+      ]);
+
+      put('Promotion', 5, 4, 'Promotion', [
+        idField,
+        fld('code', 'string', 32, { unique: true, nullable: false }),
+        fld('name', 'string', 128, { nullable: false }),
+        fld('discountType', 'string', 32, { nullable: false }),
+        fld('discountValue', 'decimal', '12,2', { nullable: false }),
+        fld('minAmount', 'decimal', '12,2', { nullable: false, default: '0.00' }),
+        fld('startAt', 'datetime'),
+        fld('endAt', 'datetime'),
+        fld('active', 'boolean', undefined, { nullable: false, default: true }),
+      ]);
+
+      rel(E.Customer, E.CustomerAddress, {
         relationType: 'one-to-many',
-        sourceId: starter.state.id,
-        targetId: starterRole.state.id,
+        sourceField: 'id',
+        targetField: 'customerId',
+        onDelete: 'CASCADE',
       });
-      designer.select(starter.state.id);
+      rel(E.Customer, E.UserAccount, {
+        relationType: 'one-to-one',
+        sourceField: 'id',
+        targetField: 'customerId',
+        onDelete: 'CASCADE',
+      });
+      rel(E.Customer, E.MembershipLevel, {
+        relationType: 'many-to-one',
+        sourceField: 'membershipLevelId',
+        targetField: 'id',
+      });
+      rel(E.UserAccount, E.Role, {
+        relationType: 'many-to-many',
+        sourceField: 'id',
+        targetField: 'id',
+        joinTableName: 'user_roles',
+      });
+      rel(E.Role, E.Permission, {
+        relationType: 'many-to-many',
+        sourceField: 'id',
+        targetField: 'id',
+        joinTableName: 'role_permissions',
+      });
+
+      rel(E.Category, E.Category, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'parentId',
+        sourceCardinality: '1',
+        targetCardinality: '0..N',
+        fromKey: 'children',
+        toKey: 'parent',
+      });
+      rel(E.Category, E.Product, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'categoryId',
+      });
+      rel(E.Brand, E.Product, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'brandId',
+      });
+      rel(E.Supplier, E.Product, {
+        relationType: 'many-to-many',
+        sourceField: 'id',
+        targetField: 'id',
+        joinTableName: 'product_suppliers',
+      });
+      rel(E.Product, E.ProductImage, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'productId',
+        onDelete: 'CASCADE',
+      });
+      rel(E.Product, E.ProductSKU, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'productId',
+        onDelete: 'CASCADE',
+      });
+
+      rel(E.Warehouse, E.Inventory, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'warehouseId',
+      });
+      rel(E.ProductSKU, E.Inventory, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'skuId',
+      });
+
+      rel(E.Customer, E.ShoppingCart, {
+        relationType: 'one-to-one',
+        sourceField: 'id',
+        targetField: 'customerId',
+      });
+      rel(E.ShoppingCart, E.CartItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'cartId',
+        onDelete: 'CASCADE',
+      });
+      rel(E.Product, E.CartItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'productId',
+      });
+      rel(E.ProductSKU, E.CartItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'skuId',
+      });
+      rel(E.Customer, E.Wishlist, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'customerId',
+        onDelete: 'CASCADE',
+      });
+      rel(E.Product, E.Wishlist, {
+        relationType: 'many-to-many',
+        sourceField: 'id',
+        targetField: 'id',
+        joinTableName: 'wishlist_items',
+      });
+      rel(E.Customer, E.Review, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'customerId',
+      });
+      rel(E.Product, E.Review, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'productId',
+      });
+      rel(E.OrderItem, E.Review, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'orderItemId',
+      });
+
+      rel(E.Customer, E.Order, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'customerId',
+      });
+      rel(E.CustomerAddress, E.Order, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'addressId',
+      });
+      rel(E.Order, E.OrderItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'orderId',
+        onDelete: 'CASCADE',
+      });
+      rel(E.Product, E.OrderItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'productId',
+      });
+      rel(E.ProductSKU, E.OrderItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'skuId',
+      });
+      rel(E.Order, E.OrderStatusHistory, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'orderId',
+        onDelete: 'CASCADE',
+      });
+      rel(E.Order, E.Invoice, {
+        relationType: 'one-to-one',
+        sourceField: 'id',
+        targetField: 'orderId',
+      });
+      rel(E.Order, E.Payment, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'orderId',
+      });
+      rel(E.Payment, E.PaymentRefund, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'paymentId',
+      });
+
+      rel(E.Order, E.Shipment, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'orderId',
+      });
+      rel(E.Shipment, E.ShipmentItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'shipmentId',
+        onDelete: 'CASCADE',
+      });
+      rel(E.OrderItem, E.ShipmentItem, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'orderItemId',
+      });
+      rel(E.Shipment, E.LogisticsTracking, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'shipmentId',
+        onDelete: 'CASCADE',
+      });
+
+      rel(E.CouponTemplate, E.Coupon, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'templateId',
+      });
+      rel(E.Customer, E.Coupon, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'customerId',
+      });
+      rel(E.Order, E.Coupon, {
+        relationType: 'one-to-many',
+        sourceField: 'id',
+        targetField: 'orderId',
+      });
+      rel(E.Order, E.Promotion, {
+        relationType: 'many-to-many',
+        sourceField: 'id',
+        targetField: 'id',
+        joinTableName: 'order_promotions',
+      });
+
+      designer.select(E.Customer.state.id);
       renderPanel();
       setLinkingMode(false);
       refreshHistoryButtons();
