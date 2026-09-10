@@ -82,10 +82,7 @@ npm run build
 
 | 示例 | 说明 |
 |---|---|
-| `tests/entity-basic.html` | 基础实体与一对多关系 |
-| `tests/entity-relations.html` | 覆盖四种关系、自引用、多对多连接表与多种约束 |
 | `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
-| `tests/showcase.html` | 静态展示页，用于生成文档截图 |
 
 ```bash
 python3 -m http.server 8899   # 然后访问 http://localhost:8899/tests/entity-editor.html
