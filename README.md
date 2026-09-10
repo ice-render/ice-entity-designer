@@ -135,23 +135,79 @@ import { EntitySchema } from 'typeorm';
 const schemas = designer.toSchemaObject().map((obj) => new EntitySchema(obj));
 ```
 
-## 6. 项目结构
+## 6. 在 React 中使用
+
+包内置 React 绑定（子路径导出 `ice-entity-designer/react`），不需要自己写 ref / effect 胶水代码。
+
+```bash
+npm install ice-entity-designer ice-render react react-dom
+```
+
+```tsx
+import { useRef } from 'react';
+import { EntityDesignerCanvas, useEntityDesigner } from 'ice-entity-designer/react';
+import type { EntityDesignerHandle } from 'ice-entity-designer/react';
+
+// 子树内可以取到同一个 EntityDesigner 实例
+function Stats() {
+  const designer = useEntityDesigner();
+  return <span>{designer ? `${designer.entities.length} 个实体` : '初始化中…'}</span>;
+}
+
+export default function App() {
+  const ref = useRef<EntityDesignerHandle>(null);
+
+  return (
+    <>
+      <button onClick={() => ref.current?.addEntity({ entityName: 'User' })}>新增实体</button>
+      <button onClick={() => console.log(ref.current?.toSchemaString())}>导出 Schema</button>
+
+      <EntityDesignerCanvas
+        ref={ref}
+        width={1200}
+        height={800}
+        defaultValue={initialProjectJson} // 可选：初始项目快照
+        onChange={({ snapshot, schema }) => save(snapshot)} // 模型变更
+      >
+        <Stats />
+      </EntityDesignerCanvas>
+    </>
+  );
+}
+```
+
+要点：
+
+- **生命周期**：`<EntityDesignerCanvas>` 挂载时创建 ICE + EntityDesigner，卸载时销毁。引擎侧 `init` 幂等、`destroy` 会解绑全局监听与帧循环，因此 **React StrictMode 双挂载安全**。
+- **两种取用方式**：`ref`（命令式 API：`addEntity` / `connect` / `updateEntity` / `updateRelation` / `remove` / `undo` / `redo` / `loadProject` / `toSchemaObject` / `toSchemaString` / `validate` / `serializeProject`），或子树内的 `useEntityDesigner()`。
+- **变更回调**：`onChange({ snapshot, schema })` 在增删改 / 载入 / undo / redo 之后触发，`snapshot` 可直接用于自动保存。
+- **仅客户端渲染**：组件依赖 canvas，SSR（如 Next.js）请按客户端组件使用，例如 `dynamic(() => import('./Designer'), { ssr: false })`。
+- React 是**可选 peerDependency**（`^18 || ^19`），不使用 React 的项目不受影响。
+
+> 完整可运行示例（**webpack** 构建）：[`examples/react`](./examples/react)
+
+## 7. 项目结构
 
 ```
 src/
-├── designer/EntityDesigner.ts     # 应用层：选择 / 增删改 / 连接 / 校验 / 历史 / 项目存取
+├── designer/EntityDesigner.ts     # 应用层：选择 / 增删改 / 连接 / 校验 / 历史 / 项目存取 / 变更订阅
 ├── er-component/
 │   ├── Entity.ts                  # 实体：表头 + 字段列表 + 约束标记 + TypeORM 序列化
 │   └── Relation.ts                # 关系：基数 / 箭头 / 标签语义 / 连接槽位
+├── react/
+│   ├── EntityDesignerCanvas.ts    # React 组件：画布 + 生命周期 + 命令式句柄
+│   ├── session.ts                 # 会话封装：创建 / 销毁 ICE + EntityDesigner
+│   ├── context.ts                 # 上下文与 useEntityDesigner()
+│   └── index.ts                   # 子路径导出 ice-entity-designer/react
 ├── utils/
 │   ├── serialization_util.ts      # 画布 → TypeORM Schema
 │   ├── schema_validator.ts        # 轻量 Schema 校验
 │   ├── camelcase_util.ts          # 命名转换
 │   └── pluralize_util.ts          # 复数化（多对多属性名）
-└── index.ts                       # 对外导出
+└── index.ts                       # 对外导出（核心，不含 React）
 ```
 
-## 7. 开发与测试
+## 8. 开发与测试
 
 | 命令 | 说明 |
 |---|---|
@@ -161,12 +217,13 @@ src/
 | `npm test` | 运行单元测试（Jest） |
 | `npm run pretty` | Prettier 格式化源码 |
 
-## 8. 环境要求与依赖
+## 9. 环境要求与依赖
 
 - Node.js >= 10.13.0，npm >= 6.4.1。
 - 运行时依赖 `lodash`；对等依赖 `ice-render >= 1.0.4`（需自行安装）。
+- React 绑定为**可选**对等依赖 `react` / `react-dom`（`^18 || ^19`），仅在使用 `ice-entity-designer/react` 时需要。
 - 构建链：Rollup 2 + Babel 7 + TypeScript 4.6；测试框架：Jest。
 
-## 9. License
+## 10. License
 
 [MIT licensed](./LICENSE).

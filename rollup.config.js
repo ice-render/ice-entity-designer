@@ -83,5 +83,26 @@ const configs = [
     },
     plugins: CommonPlugins,
   },
+  //React 绑定入口（子路径导出 ice-entity-designer/react，仅 ESM + CJS，不打 UMD）
+  {
+    input: 'src/react/index.ts',
+    external,
+    output: {
+      file: 'dist/react.js',
+      format: 'esm',
+      globals: { ...globals, react: 'React' },
+    },
+    plugins: CommonPlugins,
+  },
+  {
+    input: 'src/react/index.ts',
+    external,
+    output: {
+      file: 'dist/react.cjs.js',
+      format: 'cjs',
+      globals: { ...globals, react: 'React' },
+    },
+    plugins: CommonPlugins,
+  },
 ];
 export default configs;

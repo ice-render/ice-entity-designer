@@ -1,0 +1,108 @@
+/**
+ * React 绑定层的会话封装：createDesignerSession 的创建 / 初始项目 / onChange 透传 / 销毁。
+ * 这里用 mock 替换 ice-render 与核心入口，只验证会话编排（挂载即初始化、卸载即销毁）。
+ */
+
+jest.mock('ice-render', () => {
+  return {
+    ICE: class MockICE {
+      static instances: any[] = [];
+      init = jest.fn();
+      destroy = jest.fn();
+      constructor() {
+        (this.constructor as any).instances.push(this);
+      }
+    },
+  };
+});
+
+jest.mock('../../src/index', () => {
+  return {
+    EntityDesigner: class MockEntityDesigner {
+      static instances: any[] = [];
+      static lastListener: any = null;
+      static unsubscribe = jest.fn();
+      ice: any;
+      dispose = jest.fn();
+      loadProject = jest.fn();
+      toSchemaObject = jest.fn(() => ({ mock: 'schema' }));
+      subscribe = jest.fn((listener: any) => {
+        (this.constructor as any).lastListener = listener;
+        return (this.constructor as any).unsubscribe;
+      });
+      constructor(ice: any) {
+        this.ice = ice;
+        (this.constructor as any).instances.push(this);
+      }
+    },
+  };
+});
+
+import { createDesignerSession } from '../../src/react/session';
+
+const MockICE: any = require('ice-render').ICE;
+const MockEntityDesigner: any = require('../../src/index').EntityDesigner;
+
+function fakeCanvas() {
+  return { width: 800, height: 600, getContext: () => ({}) };
+}
+
+describe('createDesignerSession', () => {
+  beforeEach(() => {
+    MockICE.instances.length = 0;
+    MockEntityDesigner.instances.length = 0;
+    MockEntityDesigner.lastListener = null;
+    MockEntityDesigner.unsubscribe.mockClear();
+  });
+
+  it('在 canvas 上创建 ICE + EntityDesigner，并按 renderMode 初始化', () => {
+    const canvas = fakeCanvas();
+    const session = createDesignerSession(canvas);
+
+    const ice = MockICE.instances[0];
+    expect(ice.init).toHaveBeenCalledWith(canvas, { renderMode: 'dirty-rect' });
+    expect(session.ice).toBe(ice);
+    expect(session.designer).toBe(MockEntityDesigner.instances[0]);
+    expect(session.designer.ice).toBe(ice);
+  });
+
+  it('renderMode: full 会透传', () => {
+    createDesignerSession(fakeCanvas(), { renderMode: 'full' });
+    expect(MockICE.instances[0].init).toHaveBeenCalledWith(expect.anything(), { renderMode: 'full' });
+  });
+
+  it('initialProject 会调用 loadProject', () => {
+    const session = createDesignerSession(fakeCanvas(), { initialProject: '{"entities":[]}' });
+    expect(session.designer.loadProject).toHaveBeenCalledWith('{"entities":[]}');
+  });
+
+  it('onChange 会被订阅，并且能收到变更回调', () => {
+    const onChange = jest.fn();
+    createDesignerSession(fakeCanvas(), { onChange });
+
+    expect(MockEntityDesigner.instances[0].subscribe).toHaveBeenCalledWith(onChange);
+    // 模拟一次模型变更
+    MockEntityDesigner.lastListener('{"entities":[]}');
+    expect(onChange).toHaveBeenCalledWith('{"entities":[]}');
+  });
+
+  it('destroy 会退订 + dispose + 销毁 ICE，且可重复调用不重复执行', () => {
+    const session = createDesignerSession(fakeCanvas(), { onChange: jest.fn() });
+    const designer = session.designer as any;
+    const ice = session.ice;
+
+    session.destroy();
+
+    expect(MockEntityDesigner.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(designer.dispose).toHaveBeenCalledTimes(1);
+    expect(ice.destroy).toHaveBeenCalledTimes(1);
+
+    session.destroy();
+    expect(ice.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('没有 onChange 时不订阅', () => {
+    createDesignerSession(fakeCanvas());
+    expect(MockEntityDesigner.instances[0].subscribe).not.toHaveBeenCalled();
+  });
+});

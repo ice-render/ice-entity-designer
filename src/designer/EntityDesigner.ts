@@ -14,6 +14,9 @@ export default class EntityDesigner {
   public ice: ICE;
   public selectedId: string | null = null;
 
+  /** 变更订阅者：任何会改变模型的操作完成后都会被通知（React 绑定层用它驱动 onChange） */
+  private __changeListeners: Array<(snapshot: string) => void> = [];
+
   private __mousedownHandler = (evt: any) => this.__handleMouseDown(evt);
   private __undoStack: string[] = [];
   private __redoStack: string[] = [];
@@ -59,6 +62,7 @@ export default class EntityDesigner {
     });
     this.ice.addChild(entity);
     this.select(entity.state.id);
+    this.__emitChange();
     return entity;
   }
 
@@ -88,6 +92,7 @@ export default class EntityDesigner {
     });
     this.ice.addChild(relation);
     this.select(relation.state.id);
+    this.__emitChange();
     return relation;
   }
 
@@ -96,6 +101,7 @@ export default class EntityDesigner {
     if (entity && entity.constructor && entity.constructor.name === 'Entity') {
       this.captureHistory();
       entity.setState(patch);
+      this.__emitChange();
     }
     return entity;
   }
@@ -107,6 +113,7 @@ export default class EntityDesigner {
       const next = { ...relation.state, ...patch };
       const label = Relation.buildLabel(next, next.relationType || 'one-to-one');
       relation.setState({ ...patch, label });
+      this.__emitChange();
     }
     return relation;
   }
@@ -131,6 +138,7 @@ export default class EntityDesigner {
     if (this.selectedId === id) {
       this.selectedId = null;
     }
+    this.__emitChange();
   }
 
   public toSchemaObject(): object {
@@ -160,6 +168,7 @@ export default class EntityDesigner {
     }
     this.captureHistory();
     this.__applyProject(json);
+    this.__emitChange();
   }
 
   private __entitySnapshot(entity: any): any {
@@ -320,6 +329,7 @@ export default class EntityDesigner {
     const current = this.serializeProject();
     this.__redoStack.push(current);
     this.__applyHistorySnapshot(this.__undoStack.pop());
+    this.__emitChange();
   }
 
   public redo(): void {
@@ -329,6 +339,33 @@ export default class EntityDesigner {
     const current = this.serializeProject();
     this.__undoStack.push(current);
     this.__applyHistorySnapshot(this.__redoStack.pop());
+    this.__emitChange();
+  }
+
+  /**
+   * 订阅模型变更。任何改变模型的操作（增删改 / 载入 / undo / redo）完成后会被通知，
+   * 回调参数是当前项目的序列化快照（与 serializeProject() 一致）。
+   * @returns 取消订阅函数
+   */
+  public subscribe(listener: (snapshot: string) => void): () => void {
+    if (typeof listener !== 'function') {
+      return () => undefined;
+    }
+    this.__changeListeners.push(listener);
+    return () => {
+      const index = this.__changeListeners.indexOf(listener);
+      if (index !== -1) {
+        this.__changeListeners.splice(index, 1);
+      }
+    };
+  }
+
+  private __emitChange(): void {
+    if (!this.__changeListeners.length) {
+      return;
+    }
+    const snapshot = this.serializeProject();
+    this.__changeListeners.slice().forEach((listener) => listener(snapshot));
   }
 
   public dispose(): void {
