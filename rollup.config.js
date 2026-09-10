@@ -44,7 +44,10 @@ const CommonPlugins = [
     },
   }),
 ].filter(Boolean);
-const external = [...Object.keys(pkg.devDependencies || {}), ...Object.keys(pkg.peerDependencies || {})];
+// ice-render 内核在构建时被打包进产物，因此从 external 中排除；其余依赖保持外部
+const external = [...Object.keys(pkg.devDependencies || {}), ...Object.keys(pkg.peerDependencies || {})].filter(
+  (name) => name !== 'ice-render'
+);
 const globals = { 'ice-render': 'ICE' };
 
 /**

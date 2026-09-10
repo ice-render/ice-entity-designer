@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-047857.svg" /></a>
-  <img alt="ice-render" src="https://img.shields.io/badge/ice--render-%3E%3D%201.0.4-4338ca.svg" />
+  <img alt="engine bundled" src="https://img.shields.io/badge/engine-bundled-047857.svg" />
   <img alt="tests" src="https://img.shields.io/badge/jest-15%20passed-047857.svg" />
   <img alt="typescript" src="https://img.shields.io/badge/TypeScript-4.6-3178c6.svg" />
 </p>
@@ -18,6 +18,8 @@
 IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render/ice-render) 构建的**可视化 Entity-Relation 建模工具**。它以「节点 = 实体，连线 = 关系」组织数据模型，把画布上的设计结果序列化为符合 TypeORM `EntitySchema` 规范的 Schema，从而将「结构设计」与「实体类 / CRUD 代码生成」直接衔接。
 
 它不重复实现底层图元，而是在 ice-render 的通用图编辑内核之上，收敛出 ER 建模最常用的交互闭环：选择、创建、更新、删除、关系连接、校验与 Schema 输出。
+
+> **引擎内核已打包进本包**：安装 `ice-entity-designer` 即可直接使用，无需再安装 `ice-render`——内核在构建时被打进产物并从本包一并导出（含完整类型声明），保证 `ICE` 实例与 `Entity` / `Relation` 组件来自同一份内核。
 
 完整使用案例请参见：
 
@@ -94,8 +96,7 @@ python3 -m http.server 8899   # 然后访问 http://localhost:8899/tests/entity-
 `EntityDesigner` 是 Entity / Relation 之上的轻量应用层，负责把建模交互闭环串起来：
 
 ```js
-import { ICE } from 'ice-render';
-import { EntityDesigner } from 'ice-entity-designer';
+import { ICE, EntityDesigner } from 'ice-entity-designer';
 
 const ice = new ICE().init('canvas-1');
 const designer = new EntityDesigner(ice);
@@ -141,7 +142,7 @@ const schemas = designer.toSchemaObject().map((obj) => new EntitySchema(obj));
 包内置 React 绑定（子路径导出 `ice-entity-designer/react`），不需要自己写 ref / effect 胶水代码。
 
 ```bash
-npm install ice-entity-designer ice-render react react-dom
+npm install ice-entity-designer react react-dom
 ```
 
 ```tsx
@@ -262,7 +263,10 @@ src/
 ## 9. 环境要求与依赖
 
 - Node.js >= 10.13.0，npm >= 6.4.1。
-- 运行时依赖 `lodash`；对等依赖 `ice-render >= 1.0.4`（需自行安装）。
+- **引擎内核 `ice-render` 已打包进产物**（构建时 inline），因此无需安装 `ice-render`：
+  - 运行时：`import { ICE, EntityDesigner } from 'ice-entity-designer'`，两者来自同一份内核；
+  - 类型：引擎的类型声明也已一并 vendor 进包并改写为相对引用，`skipLibCheck: false` 下同样可解析。
+- 运行时依赖已全部内联（`lodash` 等），安装本包即可独立运行。
 - React 绑定为**可选**对等依赖 `react` / `react-dom`（`^18 || ^19`），仅在使用 `ice-entity-designer/react` 时需要。
 - 构建链：Rollup 2 + Babel 7 + TypeScript 4.6；测试框架：Jest。
 
