@@ -24,7 +24,13 @@ jest.mock('../../src/index', () => {
       static instances: any[] = [];
       static lastListener: any = null;
       dispose = jest.fn();
-      loadProject = jest.fn();
+      // 模拟真实引擎：loadProject 会触发一次变更广播（正是它在初始化期暴露了 TDZ 问题）
+      loadProject = jest.fn((json: string) => {
+        const listener = (this.constructor as any).lastListener;
+        if (listener) {
+          listener(json);
+        }
+      });
       toSchemaObject = jest.fn(() => ({ mock: 'schema' }));
       subscribe = jest.fn((listener: any) => {
         (this.constructor as any).lastListener = listener;
@@ -94,6 +100,18 @@ describe('<EntityDesignerCanvas> 生命周期与受控', () => {
       root.render(createElement(EntityDesignerCanvas, { defaultValue: '{"init":true}' }));
     });
     expect(MockEntityDesigner.instances[0].loadProject).toHaveBeenCalledWith('{"init":true}');
+  });
+
+  it('传 defaultValue 时不会因「初始化期就广播变更」而崩溃（TDZ 回归）', () => {
+    const onChange = jest.fn();
+    expect(() => {
+      act(() => {
+        root.render(createElement(EntityDesignerCanvas, { defaultValue: '{"seed":1}', onChange }));
+      });
+    }).not.toThrow();
+
+    // 初始载入也会上报一次变更，且此时 schema 已经取得到（说明回调里拿到的实例是就绪的）
+    expect(onChange).toHaveBeenCalledWith({ snapshot: '{"seed":1}', schema: { mock: 'schema' } });
   });
 
   it('受控：value 变化同步进画布，内部回传同值时不回环', () => {

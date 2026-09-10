@@ -37,20 +37,30 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
       return undefined;
     }
 
+    // 注意：initialProject 不交给 createDesignerSession —— 它会在返回之前就 loadProject 并触发一次
+    // 变更广播，而那时局部变量 session 还没赋值，回调里引用它会抛
+    // "Cannot access 'session' before initialization"（TDZ，只有跑真实构建产物才会暴露）。
     const session = createDesignerSession(canvas, {
       renderMode: props.renderMode,
-      initialProject,
       onChange: (snapshot) => {
         lastAppliedRef.current = snapshot;
         const callback = onChangeRef.current;
-        if (callback) {
-          callback({ snapshot, schema: session.designer.toSchemaObject() });
+        const current = sessionRef.current; // 用 ref 而不是闭包变量，避免初始化期被引用
+        if (callback && current) {
+          callback({ snapshot, schema: current.designer.toSchemaObject() });
         }
       },
     });
 
-    lastAppliedRef.current = initialProject !== undefined ? initialProject : null;
     sessionRef.current = session;
+    // 会话就绪后再载入初始快照，保证上面回调里拿得到实例
+    if (initialProject !== undefined) {
+      lastAppliedRef.current = initialProject;
+      session.designer.loadProject(initialProject);
+    } else {
+      lastAppliedRef.current = null;
+    }
+
     setDesigner(session.designer);
     if (onReadyRef.current) {
       onReadyRef.current(createHandle(session));
