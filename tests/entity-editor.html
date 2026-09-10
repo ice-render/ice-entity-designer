@@ -1250,6 +1250,13 @@
           jsonText = designer.serializeProject();
         }
 
+        let schemaText = designer.toSchemaString();
+        try {
+          schemaText = JSON.stringify(JSON.parse(schemaText), null, 2);
+        } catch (error) {
+          schemaText = designer.toSchemaString();
+        }
+
         const items = [
           {
             key: 'editor',
@@ -1270,6 +1277,22 @@
                 },
               },
               jsonText,
+            ),
+          },
+          {
+            key: 'typeorm',
+            label: 'TypeORM Schema',
+            children: React.createElement(
+              'pre',
+              {
+                className: 'schema-json',
+                style: {
+                  margin: 0,
+                  maxHeight: 'calc(100vh - 160px)',
+                  overflow: 'auto',
+                },
+              },
+              schemaText,
             ),
           },
         ];

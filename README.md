@@ -15,7 +15,7 @@
 
 ## 1. 项目定位
 
-IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render/ice-render) 构建的**可视化 Entity-Relation 建模工具**。它以「节点 = 实体，连线 = 关系」组织数据模型，把画布上的设计结果序列化为符合 TypeORM 规范的 Schema，从而将「结构设计」与「实体类 / CRUD 代码生成」直接衔接。
+IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render/ice-render) 构建的**可视化 Entity-Relation 建模工具**。它以「节点 = 实体，连线 = 关系」组织数据模型，把画布上的设计结果序列化为符合 TypeORM `EntitySchema` 规范的 Schema，从而将「结构设计」与「实体类 / CRUD 代码生成」直接衔接。
 
 它不重复实现底层图元，而是在 ice-render 的通用图编辑内核之上，收敛出 ER 建模最常用的交互闭环：选择、创建、更新、删除、关系连接、校验与 Schema 输出。
 
@@ -40,7 +40,9 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 ### 导出与校验
 
-- **一键导出 TypeORM Schema**：`toSchemaObject()` / `toSchemaString()` 输出符合 TypeORM 规范的实体定义。
+- **一键导出 TypeORM Schema**：`toSchemaObject()` / `toSchemaString()` 输出符合 TypeORM `EntitySchema` 规范的普通对象，可直接 `new EntitySchema(obj)` 使用。
+- **关系外键归属自动判定**：`one-to-many` / `one-to-one` 的外键在目标侧、`many-to-one` 的外键在源侧，`joinColumn` 自动落在持有外键的一端；`many-to-many` 生成 `joinTable` 并在反向侧补全 `inverseSide`。
+- **列类型规范化**：`number → int`、`string → varchar`、`boolean → boolean`、`decimal(12,2) → precision/scale`；非字符串类型不保留 `length`。
 - **内置 Schema 校验**：重名实体、重复字段、未命名字段、悬空关系、`many-to-many` 缺少 `joinTableName` 等。
 - **双向关系补全**：按关系类型自动补全反向属性与 `inverseSide`，`many-to-many` 自动生成复数形式的集合属性。
 
@@ -65,6 +67,10 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 <img src="./tests/assets/relations.png" alt="关系语义" />
 
+交互式编辑器（右侧面板可直接切换到「TypeORM Schema」查看导出结果）：
+
+<img src="./tests/assets/editor.png" alt="交互式编辑器与 TypeORM Schema" />
+
 ## 4. 快速开始
 
 ```bash
@@ -78,7 +84,7 @@ npm run build
 |---|---|
 | `tests/entity-basic.html` | 基础实体与一对多关系 |
 | `tests/entity-relations.html` | 覆盖四种关系、自引用、多对多连接表与多种约束 |
-| `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载 |
+| `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
 | `tests/showcase.html` | 静态展示页，用于生成文档截图 |
 
 ```bash
@@ -122,6 +128,14 @@ designer.undo();
 ```js
 const schema = IED.toSchemaObject(ice.childNodes);
 const schemaText = IED.toSchemaString(ice.childNodes);
+```
+
+导出的对象可直接构造 TypeORM 实体：
+
+```js
+import { EntitySchema } from 'typeorm';
+
+const schemas = designer.toSchemaObject().map((obj) => new EntitySchema(obj));
 ```
 
 ## 6. 项目结构
