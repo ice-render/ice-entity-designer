@@ -47,7 +47,7 @@ const CommonPlugins = [
   visualizer(),
 ].filter(Boolean);
 const external = [...Object.keys(pkg.devDependencies || {}), ...Object.keys(pkg.peerDependencies || {})];
-const globals = {};
+const globals = { 'ice-render': 'ICE' };
 
 /**
  * support config Intellisense
@@ -56,6 +56,7 @@ const globals = {};
 const configs = [
   {
     input: 'src/index.ts',
+    external,
     output: {
       file: pkg.main,
       format: 'cjs',
@@ -65,6 +66,7 @@ const configs = [
   },
   {
     input: 'src/index.ts',
+    external,
     output: {
       file: pkg.module,
       format: 'esm',
@@ -74,6 +76,7 @@ const configs = [
   },
   {
     input: 'src/index.ts',
+    external,
     output: {
       name: 'IED',
       file: pkg.browser,

@@ -17,6 +17,8 @@
     "noUnusedParameters": false,
     "experimentalDecorators": true,
     "strictNullChecks": false
+    ,"skipLibCheck": true
+    ,"types": ["jest"]
   },
   "exclude": ["node_modules", "dist", "doc"],
   "include": ["src"]

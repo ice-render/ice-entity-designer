@@ -12,10 +12,62 @@
       <script src="../dist/index.umd.js"></script>
     </div>
     <br/>
-    <canvas id="canvas-1" width="1024" height="768" style="background-color: #f7f7f7;"></canvas>
+    <canvas id="canvas-1" width="1024" height="768" style="background-color: #f7f7f7; cursor: grab;"></canvas>
   </body>
   <script type="text/javascript">
       let ice = new ICE.ICE().init('canvas-1');
+      window.__ice = ice;
+      // 最新内核：按需启用对齐吸附提示线，便于拖拽实体时自动对齐边缘/中心/间距。
+      ice.alignmentGuide.enable({ threshold: 6 });
+
+      // 最新内核：简单滚轮缩放 + 中键/空白平移，展示视口能力。
+      const canvasEl = document.getElementById('canvas-1');
+      canvasEl.addEventListener('wheel', (evt) => {
+        evt.preventDefault();
+        const oldScale = ice.viewport.scale;
+        const nextScale = Math.max(0.3, Math.min(3, oldScale * (evt.deltaY > 0 ? 0.9 : 1.1)));
+        const rect = canvasEl.getBoundingClientRect();
+        const cx = evt.clientX - rect.left;
+        const cy = evt.clientY - rect.top;
+        const tx = cx - ((cx - ice.viewport.tx) * nextScale) / oldScale;
+        const ty = cy - ((cy - ice.viewport.ty) * nextScale) / oldScale;
+        ice.setViewport(nextScale, tx, ty);
+      });
+
+      // E-R 场景默认允许拖拽画布：左键在空白处拖拽，中键则始终拖拽；命中图元时仍交给组件拖动逻辑。
+      let panning = false;
+      let lastX = 0;
+      let lastY = 0;
+      canvasEl.addEventListener('mousedown', (evt) => {
+        const blank = evt.button === 0 && !ice.hitTest(evt.offsetX, evt.offsetY);
+        if (evt.button !== 1 && !blank) return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        panning = true;
+        lastX = evt.offsetX;
+        lastY = evt.offsetY;
+        canvasEl.style.cursor = 'grabbing';
+      });
+      canvasEl.addEventListener('mousemove', (evt) => {
+        if (!panning) return;
+        const dx = evt.offsetX - lastX;
+        const dy = evt.offsetY - lastY;
+        lastX = evt.offsetX;
+        lastY = evt.offsetY;
+        ice.setViewport(ice.viewport.scale, ice.viewport.tx + dx, ice.viewport.ty + dy);
+      });
+      canvasEl.addEventListener('mouseup', () => {
+        panning = false;
+        canvasEl.style.cursor = 'grab';
+      });
+      canvasEl.addEventListener('mouseleave', () => {
+        panning = false;
+        canvasEl.style.cursor = 'grab';
+      });
+      canvasEl.addEventListener('auxclick', (evt) => {
+        if (evt.button === 1) evt.preventDefault();
+      });
+
       document.querySelector('#btn-1').addEventListener('click', (evt) => {
         const jsonStr = ice.toJSONString();
         console.log(jsonStr);
@@ -49,26 +101,35 @@
               name:'id',
               type:'number',
               length:64,
+              primary: true,
+              autoIncrement: true,
+              nullable: false,
             },
             {
               name:'userName',
               type:'string',
               length:64,
+              unique: true,
+              nullable: false,
             },
             {
               name:'password',
               type:'string',
               length:64,
+              nullable: false,
             },
             {
               name:'email',
               type:'string',
               length:128,
+              nullable: false,
             },
             {
               name:'cellPhone',
               type:'string',
               length:32,
+              nullable: true,
+              comment: '手机号码，可空',
             }
           ]
         })
@@ -87,29 +148,37 @@
               name:'id',
               type:'number',
               length:64,
+              primary: true,
+              autoIncrement: true,
+              nullable: false,
             },
             {
               name:'roleName',
               type:'string',
               length:64,
+              unique: true,
             },
             {
               name:'roleCode',
               type:'string',
               length:64,
+              nullable: false,
             }
           ]
         })
         ice.addChild(entity2);
 
         let link1=new IED.Relation({
-          left: 0,
-          top: 0,
-          startPoint: [300, 300],
-          endPoint: [400, 400],
+          relationType: 'one-to-many',
+          sourceField: 'id',
+          targetField: 'id',
+          links: {
+            start: { id: entity1.state.id, position: 'R' },
+            end: { id: entity2.state.id, position: 'L' },
+          },
           style: {
-            strokeStyle: '#08ee00',
-            fillStyle: '#008000',
+            strokeStyle: '#64748b',
+            fillStyle: '#334155',
             lineWidth: 2,
           },
           arrow:'end',

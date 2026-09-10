@@ -18,20 +18,89 @@ import { ICEVisioLink } from 'ice-render';
  * @author 大漠穷秋<damoqiongqiu@126.com>
  */
 export default class Relation extends ICEVisioLink {
-  constructor(props) {
+  constructor(props: any = {}) {
+    const normalizedProps = Relation.normalizeLinks(props || {});
+    const relationType = normalizedProps.relationType || 'one-to-one';
+    const label = Relation.composeLabel(normalizedProps, relationType);
     super({
       title: 'Relation',
-      relationType: 'one-to-one',
+      relationType,
       referencedColumnName: 'id',
-      ...props,
+      sourceField: 'id',
+      targetField: 'id',
+      ...normalizedProps,
+      label,
+      labelStyle: {
+        fontSize: 14,
+        fillStyle: '#334155',
+        backgroundColor: '#ffffff',
+        ...(normalizedProps.labelStyle || {}),
+      },
     });
+  }
+
+  /**
+   * 兼容语义化的连接点写法：top/right/bottom/left/center -> T/R/B/L/C。
+   * 内核 ICELinkSlot 使用单字母标识，这里让应用层可以用更直观的单词。
+   */
+  private static normalizeLinks(props) {
+    if (!props || !props.links) return props || {};
+    const map = { top: 'T', right: 'R', bottom: 'B', left: 'L', center: 'C' };
+    const links = { ...props.links };
+    if (links.start && map[links.start.position]) {
+      links.start = { ...links.start, position: map[links.start.position] };
+    }
+    if (links.end && map[links.end.position]) {
+      links.end = { ...links.end, position: map[links.end.position] };
+    }
+    return { ...props, links };
+  }
+
+  /**
+   * 允许应用层覆盖两端的基数写法，例如 sourceCardinality: '0..1'。
+   */
+  public static cardinalityLabel(relationType: string, props: any = {}): string {
+    const defaults: Record<string, [string, string]> = {
+      'one-to-many': ['1', 'N'],
+      'many-to-one': ['N', '1'],
+      'many-to-many': ['N', 'N'],
+      'one-to-one': ['1', '1'],
+    };
+    const [defaultSource, defaultTarget] = defaults[relationType] || defaults['one-to-one'];
+    return `${props.sourceCardinality || defaultSource} : ${props.targetCardinality || defaultTarget}`;
+  }
+
+  /**
+   * 在基数之外把 onDelete / onUpdate 语义显示到连线标签上，便于评审 schema。
+   */
+  private static composeLabel(props: any, relationType: string): string {
+    if (props.label) {
+      return props.label;
+    }
+    const constraints = [];
+    if (props.onDelete) constraints.push(`ON DELETE ${props.onDelete}`);
+    if (props.onUpdate) constraints.push(`ON UPDATE ${props.onUpdate}`);
+    const base = Relation.cardinalityLabel(relationType, props);
+    return constraints.length ? `${base}  (${constraints.join(', ')})` : base;
   }
 
   /**
    * 实体类的 JSON 格式描述，与 type-orm 规定的格式对应
    */
   public toEntityObject(): any {
-    let { title, relationType, referencedColumnName } = this.state;
+    let {
+      title,
+      relationType,
+      referencedColumnName,
+      sourceField,
+      targetField,
+      nullable,
+      onDelete,
+      onUpdate,
+      joinTableName,
+      fromKey,
+      toKey,
+    } = this.state;
     let fromComponent, toComponent, fromId, fromName, toId, toName;
     if (this.state.links && this.state.links.start && this.state.links.start.id) {
       fromId = this.state.links.start.id;
@@ -52,6 +121,14 @@ export default class Relation extends ICEVisioLink {
       toName,
       relationType,
       referencedColumnName,
+      sourceField,
+      targetField,
+      nullable: nullable === false ? false : undefined,
+      onDelete,
+      onUpdate,
+      joinTableName,
+      fromKey,
+      toKey,
     };
     return result;
   }

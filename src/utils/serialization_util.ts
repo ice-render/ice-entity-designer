@@ -19,7 +19,22 @@ export function toSchemaObject(componentList): object {
 
   for (let i = 0; i < relations.length; i++) {
     let relation = relations[i];
-    let { fromId, fromName, toId, toName, relationType, referencedColumnName } = relation.toEntityObject();
+    let {
+      fromId,
+      fromName,
+      toId,
+      toName,
+      relationType,
+      referencedColumnName,
+      sourceField,
+      targetField,
+      nullable,
+      onDelete,
+      onUpdate,
+      joinTableName,
+      fromKey: relationFromKey,
+      toKey: relationToKey,
+    } = relation.toEntityObject();
     let fromObj = cache[fromId];
     let toObj = cache[toId];
 
@@ -33,43 +48,72 @@ export function toSchemaObject(componentList): object {
       toObj.relations = {};
     }
 
-    //TODO:这里的实现做了简化，没有支持 type-orm 完整的 schema 规则。
-    //TODO:这里需要重构，需要完整支持 type-orm 中的4种关联关系，one-to-one, one-to-many, many-to-one, many-to-many ，type-orm 中定义了更详细的 schema 配置参数。
+    const fromKey = relationFromKey || camelCase(toName);
+    const toKey = relationToKey || camelCase(fromName);
+    const extra: any = {};
+    if (nullable === false) extra.nullable = false;
+    if (onDelete) extra.onDelete = onDelete;
+    if (onUpdate) extra.onUpdate = onUpdate;
+
     if ('one-to-one' === relationType) {
-      fromObj.relations[`${camelCase(toName)}`] = {
+      fromObj.relations[fromKey] = {
         type: relationType,
         target: toName,
         joinColumn: {
-          target: toName,
-          referencedColumnName: referencedColumnName,
+          name: sourceField || referencedColumnName,
+          referencedColumnName: targetField || referencedColumnName,
         },
+        ...extra,
       };
-      toObj.relations[`${camelCase(fromName)}`] = {
+      toObj.relations[toKey] = {
         type: relationType,
         target: fromName,
+        inverseSide: fromKey,
       };
     } else if ('one-to-many' === relationType) {
-      fromObj.relations[`${camelCase(toName)}`] = {
+      fromObj.relations[fromKey] = {
         type: relationType,
         target: toName,
+        inverseSide: toKey,
+      };
+      toObj.relations[toKey] = {
+        type: 'many-to-one',
+        target: fromName,
+        joinColumn: {
+          name: sourceField || referencedColumnName,
+          referencedColumnName: targetField || referencedColumnName,
+        },
+        ...extra,
       };
     } else if ('many-to-one' === relationType) {
-      toObj.relations[`${camelCase(fromName)}`] = {
-        type: 'one-to-many', //反向设置为 one-to-many
+      fromObj.relations[fromKey] = {
+        type: relationType,
+        target: toName,
+        joinColumn: {
+          name: sourceField || referencedColumnName,
+          referencedColumnName: targetField || referencedColumnName,
+        },
+        ...extra,
+      };
+      toObj.relations[toKey] = {
+        type: 'one-to-many',
         target: fromName,
+        inverseSide: fromKey,
       };
     } else if ('many-to-many' === relationType) {
       //这里默认双向设置，方便 QueryBuilder 进行操作
-      fromObj.relations[`${pluralize(camelCase(toName))}`] = {
+      fromObj.relations[`${pluralize(fromKey)}`] = {
         type: relationType,
         target: toName,
         joinTable: {
           target: toName,
+          ...(joinTableName ? { name: joinTableName } : {}),
         },
       };
-      toObj.relations[`${pluralize(camelCase(fromName))}`] = {
+      toObj.relations[`${pluralize(toKey)}`] = {
         type: relationType,
         target: fromName,
+        inverseSide: `${pluralize(fromKey)}`,
       };
     }
   }
