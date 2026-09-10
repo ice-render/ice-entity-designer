@@ -83,7 +83,7 @@ npm run build
 | 示例 | 说明 |
 |---|---|
 | `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
-| [`examples/react`](./examples/react) | React 集成示例工程（webpack + ts-loader）：ref / hook / onChange / 受控模式 |
+| [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
 
 ```bash
 python3 -m http.server 8899   # 然后访问 http://localhost:8899/tests/entity-editor.html
@@ -226,7 +226,7 @@ const session = createDesignerSession(canvasEl);
 - React 是**可选 peerDependency**（`^18 || ^19`），不使用 React 的项目不受影响。
 - **子路径解析**：现代解析器（webpack 5 / Vite / Node ESM）走 `exports`；老版本 TypeScript（< 4.7，或 `moduleResolution: "node"`）建议改用 `node16` / `bundler`，包内另提供 `react.d.ts` 垫片以兼容旧解析器。
 
-> 完整可运行示例（**webpack** 构建）：[`examples/react`](./examples/react)
+> 完整可运行示例（**独立工程**，webpack 构建）：[`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo)
 
 ## 7. 项目结构
 
