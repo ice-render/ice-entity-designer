@@ -6,7 +6,6 @@ import babel from 'rollup-plugin-babel';
 import { terser } from 'rollup-plugin-terser';
 import pkg from './package.json';
 
-const { visualizer } = require('rollup-plugin-visualizer');
 const path = require('path');
 const license = require('rollup-plugin-license');
 
@@ -44,7 +43,6 @@ const CommonPlugins = [
       allow: '(MIT OR Apache-2.0)',
     },
   }),
-  visualizer(),
 ].filter(Boolean);
 const external = [...Object.keys(pkg.devDependencies || {}), ...Object.keys(pkg.peerDependencies || {})];
 const globals = { 'ice-render': 'ICE' };

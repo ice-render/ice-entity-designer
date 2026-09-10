@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>IED · ER 模型展示</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+      }
+      #canvas-1 {
+        display: block;
+        background-color: #f8fafc;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas-1"></canvas>
+
+    <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+    <script src="../dist/index.umd.js"></script>
+    <script type="text/javascript">
+      (function () {
+        // 通过 URL 参数控制导出区域与倍率，便于生成 README 截图：
+        // ?s=2&x=0&y=0&rw=1240&rh=900  => 画布 2480x1800，展示世界坐标 (0,0)-(1240,900)
+        var q = new URLSearchParams(location.search);
+        var S = parseFloat(q.get('s') || '1');
+        var X = parseFloat(q.get('x') || '0');
+        var Y = parseFloat(q.get('y') || '0');
+        var RW = parseFloat(q.get('rw') || '1240');
+        var RH = parseFloat(q.get('rh') || '900');
+
+        var canvasEl = document.getElementById('canvas-1');
+        canvasEl.width = Math.round(RW * S);
+        canvasEl.height = Math.round(RH * S);
+
+        // 静态展示场景：强制整屏重绘，避免局部重绘在离屏截图时留下未绘制区域。
+        var ice = new ICE.ICE().init('canvas-1', { renderMode: 'full' });
+        window.__ice = ice;
+
+        var THEME = {
+          commerce: { headerBg: '#ecfdf5', headerText: '#047857' },
+          auth: { headerBg: '#eef2ff', headerText: '#4338ca' },
+        };
+
+        function makeEntity(group, props) {
+          var palette = THEME[group];
+          var entity = new IED.Entity({
+            style: {
+              fillStyle: '#ffffff',
+              strokeStyle: '#e2e8f0',
+              radius: 12,
+              lineWidth: 1.5,
+            },
+            headerStyle: {
+              textColor: palette.headerText,
+              backgroundColor: palette.headerBg,
+              fontSize: 18,
+              fontWeight: 'bold',
+              paddingTop: 12,
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingBottom: 12,
+            },
+            fieldStyle: {
+              textColor: '#334155',
+              fontSize: 15,
+              fontWeight: 'normal',
+              paddingTop: 9,
+              paddingLeft: 16,
+              paddingRight: 16,
+            },
+            dividerStyle: {
+              strokeStyle: '#e2e8f0',
+              fillStyle: '#e2e8f0',
+              lineWidth: 1,
+            },
+            ...props,
+          });
+          ice.addChild(entity);
+          return entity;
+        }
+
+        var idField = { name: 'id', type: 'number', length: 64, primary: true, autoIncrement: true, nullable: false };
+
+        var customer = makeEntity('commerce', {
+          left: 60,
+          top: 60,
+          entityName: 'Customer',
+          fields: [
+            idField,
+            { name: 'name', type: 'string', length: 128, nullable: false },
+            { name: 'email', type: 'string', length: 128, unique: true, nullable: false },
+            { name: 'phone', type: 'string', length: 32, nullable: true, comment: '联系电话，可空' },
+          ],
+        });
+
+        var order = makeEntity('commerce', {
+          left: 470,
+          top: 50,
+          entityName: 'Order',
+          fields: [
+            idField,
+            { name: 'orderNo', type: 'string', length: 64, unique: true, nullable: false },
+            { name: 'customerId', type: 'number', length: 64, foreignKey: true, nullable: false, index: true },
+            { name: 'totalAmount', type: 'decimal', length: '12,2', nullable: false, default: '0.00' },
+            { name: 'status', type: 'string', length: 32, nullable: false, default: "'created'" },
+          ],
+        });
+
+        var orderItem = makeEntity('commerce', {
+          left: 880,
+          top: 55,
+          entityName: 'OrderItem',
+          fields: [
+            idField,
+            { name: 'orderId', type: 'number', length: 64, foreignKey: true, nullable: false, index: true },
+            { name: 'productId', type: 'number', length: 64, foreignKey: true, nullable: false, index: true },
+            { name: 'quantity', type: 'number', length: 11, nullable: false },
+            { name: 'unitPrice', type: 'decimal', length: '12,2', nullable: false },
+          ],
+        });
+
+        var product = makeEntity('commerce', {
+          left: 880,
+          top: 360,
+          entityName: 'Product',
+          fields: [
+            idField,
+            { name: 'sku', type: 'string', length: 64, unique: true, nullable: false },
+            { name: 'name', type: 'string', length: 128, nullable: false },
+            { name: 'price', type: 'decimal', length: '12,2', nullable: false },
+            { name: 'stock', type: 'number', length: 11, nullable: false, default: 0 },
+          ],
+        });
+
+        var category = makeEntity('commerce', {
+          left: 60,
+          top: 360,
+          entityName: 'Category',
+          fields: [
+            idField,
+            { name: 'name', type: 'string', length: 128, nullable: false },
+            { name: 'parentId', type: 'number', length: 64, foreignKey: true, nullable: true, comment: '自引用' },
+            { name: 'sort', type: 'number', length: 11, default: 0 },
+          ],
+        });
+
+        var user = makeEntity('auth', {
+          left: 470,
+          top: 360,
+          entityName: 'User',
+          fields: [
+            idField,
+            { name: 'username', type: 'string', length: 64, unique: true, nullable: false },
+            { name: 'password', type: 'string', length: 128, nullable: false },
+            { name: 'email', type: 'string', length: 128, nullable: false },
+            { name: 'enabled', type: 'boolean', nullable: false, default: true },
+          ],
+        });
+
+        var role = makeEntity('auth', {
+          left: 60,
+          top: 660,
+          entityName: 'Role',
+          fields: [
+            idField,
+            { name: 'roleName', type: 'string', length: 64, unique: true, nullable: false },
+            { name: 'roleCode', type: 'string', length: 64, nullable: false },
+            { name: 'description', type: 'string', length: 255, nullable: true },
+          ],
+        });
+
+        var permission = makeEntity('auth', {
+          left: 470,
+          top: 660,
+          entityName: 'Permission',
+          fields: [
+            idField,
+            { name: 'permName', type: 'string', length: 64, nullable: false },
+            { name: 'permCode', type: 'string', length: 64, unique: true, nullable: false },
+            { name: 'resource', type: 'string', length: 128, nullable: false },
+          ],
+        });
+
+        var userProfile = makeEntity('auth', {
+          left: 880,
+          top: 660,
+          entityName: 'UserProfile',
+          fields: [
+            idField,
+            { name: 'userId', type: 'number', length: 64, foreignKey: true, unique: true, nullable: false },
+            { name: 'avatar', type: 'string', length: 255, nullable: true },
+            { name: 'bio', type: 'string', length: 255, nullable: true, comment: '个人简介' },
+          ],
+        });
+
+        function makeRelation(props) {
+          var relation = new IED.Relation({
+            style: {
+              strokeStyle: '#94a3b8',
+              fillStyle: '#94a3b8',
+              lineWidth: 2,
+            },
+            labelStyle: {
+              fontSize: 13,
+              fillStyle: '#475569',
+              backgroundColor: '#ffffff',
+            },
+            ...props,
+          });
+          ice.addChild(relation);
+          return relation;
+        }
+
+        makeRelation({
+          relationType: 'one-to-many',
+          sourceField: 'id',
+          targetField: 'customerId',
+          links: { start: { id: customer.state.id, position: 'R' }, end: { id: order.state.id, position: 'L' } },
+        });
+        makeRelation({
+          relationType: 'one-to-many',
+          sourceField: 'id',
+          targetField: 'orderId',
+          links: { start: { id: order.state.id, position: 'R' }, end: { id: orderItem.state.id, position: 'L' } },
+        });
+        makeRelation({
+          relationType: 'one-to-many',
+          sourceField: 'id',
+          targetField: 'productId',
+          links: { start: { id: product.state.id, position: 'T' }, end: { id: orderItem.state.id, position: 'B' } },
+        });
+        makeRelation({
+          relationType: 'one-to-many',
+          sourceField: 'id',
+          targetField: 'parentId',
+          sourceCardinality: '1',
+          targetCardinality: '0..N',
+          fromKey: 'children',
+          toKey: 'parent',
+          links: { start: { id: category.state.id, position: 'R' }, end: { id: category.state.id, position: 'B' } },
+        });
+        makeRelation({
+          relationType: 'many-to-many',
+          sourceField: 'id',
+          targetField: 'id',
+          joinTableName: 'user_roles',
+          links: { start: { id: user.state.id, position: 'B' }, end: { id: role.state.id, position: 'T' } },
+        });
+        makeRelation({
+          relationType: 'many-to-many',
+          sourceField: 'id',
+          targetField: 'id',
+          joinTableName: 'role_permissions',
+          links: { start: { id: role.state.id, position: 'R' }, end: { id: permission.state.id, position: 'L' } },
+        });
+        makeRelation({
+          relationType: 'one-to-one',
+          sourceField: 'id',
+          targetField: 'userId',
+          onDelete: 'CASCADE',
+          onUpdate: 'CASCADE',
+          label: '1 : 1  CASCADE',
+          links: { start: { id: user.state.id, position: 'R' }, end: { id: userProfile.state.id, position: 'L' } },
+        });
+
+        ice.setViewport(S, -X * S, -Y * S);
+        window.__shotReady = true;
+      })();
+    </script>
+  </body>
+</html>

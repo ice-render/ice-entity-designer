@@ -64,6 +64,32 @@
       height: 16px;
       flex: 0 0 auto;
     }
+    .icon-btn {
+      position: relative;
+    }
+    .icon-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%) scale(0.96);
+      transform-origin: top center;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 12px;
+      line-height: 1.2;
+      padding: 5px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 20;
+    }
+    .icon-btn:hover::after {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
     button:hover {
       border-color: #6366f1;
     }
@@ -264,6 +290,11 @@
       const entityPanel = document.getElementById('entity-panel');
       const schemaOutput = document.getElementById('schema-output');
       const validationOutput = document.getElementById('validation-output');
+
+      document.querySelectorAll('.icon-btn[title]').forEach((button) => {
+        button.dataset.tooltip = button.getAttribute('title');
+        button.removeAttribute('title');
+      });
 
       // 画布默认支持滚轮缩放 + 空白/中键拖拽。
       function zoomAtClientPoint(clientX, clientY, factor) {
@@ -563,25 +594,75 @@
           .map(Number)
           .sort((a, b) => a - b);
         rankList.forEach((r) => layers[r].forEach((node, index) => (node.order = index)));
+        const rankIndexMap = {};
+        rankList.forEach((r, index) => {
+          rankIndexMap[r] = index;
+        });
 
-        for (let iter = 0; iter < 10; iter++) {
-          rankList.forEach((r, rankIndex) => {
+        const median = (values) => {
+          const sorted = [...values].sort((a, b) => a - b);
+          const mid = Math.floor(sorted.length / 2);
+          return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        };
+
+        const neighborOrders = (node, previousIds, nextIds) => {
+          const orders = [];
+          [...node.in].forEach((id) => {
+            if (previousIds.has(id)) orders.push(nodeMap[id].order);
+          });
+          [...node.out].forEach((id) => {
+            if (nextIds.has(id)) orders.push(nodeMap[id].order);
+          });
+          return orders;
+        };
+
+        const transposeLayer = (layer, neighborIds) => {
+          let changed = true;
+          let guard = 0;
+          while (changed && guard < layer.length) {
+            changed = false;
+            guard++;
+            for (let i = 0; i < layer.length - 1; i++) {
+              const a = layer[i];
+              const b = layer[i + 1];
+              const score = (node) => {
+                const orders = [...node.in, ...node.out]
+                  .filter((id) => neighborIds.has(id))
+                  .map((id) => nodeMap[id].order)
+                  .sort((x, y) => x - y);
+                if (!orders.length) return node.order;
+                return Math.abs(node.order - median(orders));
+              };
+              if (score(b) < score(a)) {
+                layer[i] = b;
+                layer[i + 1] = a;
+                changed = true;
+              }
+            }
+          }
+          layer.forEach((node, index) => (node.order = index));
+        };
+
+        for (let iter = 0; iter < 14; iter++) {
+          const downward = iter % 2 === 0;
+          const rankOrder = downward ? rankList : [...rankList].reverse();
+          rankOrder.forEach((r) => {
+            const rankIndex = rankIndexMap[r];
             const layer = layers[r];
             const previousLayer = layers[rankList[rankIndex - 1]];
             const nextLayer = layers[rankList[rankIndex + 1]];
             const previousIds = new Set(previousLayer ? previousLayer.map((node) => node.id) : []);
             const nextIds = new Set(nextLayer ? nextLayer.map((node) => node.id) : []);
             layer.forEach((node) => {
-              const neighbors = [
-                ...[...node.in].filter((id) => previousIds.has(id)).map((id) => nodeMap[id]),
-                ...[...node.out].filter((id) => nextIds.has(id)).map((id) => nodeMap[id]),
-              ];
-              node.bary = neighbors.length
-                ? neighbors.reduce((sum, item) => sum + item.order, 0) / neighbors.length
-                : node.order;
+              const orders = neighborOrders(node, previousIds, nextIds);
+              node.bary = orders.length ? median(orders) : node.order;
             });
             layer.sort((a, b) => a.bary - b.bary || a.id.localeCompare(b.id));
             layer.forEach((node, index) => (node.order = index));
+            const neighborIds = downward ? nextIds : previousIds;
+            if (neighborIds.size) {
+              transposeLayer(layer, neighborIds);
+            }
           });
         }
 
@@ -715,7 +796,7 @@
 
       function resolveOverlaps(positions, boxes) {
         let moved = false;
-        for (let iter = 0; iter < 260; iter++) {
+        for (let iter = 0; iter < 400; iter++) {
           moved = false;
           for (let i = 0; i < positions.length; i++) {
             for (let j = i + 1; j < positions.length; j++) {
@@ -731,17 +812,21 @@
               const overlapY = (boxes[i].height + boxes[j].height) / 2 - Math.abs(dy);
               if (overlapX <= 0 || overlapY <= 0) continue;
               moved = true;
-              const push = overlapX < overlapY ? overlapX / 2 : overlapY / 2;
-              const length = Math.hypot(dx, dy) || 0.001;
-              const ux = dx / length;
-              const uy = dy / length;
-              if (overlapX < overlapY) {
-                a.x -= (ux >= 0 ? 1 : -1) * push;
-                b.x += (ux >= 0 ? 1 : -1) * push;
+              const push = Math.min(overlapX, overlapY) / 2;
+              const length = Math.hypot(dx, dy);
+              let ux = 0;
+              let uy = 0;
+              if (length > 0.001) {
+                ux = dx / length;
+                uy = dy / length;
               } else {
-                a.y -= (uy >= 0 ? 1 : -1) * push;
-                b.y += (uy >= 0 ? 1 : -1) * push;
+                ux = 1;
+                uy = 0;
               }
+              a.x -= ux * push;
+              a.y -= uy * push;
+              b.x += ux * push;
+              b.y += uy * push;
             }
           }
           if (!moved) break;
@@ -839,7 +924,7 @@
       }
 
       const antdUI = window.antd || {};
-      const { Table = () => null, Input = () => null, Button = () => null, Checkbox = () => null, Space = () => null, Select = () => null, Typography = {}, Form = () => null } = antdUI;
+      const { Table = () => null, Input = () => null, Button = () => null, Select = () => null, Tabs = () => null, Typography = {}, Form = () => null } = antdUI;
       let propertyPanelRoot = null;
 
       function commitField(entity, index, patch) {
@@ -854,25 +939,40 @@
         entity.setFields(fields);
       }
 
-      function commitFlag(entity, index, key, checked) {
-        if (key === 'nullable') {
-          commitField(entity, index, { nullable: checked });
-        } else {
-          commitField(entity, index, { [key]: checked });
-        }
+      function commitConstraints(entity, index, values) {
+        commitField(entity, index, {
+          primary: values.includes('PK'),
+          foreignKey: values.includes('FK'),
+          unique: values.includes('UQ'),
+          autoIncrement: values.includes('AI'),
+          nullable: !values.includes('NN'),
+          generated: values.includes('GEN'),
+          index: values.includes('IDX'),
+        });
       }
 
       function EntityFieldsTable({ entity, refresh }) {
         const fields = (entity.state.fields || []).map((field, index) => ({ ...field, key: index }));
-        const flagDefs = [
-          ['primary', 'PK'],
-          ['foreignKey', 'FK'],
-          ['unique', 'UQ'],
-          ['autoIncrement', 'AI'],
-          ['nullable', 'NN'],
-          ['generated', 'GEN'],
-          ['index', 'IDX'],
+        const constraintOptions = [
+          { value: 'PK', label: 'PK' },
+          { value: 'FK', label: 'FK' },
+          { value: 'UQ', label: 'UQ' },
+          { value: 'AI', label: 'AI' },
+          { value: 'NN', label: 'NN' },
+          { value: 'GEN', label: 'GEN' },
+          { value: 'IDX', label: 'IDX' },
         ];
+        const constraintValues = (field) => {
+          const values = [];
+          if (field.primary) values.push('PK');
+          if (field.foreignKey) values.push('FK');
+          if (field.unique) values.push('UQ');
+          if (field.autoIncrement) values.push('AI');
+          if (field.nullable === false) values.push('NN');
+          if (field.generated) values.push('GEN');
+          if (field.index) values.push('IDX');
+          return values;
+        };
 
         const inputProps = (value, placeholder, commit) => ({
           defaultValue: value ?? '',
@@ -919,46 +1019,22 @@
           {
             title: '约束',
             dataIndex: 'constraints',
-            width: 230,
+            width: 190,
             render: (value, record, index) =>
               React.createElement(
-                Space,
-                { size: 4, wrap: true },
-                flagDefs.map(([key, label]) => {
-                  const checked = key === 'nullable' ? record.nullable !== false : Boolean(record[key]);
-                  return React.createElement(
-                    Checkbox,
-                    {
-                      key: label,
-                      checked,
-                      onChange: (evt) => {
-                        commitFlag(entity, index, key, evt.target.checked);
-                        refresh();
-                      },
-                    },
-                    label,
-                  );
-                }),
-              ),
-          },
-          {
-            title: '默认值',
-            dataIndex: 'default',
-            width: 110,
-            render: (value, record, index) =>
-              React.createElement(
-                Input,
-                inputProps(value, 'default', (next) => commitField(entity, index, { default: next === '' ? undefined : next })),
-              ),
-          },
-          {
-            title: '注释',
-            dataIndex: 'comment',
-            width: 150,
-            render: (value, record, index) =>
-              React.createElement(
-                Input,
-                inputProps(value, 'comment', (next) => commitField(entity, index, { comment: next || undefined })),
+                Select,
+                {
+                  mode: 'multiple',
+                  size: 'small',
+                  defaultValue: constraintValues(record),
+                  options: constraintOptions,
+                  style: { width: '100%' },
+                  maxTagCount: 2,
+                  onChange: (values) => {
+                    commitConstraints(entity, index, values);
+                    refresh();
+                  },
+                },
               ),
           },
           {
@@ -983,6 +1059,41 @@
           },
         ];
 
+        const expandedRowRender = (record, index) =>
+          React.createElement(
+            'div',
+            {
+              style: {
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 8,
+                padding: '6px 0',
+              },
+            },
+            React.createElement(
+              'div',
+              null,
+              React.createElement('div', { style: { marginBottom: 4, color: '#64748b' } }, '默认值'),
+              React.createElement(
+                Input,
+                inputProps(record.default, 'default', (next) =>
+                  commitField(entity, index, { default: next === '' ? undefined : next }),
+                ),
+              ),
+            ),
+            React.createElement(
+              'div',
+              null,
+              React.createElement('div', { style: { marginBottom: 4, color: '#64748b' } }, '注释'),
+              React.createElement(
+                Input,
+                inputProps(record.comment, 'comment', (next) =>
+                  commitField(entity, index, { comment: next || undefined }),
+                ),
+              ),
+            ),
+          );
+
         return React.createElement(
           'div',
           null,
@@ -1002,7 +1113,8 @@
             columns,
             dataSource: fields,
             pagination: false,
-            scroll: { x: 850 },
+            scroll: { x: 560 },
+            expandable: { expandedRowRender },
             rowKey: (record) => record.key,
           }),
           React.createElement(
@@ -1117,17 +1229,56 @@
       }
 
       function PropertyPanel({ selected, refresh }) {
-        if (!selected) {
-          return React.createElement(
-            'div',
-            { style: { color: '#64748b', padding: '12px 0' } },
-            '点击画布中的 Entity 或 Relation 进行编辑',
-          );
+        const renderEditor = () => {
+          if (!selected) {
+            return React.createElement(
+              'div',
+              { style: { color: '#64748b', padding: '12px 0' } },
+              '点击画布中的 Entity 或 Relation 进行编辑',
+            );
+          }
+          if (selected.constructor.name === 'Relation') {
+            return React.createElement(RelationPropertyPanel, { relation: selected, refresh });
+          }
+          return React.createElement(EntityFieldsTable, { entity: selected, refresh });
+        };
+
+        let jsonText = designer.serializeProject();
+        try {
+          jsonText = JSON.stringify(JSON.parse(jsonText), null, 2);
+        } catch (error) {
+          jsonText = designer.serializeProject();
         }
-        if (selected.constructor.name === 'Relation') {
-          return React.createElement(RelationPropertyPanel, { relation: selected, refresh });
-        }
-        return React.createElement(EntityFieldsTable, { entity: selected, refresh });
+
+        const items = [
+          {
+            key: 'editor',
+            label: '属性编辑',
+            children: renderEditor(),
+          },
+          {
+            key: 'json',
+            label: '序列化 JSON',
+            children: React.createElement(
+              'pre',
+              {
+                className: 'schema-json',
+                style: {
+                  margin: 0,
+                  maxHeight: 'calc(100vh - 160px)',
+                  overflow: 'auto',
+                },
+              },
+              jsonText,
+            ),
+          },
+        ];
+
+        return React.createElement(Tabs, {
+          defaultActiveKey: 'editor',
+          size: 'small',
+          items,
+        });
       }
 
       function renderPanel() {
@@ -1887,10 +2038,9 @@
         joinTableName: 'order_promotions',
       });
 
+      applyForceLayout();
       designer.select(E.Customer.state.id);
       renderPanel();
-      setLinkingMode(false);
-      refreshHistoryButtons();
     </script>
   </body>
 </html>
