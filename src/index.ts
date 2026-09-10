@@ -7,4 +7,6 @@
  */
 export { default as Entity } from './er-component/Entity';
 export { default as Relation } from './er-component/Relation';
+export { default as EntityDesigner } from './designer/EntityDesigner';
 export { toSchemaObject, toSchemaString } from './utils/serialization_util';
+export { validateSchema } from './utils/schema_validator';

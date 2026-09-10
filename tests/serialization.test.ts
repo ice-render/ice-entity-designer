@@ -181,4 +181,17 @@ describe('Relation.cardinalityLabel', () => {
       '1 : 0..N'
     );
   });
+
+  it('buildLabel 会忽略旧 label 并按当前参数重新计算', () => {
+    expect(Relation.buildLabel({ label: '1 : N', onDelete: 'CASCADE' }, 'many-to-one')).toBe(
+      'N : 1  (ON DELETE CASCADE)'
+    );
+  });
+
+  it('根据关系类型推断默认箭头方向', () => {
+    expect(Relation.defaultArrow('one-to-many')).toBe('end');
+    expect(Relation.defaultArrow('many-to-one')).toBe('start');
+    expect(Relation.defaultArrow('one-to-one')).toBe('none');
+    expect(Relation.defaultArrow('many-to-many')).toBe('none');
+  });
 });

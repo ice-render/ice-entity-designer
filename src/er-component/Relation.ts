@@ -22,12 +22,14 @@ export default class Relation extends ICEVisioLink {
     const normalizedProps = Relation.normalizeLinks(props || {});
     const relationType = normalizedProps.relationType || 'one-to-one';
     const label = Relation.composeLabel(normalizedProps, relationType);
+    const arrow = normalizedProps.arrow || Relation.defaultArrow(relationType);
     super({
       title: 'Relation',
       relationType,
       referencedColumnName: 'id',
       sourceField: 'id',
       targetField: 'id',
+      arrow,
       ...normalizedProps,
       label,
       labelStyle: {
@@ -37,6 +39,22 @@ export default class Relation extends ICEVisioLink {
         ...(normalizedProps.labelStyle || {}),
       },
     });
+  }
+
+  /**
+   * 根据关系类型推断箭头方向，默认指向 FK 所在的一端。
+   */
+  public static defaultArrow(relationType: string): string {
+    switch (relationType) {
+      case 'one-to-many':
+        return 'end';
+      case 'many-to-one':
+        return 'start';
+      case 'many-to-many':
+      case 'one-to-one':
+      default:
+        return 'none';
+    }
   }
 
   /**
@@ -73,10 +91,17 @@ export default class Relation extends ICEVisioLink {
   /**
    * 在基数之外把 onDelete / onUpdate 语义显示到连线标签上，便于评审 schema。
    */
-  private static composeLabel(props: any, relationType: string): string {
+  public static composeLabel(props: any, relationType: string): string {
     if (props.label) {
       return props.label;
     }
+    return Relation.buildLabel(props, relationType);
+  }
+
+  /**
+   * 根据当前关系参数重新计算标签，忽略已有的 label，供属性面板实时更新使用。
+   */
+  public static buildLabel(props: any, relationType: string): string {
     const constraints = [];
     if (props.onDelete) constraints.push(`ON DELETE ${props.onDelete}`);
     if (props.onUpdate) constraints.push(`ON UPDATE ${props.onUpdate}`);

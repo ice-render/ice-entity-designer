@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <meta charset="utf-8" />
+  <title>IED-entity-editor</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .app {
+      display: flex;
+      min-height: 100vh;
+    }
+    .workspace {
+      flex: 1;
+      padding: 12px;
+      min-width: 0;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    button,
+    select,
+    input[type="text"] {
+      font: inherit;
+      padding: 6px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #0f172a;
+    }
+    button {
+      cursor: pointer;
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .icon-btn svg {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+    }
+    button:hover {
+      border-color: #6366f1;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #f8fafc;
+      cursor: grab;
+    }
+    .canvas-wrap {
+      position: relative;
+    }
+    .link-preview {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: none;
+    }
+    .link-preview path {
+      stroke: #0f766e;
+      stroke-width: 2;
+      stroke-dasharray: 6 4;
+      fill: none;
+    }
+    .side {
+      width: 360px;
+      padding: 14px;
+      border-left: 1px solid #e2e8f0;
+      background: #ffffff;
+      box-sizing: border-box;
+    }
+    .side h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 90px 58px auto;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .field-row input {
+      min-width: 0;
+    }
+    .checks {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 2px 0 10px;
+    }
+    .checks label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .field-extras {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 6px;
+      margin: -2px 0 10px;
+    }
+    .relation-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    pre {
+      max-height: 220px;
+      overflow: auto;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 10px;
+      border-radius: 10px;
+      white-space: pre-wrap;
+    }
+  </style>
+  <body>
+    <div class="app">
+      <div class="workspace">
+        <div class="toolbar">
+          <button id="btn-add-entity" class="icon-btn" title="新增 Entity">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            新增 Entity
+          </button>
+          <button id="btn-delete-selected" class="icon-btn" title="删除选中">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M8 6V4h8v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+            删除选中
+          </button>
+          <button id="btn-undo" class="icon-btn" title="撤销">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+            撤销
+          </button>
+          <button id="btn-redo" class="icon-btn" title="重做">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
+            重做
+          </button>
+          <button id="btn-validate" class="icon-btn" title="校验 Schema">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+            校验 Schema
+          </button>
+          <button id="btn-save-project" class="icon-btn" title="保存项目">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+            保存项目
+          </button>
+          <button id="btn-load-project" class="icon-btn" title="加载项目">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6A2 2 0 0 1 18.45 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v2" /></svg>
+            加载项目
+          </button>
+          <button id="btn-schema" class="icon-btn" title="输出 Schema">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+            输出 Schema
+          </button>
+          <button id="btn-reset" class="icon-btn" title="重置视图">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+            重置视图
+          </button>
+          <select id="rel-type" title="关系类型">
+            <option value="one-to-many">one-to-many</option>
+            <option value="many-to-one">many-to-one</option>
+            <option value="one-to-one">one-to-one</option>
+            <option value="many-to-many">many-to-many</option>
+          </select>
+          <button id="btn-toggle-link" class="icon-btn" title="连接关系">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+            连接关系
+          </button>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="canvas-1" width="1200" height="760"></canvas>
+          <svg id="link-preview" class="link-preview" viewBox="0 0 1200 760" preserveAspectRatio="none">
+            <path id="link-preview-path" d="" />
+          </svg>
+        </div>
+      </div>
+      <aside class="side">
+        <h3>实体属性</h3>
+        <div id="entity-panel">点击画布中的 Entity 进行编辑</div>
+        <h3 style="margin-top: 18px;">关系</h3>
+        <div id="relation-hint" style="min-height: 20px; color: #64748b;">选择关系类型后点击“连接关系”</div>
+        <pre id="schema-output" hidden></pre>
+        <div id="validation-output"></div>
+      </aside>
+    </div>
+
+    <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+    <script src="../dist/index.umd.js"></script>
+    <script type="text/javascript">
+      const ice = new ICE.ICE().init('canvas-1');
+      const designer = new IED.EntityDesigner(ice);
+      window.__ice = ice;
+      window.__designer = designer;
+      ice.alignmentGuide.enable({ threshold: 6 });
+
+      const canvasEl = document.getElementById('canvas-1');
+      const linkPreview = document.getElementById('link-preview');
+      const linkPreviewPath = document.getElementById('link-preview-path');
+      const entityPanel = document.getElementById('entity-panel');
+      const schemaOutput = document.getElementById('schema-output');
+      const validationOutput = document.getElementById('validation-output');
+
+      // 画布默认支持滚轮缩放 + 空白/中键拖拽。
+      function zoomAtClientPoint(clientX, clientY, factor) {
+        const oldScale = ice.viewport.scale;
+        const nextScale = Math.max(0.3, Math.min(3, oldScale * factor));
+        const rect = canvasEl.getBoundingClientRect();
+        const cx = clientX - rect.left;
+        const cy = clientY - rect.top;
+        const tx = cx - ((cx - ice.viewport.tx) * nextScale) / oldScale;
+        const ty = cy - ((cy - ice.viewport.ty) * nextScale) / oldScale;
+        ice.setViewport(nextScale, tx, ty);
+      }
+      canvasEl.addEventListener('wheel', (evt) => {
+        evt.preventDefault();
+        zoomAtClientPoint(evt.clientX, evt.clientY, evt.deltaY > 0 ? 0.9 : 1.1);
+      });
+
+      let panning = false;
+      let lastX = 0;
+      let lastY = 0;
+      let linkingMode = false;
+      let linkSource = null;
+
+      function findRootEntity(component) {
+        let root = component;
+        while (root && root.parentNode) {
+          root = root.parentNode;
+        }
+        return root && root.constructor && root.constructor.name === 'Entity' ? root : null;
+      }
+
+      function entityCenterInCanvas(entity) {
+        const box = entity.getMinBoundingBox(true);
+        const center = box.center;
+        return ice.worldToScreen(center[0], center[1]);
+      }
+
+      function showLinkPreview(entity) {
+        const [x, y] = entityCenterInCanvas(entity);
+        linkPreviewPath.setAttribute('d', orthogonalPreviewPath(x, y, x, y));
+        linkPreview.style.display = 'block';
+      }
+
+      function hideLinkPreview() {
+        linkPreview.style.display = 'none';
+      }
+
+      function orthogonalPreviewPath(x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          const midX = (x1 + x2) / 2;
+          return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+        }
+        const midY = (y1 + y2) / 2;
+        return `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
+      }
+
+      canvasEl.addEventListener('mousedown', (evt) => {
+        if (linkingMode) {
+          const hit = ice.hitTest(evt.offsetX, evt.offsetY);
+          const entity = findRootEntity(hit);
+          if (entity) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            if (!linkSource) {
+              linkSource = entity;
+              showLinkPreview(entity);
+              document.getElementById('relation-hint').textContent = `已选择源 Entity：${entity.state.entityName}，请点击目标 Entity`;
+              document.getElementById('relation-hint').style.color = '#0f766e';
+            } else if (linkSource.state.id !== entity.state.id) {
+              designer.createRelation({
+                relationType: document.getElementById('rel-type').value,
+                sourceId: linkSource.state.id,
+                targetId: entity.state.id,
+              });
+              hideLinkPreview();
+              setLinkingMode(false);
+              renderPanel();
+              refreshHistoryButtons();
+            } else {
+              document.getElementById('relation-hint').textContent = '源 Entity 和目标 Entity 不能相同，请重新选择';
+              document.getElementById('relation-hint').style.color = '#b45309';
+              linkSource = null;
+              hideLinkPreview();
+            }
+          }
+          return;
+        }
+
+        const blank = evt.button === 0 && !ice.hitTest(evt.offsetX, evt.offsetY);
+        if (evt.button !== 1 && !blank) return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        panning = true;
+        lastX = evt.offsetX;
+        lastY = evt.offsetY;
+        canvasEl.style.cursor = 'grabbing';
+      });
+      canvasEl.addEventListener('mousemove', (evt) => {
+        if (linkingMode && linkSource) {
+          const rect = canvasEl.getBoundingClientRect();
+          const mx = evt.offsetX * (canvasEl.width / rect.width);
+          const my = evt.offsetY * (canvasEl.height / rect.height);
+          const [sx, sy] = entityCenterInCanvas(linkSource);
+          linkPreviewPath.setAttribute('d', orthogonalPreviewPath(sx, sy, mx, my));
+        }
+        if (!panning) return;
+        const dx = evt.offsetX - lastX;
+        const dy = evt.offsetY - lastY;
+        lastX = evt.offsetX;
+        lastY = evt.offsetY;
+        ice.setViewport(ice.viewport.scale, ice.viewport.tx + dx, ice.viewport.ty + dy);
+      });
+      canvasEl.addEventListener('mouseup', () => {
+        panning = false;
+        canvasEl.style.cursor = 'grab';
+      });
+      canvasEl.addEventListener('mouseleave', () => {
+        panning = false;
+        canvasEl.style.cursor = 'grab';
+      });
+      canvasEl.addEventListener('auxclick', (evt) => {
+        if (evt.button === 1) evt.preventDefault();
+      });
+
+      function setLinkingMode(enabled) {
+        linkingMode = enabled;
+        linkSource = null;
+        designer.entities.forEach((entity) => {
+          entity.setState({ draggable: !enabled });
+        });
+        const hint = document.getElementById('relation-hint');
+        const button = document.getElementById('btn-toggle-link');
+        if (enabled) {
+          hint.textContent = '连接模式：请先点击源 Entity，再点击目标 Entity';
+          hint.style.color = '#0f766e';
+          button.style.borderColor = '#0f766e';
+          canvasEl.style.cursor = 'crosshair';
+        } else {
+          hideLinkPreview();
+          hint.textContent = '选择关系类型后点击“连接关系”';
+          hint.style.color = '#64748b';
+          button.style.borderColor = '';
+          canvasEl.style.cursor = 'grab';
+        }
+      }
+
+      function renderPanel() {
+        const selected = designer.selected;
+        if (!selected) {
+          entityPanel.innerHTML = '点击画布中的 Entity 或 Relation 进行编辑';
+          return;
+        }
+
+        if (selected.constructor.name === 'Relation') {
+          renderRelationPanel(selected);
+          return;
+        }
+
+        const entity = selected;
+        const fields = [...(entity.state.fields || [])];
+        entityPanel.innerHTML = '';
+
+        const nameLabel = document.createElement('label');
+        nameLabel.textContent = '实体名称';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = entity.state.entityName || '';
+        nameInput.style.width = '100%';
+        nameInput.addEventListener('input', () => {
+          designer.updateEntity(entity.state.id, { entityName: nameInput.value });
+        });
+        entityPanel.appendChild(nameLabel);
+        entityPanel.appendChild(nameInput);
+
+        const fieldsTitle = document.createElement('div');
+        fieldsTitle.style.cssText = 'margin:12px 0 6px;font-weight:600;';
+        fieldsTitle.textContent = '字段列表';
+        entityPanel.appendChild(fieldsTitle);
+
+        fields.forEach((field, index) => {
+          const row = document.createElement('div');
+          row.className = 'field-row';
+
+          const name = document.createElement('input');
+          name.type = 'text';
+          name.value = field.name || '';
+          name.placeholder = 'name';
+
+          const type = document.createElement('input');
+          type.type = 'text';
+          type.value = field.type || '';
+          type.placeholder = 'type';
+
+          const length = document.createElement('input');
+          length.type = 'text';
+          length.value = field.length ?? '';
+          length.placeholder = 'len';
+
+          const remove = document.createElement('button');
+          remove.textContent = '删除';
+          remove.addEventListener('click', () => {
+            fields.splice(index, 1);
+            entity.setFields(fields);
+            renderPanel();
+          });
+
+          row.appendChild(name);
+          row.appendChild(type);
+          row.appendChild(length);
+          row.appendChild(remove);
+          entityPanel.appendChild(row);
+
+          const checks = document.createElement('div');
+          checks.className = 'checks';
+          [
+            ['primary', 'PK'],
+            ['foreignKey', 'FK'],
+            ['unique', 'UQ'],
+            ['autoIncrement', 'AI'],
+            ['nullable', 'NN'],
+            ['generated', 'GEN'],
+            ['index', 'IDX'],
+          ].forEach(([key, label]) => {
+            const labelEl = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            if (key === 'nullable') {
+              checkbox.checked = field.nullable !== false;
+            } else {
+              checkbox.checked = Boolean(field[key]);
+            }
+            checkbox.addEventListener('change', () => {
+              if (key === 'nullable') {
+                field.nullable = checkbox.checked;
+              } else {
+                field[key] = checkbox.checked;
+              }
+              entity.setFields(fields);
+            });
+            labelEl.appendChild(checkbox);
+            labelEl.appendChild(document.createTextNode(label));
+            checks.appendChild(labelEl);
+          });
+          entityPanel.appendChild(checks);
+
+          const extras = document.createElement('div');
+          extras.className = 'field-extras';
+          const defaultInput = document.createElement('input');
+          defaultInput.type = 'text';
+          defaultInput.placeholder = 'default';
+          defaultInput.value = field.default ?? '';
+          const commentInput = document.createElement('input');
+          commentInput.type = 'text';
+          commentInput.placeholder = 'comment';
+          commentInput.value = field.comment ?? '';
+          extras.appendChild(defaultInput);
+          extras.appendChild(commentInput);
+          entityPanel.appendChild(extras);
+
+          const sync = () => {
+            field.name = name.value;
+            field.type = type.value || undefined;
+            field.length = length.value === '' ? undefined : length.value;
+            field.default = defaultInput.value === '' ? undefined : defaultInput.value;
+            field.comment = commentInput.value || undefined;
+            entity.setFields(fields);
+          };
+          name.addEventListener('input', sync);
+          type.addEventListener('input', sync);
+          length.addEventListener('input', sync);
+          defaultInput.addEventListener('input', sync);
+          commentInput.addEventListener('input', sync);
+        });
+
+        const addField = document.createElement('button');
+        addField.textContent = '新增字段';
+        addField.addEventListener('click', () => {
+          entity.addField({ name: 'newField', type: 'string' });
+          renderPanel();
+        });
+        entityPanel.appendChild(addField);
+      }
+
+      function renderRelationPanel(relation) {
+        entityPanel.innerHTML = '';
+        const title = document.createElement('div');
+        title.style.cssText = 'margin-bottom:10px;font-weight:600;';
+        title.textContent = '关系属性';
+        entityPanel.appendChild(title);
+
+        const makeRow = (labelText, input) => {
+          const label = document.createElement('label');
+          label.textContent = labelText;
+          label.style.display = 'block';
+          label.style.marginBottom = '8px';
+          input.style.width = '100%';
+          label.appendChild(input);
+          entityPanel.appendChild(label);
+          return input;
+        };
+
+        const relationType = document.createElement('select');
+        ['one-to-many', 'many-to-one', 'one-to-one', 'many-to-many'].forEach((value) => {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value;
+          relationType.appendChild(option);
+        });
+        relationType.value = relation.state.relationType || 'one-to-many';
+        relationType.addEventListener('change', () => {
+          designer.updateRelation(relation.state.id, { relationType: relationType.value });
+          renderPanel();
+        });
+        makeRow('关系类型', relationType);
+
+        const sourceField = document.createElement('input');
+        sourceField.type = 'text';
+        sourceField.value = relation.state.sourceField || 'id';
+        sourceField.addEventListener('input', () => {
+          designer.updateRelation(relation.state.id, { sourceField: sourceField.value || 'id' });
+        });
+        makeRow('源字段', sourceField);
+
+        const targetField = document.createElement('input');
+        targetField.type = 'text';
+        targetField.value = relation.state.targetField || 'id';
+        targetField.addEventListener('input', () => {
+          designer.updateRelation(relation.state.id, { targetField: targetField.value || 'id' });
+        });
+        makeRow('目标字段', targetField);
+
+        const makeActionSelect = (labelText, key) => {
+          const select = document.createElement('select');
+          ['', 'CASCADE', 'SET NULL', 'NO ACTION', 'RESTRICT'].forEach((value) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value || '未设置';
+            select.appendChild(option);
+          });
+          select.value = relation.state[key] || '';
+          select.addEventListener('change', () => {
+            designer.updateRelation(relation.state.id, { [key]: select.value || undefined });
+          });
+          makeRow(labelText, select);
+        };
+
+        makeActionSelect('onDelete', 'onDelete');
+        makeActionSelect('onUpdate', 'onUpdate');
+
+        const joinTableName = document.createElement('input');
+        joinTableName.type = 'text';
+        joinTableName.value = relation.state.joinTableName || '';
+        joinTableName.placeholder = 'user_roles';
+        joinTableName.addEventListener('input', () => {
+          designer.updateRelation(relation.state.id, { joinTableName: joinTableName.value || undefined });
+        });
+        makeRow('joinTableName', joinTableName);
+      }
+
+      ice.evtBus.on('mousedown', () => {
+        setTimeout(() => {
+          renderPanel();
+        }, 0);
+      });
+
+      document.getElementById('btn-add-entity').addEventListener('click', () => {
+        designer.createEntity({
+          entityName: 'NewEntity',
+          fields: [{ name: 'id', type: 'number', primary: true, autoIncrement: true, nullable: false }],
+        });
+        renderPanel();
+        setLinkingMode(false);
+        refreshHistoryButtons();
+      });
+
+      document.getElementById('btn-delete-selected').addEventListener('click', () => {
+        if (designer.selectedId) {
+          designer.removeComponent(designer.selectedId);
+          renderPanel();
+          setLinkingMode(false);
+          refreshHistoryButtons();
+        }
+      });
+
+      document.getElementById('btn-toggle-link').addEventListener('click', () => {
+        setLinkingMode(!linkingMode);
+      });
+
+      document.getElementById('btn-schema').addEventListener('click', () => {
+        schemaOutput.hidden = false;
+        schemaOutput.textContent = JSON.stringify(designer.toSchemaObject(), null, 2);
+      });
+
+      document.getElementById('btn-validate').addEventListener('click', () => {
+        const issues = designer.validate();
+        validationOutput.innerHTML = '';
+        if (!issues.length) {
+          validationOutput.textContent = '✅ Schema 校验通过';
+          validationOutput.style.color = '#059669';
+          return;
+        }
+        validationOutput.style.color = '#b91c1c';
+        const list = document.createElement('ul');
+        list.style.cssText = 'margin:0;padding-left:20px;';
+        issues.forEach((issue) => {
+          const item = document.createElement('li');
+          item.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
+          list.appendChild(item);
+        });
+        validationOutput.appendChild(list);
+      });
+
+      const projectStorageKey = 'ice-entity-designer-project';
+      document.getElementById('btn-save-project').addEventListener('click', () => {
+        window.localStorage.setItem(projectStorageKey, designer.serializeProject());
+        validationOutput.innerHTML = '';
+        validationOutput.textContent = '✅ 项目已保存';
+        validationOutput.style.color = '#059669';
+      });
+
+      document.getElementById('btn-load-project').addEventListener('click', () => {
+        const json = window.localStorage.getItem(projectStorageKey);
+        if (!json) {
+          validationOutput.innerHTML = '';
+          validationOutput.textContent = '⚠️ 没有可加载的项目';
+          validationOutput.style.color = '#b45309';
+          return;
+        }
+        designer.loadProject(json);
+        renderPanel();
+        setLinkingMode(false);
+        refreshHistoryButtons();
+        validationOutput.innerHTML = '';
+        validationOutput.textContent = '✅ 项目已加载';
+        validationOutput.style.color = '#059669';
+      });
+
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        ice.setViewport(1, 0, 0);
+      });
+
+      function refreshHistoryButtons() {
+        document.getElementById('btn-undo').disabled = !designer.canUndo();
+        document.getElementById('btn-redo').disabled = !designer.canRedo();
+      }
+
+      document.getElementById('btn-undo').addEventListener('click', () => {
+        designer.undo();
+        renderPanel();
+        setLinkingMode(false);
+        refreshHistoryButtons();
+      });
+
+      document.getElementById('btn-redo').addEventListener('click', () => {
+        designer.redo();
+        renderPanel();
+        setLinkingMode(false);
+        refreshHistoryButtons();
+      });
+
+      document.addEventListener('keydown', (evt) => {
+        const mod = evt.metaKey || evt.ctrlKey;
+        if (!mod) return;
+        if (evt.key.toLowerCase() === 'z' && !evt.shiftKey) {
+          evt.preventDefault();
+          designer.undo();
+          renderPanel();
+          setLinkingMode(false);
+          refreshHistoryButtons();
+        } else if (evt.key.toLowerCase() === 'y' || (evt.key.toLowerCase() === 'z' && evt.shiftKey)) {
+          evt.preventDefault();
+          designer.redo();
+          renderPanel();
+          setLinkingMode(false);
+          refreshHistoryButtons();
+        }
+      });
+
+      const starter = designer.createEntity({
+        left: 120,
+        top: 120,
+        entityName: 'User',
+        fields: [
+          { name: 'id', type: 'number', primary: true, autoIncrement: true, nullable: false },
+          { name: 'email', type: 'string', unique: true, nullable: false },
+        ],
+      });
+      const starterRole = designer.createEntity({
+        left: 520,
+        top: 120,
+        entityName: 'Role',
+        fields: [{ name: 'id', type: 'number', primary: true, autoIncrement: true, nullable: false }],
+      });
+      designer.createRelation({
+        relationType: 'one-to-many',
+        sourceId: starter.state.id,
+        targetId: starterRole.state.id,
+      });
+      designer.select(starter.state.id);
+      renderPanel();
+      setLinkingMode(false);
+      refreshHistoryButtons();
+    </script>
+  </body>
+</html>

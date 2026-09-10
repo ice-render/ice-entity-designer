@@ -144,16 +144,18 @@ export default class Entity extends ICEGroup {
       });
 
       if (this.state.headerStyle.backgroundColor && this.state.headerStyle.backgroundColor !== 'none') {
+        const lineWidth = this.state.style.lineWidth || 1.5;
+        const inset = lineWidth / 2;
         this.headerBackgroundComponent = new ICERect({
-          left: 0,
-          top: 0,
-          width: this.state.width,
-          height: this.entityNameComponent.state.height,
+          left: inset,
+          top: inset,
+          width: Math.max(this.state.width - lineWidth, 0),
+          height: Math.max(this.entityNameComponent.state.height - inset, 0),
           zIndex: this.entityNameComponent.state.zIndex - 1,
           origin: 'top-left',
           style: {
             fillStyle: this.state.headerStyle.backgroundColor,
-            radius: this.state.style.radius || 0,
+            radius: Math.max((this.state.style.radius || 0) - inset, 0),
             lineWidth: 0,
           },
           interactive: false,
@@ -278,10 +280,12 @@ export default class Entity extends ICEGroup {
 
     //Header 背景带始终铺满实体当前最终宽度，与分隔线平齐。
     if (this.headerBackgroundComponent) {
-      this.headerBackgroundComponent.state.left = 0;
-      this.headerBackgroundComponent.state.top = 0;
-      this.headerBackgroundComponent.state.width = maxWidth;
-      this.headerBackgroundComponent.state.height = headerHeight;
+      const lineWidth = this.state.style.lineWidth || 1.5;
+      const inset = lineWidth / 2;
+      this.headerBackgroundComponent.state.left = inset;
+      this.headerBackgroundComponent.state.top = inset;
+      this.headerBackgroundComponent.state.width = Math.max(maxWidth - lineWidth, 0);
+      this.headerBackgroundComponent.state.height = Math.max(headerHeight - inset, 0);
     }
 
     //根据计算出来的宽高调整容器的尺寸
