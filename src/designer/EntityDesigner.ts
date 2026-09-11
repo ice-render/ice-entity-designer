@@ -241,6 +241,7 @@ export default class EntityDesigner {
       routeType: state.routeType,
       routeOffset: state.routeOffset,
       curveType: state.curveType,
+      linkShape: state.linkShape, //连线形态（visio/bezier）；不加进来会导致保存/加载/undo/redo 丢失
       lineDash: state.lineDash,
       startPoint: state.startPoint,
       endPoint: state.endPoint,

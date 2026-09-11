@@ -432,3 +432,60 @@ describe('EntityDesigner 订阅与事件', () => {
     expect(designer.selected).toBeUndefined();
   });
 });
+
+/**
+ * 连线形态（linkShape）在应用层的贯通：创建透传 → 快照保留 → 加载还原 → 运行时可切换。
+ * 持久化是**显式白名单**（`__relationSnapshot`），漏加字段会让形态在保存/加载/undo/redo 后静默丢失。
+ */
+describe('EntityDesigner 连线形态（linkShape）', () => {
+  it('createRelation 透传 linkShape，且快照里保留', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    const b = designer.createEntity({ entityName: 'B' });
+    const relation = designer.createRelation({
+      sourceId: a.state.id,
+      targetId: b.state.id,
+      linkShape: 'bezier',
+    });
+
+    expect(relation.state.linkShape).toBe('bezier');
+    const payload = JSON.parse(designer.serializeProject());
+    expect(payload.relations[0].linkShape).toBe('bezier');
+  });
+
+  it('不传时默认 visio（既有项目/外观不变）', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    const b = designer.createEntity({ entityName: 'B' });
+    const relation = designer.createRelation({ sourceId: a.state.id, targetId: b.state.id });
+
+    expect(relation.state.linkShape).toBe('visio');
+    expect(JSON.parse(designer.serializeProject()).relations[0].linkShape).toBe('visio');
+  });
+
+  it('loadProject 还原连线形态，且二次 round-trip 仍稳定', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    const b = designer.createEntity({ entityName: 'B' });
+    designer.createRelation({ sourceId: a.state.id, targetId: b.state.id, linkShape: 'bezier' });
+
+    const json = designer.serializeProject();
+    designer.loadProject(json);
+
+    expect(designer.relations[0].state.linkShape).toBe('bezier');
+    const afterFirst = designer.serializeProject();
+    designer.loadProject(afterFirst);
+    expect(designer.serializeProject()).toBe(afterFirst);
+  });
+
+  it('updateRelation 可在运行时切换形态', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    const b = designer.createEntity({ entityName: 'B' });
+    const relation = designer.createRelation({ sourceId: a.state.id, targetId: b.state.id });
+
+    designer.updateRelation(relation.state.id, { linkShape: 'bezier' });
+
+    expect(relation.state.linkShape).toBe('bezier');
+  });
+});

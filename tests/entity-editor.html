@@ -256,6 +256,10 @@
             <option value="one-to-one">one-to-one</option>
             <option value="many-to-many">many-to-many</option>
           </select>
+          <select id="rel-shape" title="新建连线的默认形态">
+            <option value="visio">Visio 折线</option>
+            <option value="bezier">贝塞尔曲线</option>
+          </select>
           <button id="btn-toggle-link" class="icon-btn" title="连接关系">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
           </button>
@@ -374,6 +378,7 @@
             } else if (linkSource.state.id !== entity.state.id) {
               designer.createRelation({
                 relationType: document.getElementById('rel-type').value,
+                linkShape: document.getElementById('rel-shape').value,
                 sourceId: linkSource.state.id,
                 targetId: entity.state.id,
               });
@@ -1169,6 +1174,22 @@
             }),
           ),
           field(
+            '连线形态',
+            React.createElement(Select, {
+              id: 'rel-shape-select',
+              defaultValue: relation.state.linkShape || 'visio',
+              options: [
+                { value: 'visio', label: 'Visio 折线' },
+                { value: 'bezier', label: '贝塞尔曲线' },
+              ],
+              style: { width: '100%' },
+              onChange: (value) => {
+                designer.updateRelation(relation.state.id, { linkShape: value });
+                refresh();
+              },
+            }),
+          ),
+          field(
             '源字段',
             React.createElement(Input, {
               defaultValue: relation.state.sourceField || 'id',
@@ -1238,7 +1259,9 @@
               '点击画布中的 Entity 或 Relation 进行编辑',
             );
           }
-          if (selected.constructor.name === 'Relation') {
+          //判类型不要用 constructor.name：下游打包会 mangle 类名（Relation → Br），判断会静默失效。
+          //Relation / Entity 上都挂了稳定标识 typeId，用它判断（压缩安全）。
+          if (selected.constructor && selected.constructor.typeId === 'Relation') {
             // key 绑定选中项 id：面板里的输入框是**非受控**（defaultValue）的，
             // 不换 key 的话 React 复用旧 DOM，切换选中后仍显示上一个对象的旧值
             //（用户照着旧值编辑，会写到新选中的对象上）。

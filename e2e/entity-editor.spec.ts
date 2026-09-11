@@ -369,3 +369,63 @@ test('选中实体后实体面板更新为选中项', async ({ page }) => {
     .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value));
   expect(values).toContain(name);
 });
+
+test('连线形态：属性面板可切 Visio/贝塞尔，工具栏决定新建连线的形态', async ({ page }) => {
+  // 1) 默认全部是 visio（既有项目外观不变）
+  const initial = await page.evaluate(() => (window as any).__designer.relations.map((r: any) => r.state.linkShape));
+  expect(initial.length).toBeGreaterThan(0);
+  expect(initial.every((shape: string) => shape === 'visio')).toBe(true);
+
+  // 2) 选中第一条关系 → 属性面板出现「连线形态」下拉
+  await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    designer.select(designer.relations[0].state.id);
+    (window as any).__renderPanel();
+  });
+  await page.waitForTimeout(300);
+  const shapeField = page.locator('.ant-form-item').filter({ hasText: '连线形态' });
+  await expect(shapeField).toHaveCount(1);
+
+  const beforeHash = await canvasHash(page);
+
+  // 3) 切到贝塞尔：状态变化 + 采样成密集折线 + 画布确实重绘
+  await shapeField.locator('.ant-select').click();
+  await page.locator('.ant-select-item-option').filter({ hasText: '贝塞尔曲线' }).click();
+  await page.waitForTimeout(400);
+
+  const afterSwitch = await page.evaluate(() => {
+    const relation = (window as any).__designer.relations[0];
+    return { linkShape: relation.state.linkShape, points: relation.state.points.length };
+  });
+  expect(afterSwitch.linkShape).toBe('bezier');
+  // 贝塞尔是「控制点 → 等分采样成折线」，所以点数必然多于两点
+  expect(afterSwitch.points).toBeGreaterThan(2);
+  expect(await canvasHash(page)).not.toBe(beforeHash);
+
+  // 4) 工具栏选 bezier → 新建的连线即贝塞尔
+  await page.selectOption('#rel-shape', 'bezier');
+  await page.click('#btn-toggle-link');
+  const a = await entityCanvasPoint(page, 0);
+  await clickCanvasAt(page, a);
+  await page.waitForTimeout(250);
+  const b = await entityCanvasPoint(page, 1);
+  await clickCanvasAt(page, b);
+  await page.waitForTimeout(400);
+
+  const newest = await page.evaluate(() => {
+    const relations = (window as any).__designer.relations;
+    return relations[relations.length - 1].state.linkShape;
+  });
+  expect(newest).toBe('bezier');
+
+  // 5) 保存 / 加载后形态仍在（持久化白名单里有 linkShape）
+  await page.click('#btn-save-project');
+  await page.waitForTimeout(300);
+  await page.click('#btn-load-project');
+  await page.waitForTimeout(600);
+
+  const restored = await page.evaluate(() => (window as any).__designer.relations.map((r: any) => r.state.linkShape));
+  expect(restored).toContain('bezier');
+  // 切过形态的那条仍为 bezier（没有被打回 visio）
+  expect(restored[0]).toBe('bezier');
+});

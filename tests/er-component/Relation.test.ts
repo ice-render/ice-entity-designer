@@ -163,3 +163,23 @@ describe('Relation 导出为 typeorm 风格对象（toEntityObject）', () => {
     expect(object.toName).toBeUndefined();
   });
 });
+
+/**
+ * 连线形态（linkShape）：默认保持 Visio，可显式切贝塞尔。
+ * 这里钉两条：① 默认值与覆盖规则；② `toEntityObject()` **不能**带上它 ——
+ * 它是纯 UI/几何配置，混进 typeorm 输出会污染 `toSchemaObject()`。
+ */
+describe('Relation 连线形态（linkShape）', () => {
+  it('默认 visio，显式传入可覆盖为 bezier', () => {
+    expect((new Relation() as any).state.linkShape).toBe('visio');
+    expect((new Relation({ linkShape: 'bezier' }) as any).state.linkShape).toBe('bezier');
+  });
+
+  it('toEntityObject 不包含 linkShape（不污染 TypeORM schema 输出）', () => {
+    const relation: any = new Relation({ relationType: 'one-to-many', linkShape: 'bezier' });
+    const obj = relation.toEntityObject();
+    expect(obj).not.toHaveProperty('linkShape');
+    // 顺带确认该输出仍是 typeorm 需要的那几个键
+    expect(obj.relationType).toBe('one-to-many');
+  });
+});
