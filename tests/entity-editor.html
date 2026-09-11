@@ -256,7 +256,7 @@
             <option value="one-to-one">one-to-one</option>
             <option value="many-to-many">many-to-many</option>
           </select>
-          <select id="rel-shape" title="新建连线的默认形态">
+          <select id="rel-shape" title="连线形态：选中连线时直接修改它，未选中时作为新建连线的默认形态">
             <option value="visio">Visio 折线</option>
             <option value="bezier">贝塞尔曲线</option>
           </select>
@@ -328,7 +328,9 @@
         while (root && root.parentNode) {
           root = root.parentNode;
         }
-        return root && root.constructor && root.constructor.name === 'Entity' ? root : null;
+        //判类型不要用 constructor.name：下游打包会 mangle 类名（Entity → Xr），判断会静默失效。
+        //Entity / Relation 上挂了稳定标识 typeId，用它判断（压缩安全）。
+        return root && root.constructor && root.constructor.typeId === 'Entity' ? root : null;
       }
 
       function entityCenterInCanvas(entity) {
@@ -1177,7 +1179,8 @@
             '连线形态',
             React.createElement(Select, {
               id: 'rel-shape-select',
-              defaultValue: relation.state.linkShape || 'visio',
+              //受控：这一项除了面板，工具栏下拉也能改（选中连线时），非受控会导致两处显示不一致
+              value: relation.state.linkShape || 'visio',
               options: [
                 { value: 'visio', label: 'Visio 折线' },
                 { value: 'bezier', label: '贝塞尔曲线' },
@@ -1345,6 +1348,20 @@
             refresh: renderPanel,
           }),
         );
+
+        //选中连线时让工具栏下拉跟随它的形态，避免工具栏与属性面板两处显示不一致。
+        //判类型用稳定标识 typeId，不用 constructor.name（下游打包会 mangle 类名）。
+        const selectedRel = designer.selected;
+        const relShapeSelect = document.getElementById('rel-shape');
+        if (
+          relShapeSelect &&
+          selectedRel &&
+          selectedRel.constructor &&
+          selectedRel.constructor.typeId === 'Relation' &&
+          selectedRel.state.linkShape
+        ) {
+          relShapeSelect.value = selectedRel.state.linkShape;
+        }
       }
       window.__renderPanel = renderPanel;
 
@@ -1434,6 +1451,16 @@
       document.getElementById('btn-layout-vertical').addEventListener('click', () => applyFlowLayout('TB'));
       document.getElementById('btn-layout-radial').addEventListener('click', applyRadialLayout);
       document.getElementById('btn-layout-force').addEventListener('click', applyForceLayout);
+
+      //工具栏「连线形态」：选中连线时直接改这条线；没选中时只作为新建连线的默认形态。
+      document.getElementById('rel-shape').addEventListener('change', (evt) => {
+        const selectedRel = designer.selected;
+        if (selectedRel && selectedRel.constructor && selectedRel.constructor.typeId === 'Relation') {
+          designer.updateRelation(selectedRel.state.id, { linkShape: evt.target.value });
+          renderPanel();
+          refreshHistoryButtons();
+        }
+      });
 
       function refreshHistoryButtons() {
         document.getElementById('btn-undo').disabled = !designer.canUndo();

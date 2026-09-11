@@ -37,7 +37,8 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 - 覆盖四种关系：`one-to-one` / `one-to-many` / `many-to-one` / `many-to-many`。
 - **连线形态可切换**：`linkShape: 'visio' | 'bezier'`（默认 `visio`）。Visio 是引擎的正交折线（出口点 + 路径评分），
-  贝塞尔是沿插槽法线出/入的三次曲线；编辑器里可通过**关系属性面板**改选中连线，或用**工具栏**指定新建连线的默认形态。
+  贝塞尔是沿插槽法线出/入的三次曲线。编辑器里改连线形态有两个入口：选中连线后用**关系属性面板**的「连线形态」下拉，
+  或用**工具栏**的同名下拉 —— 选中连线时它直接改这条线，未选中时它同时作为新建连线的默认形态。
 - 支持自引用关系，并可指定 `parent` / `children` 属性名。
 - 关系语义完整：`onDelete` / `onUpdate` / `joinTableName`，以及自定义两端基数（如 `1 : 0..N`）。
 - 连线标签自动呈现基数与约束（如 `1 : 1  ON DELETE CASCADE`）。

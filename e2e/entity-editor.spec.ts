@@ -525,3 +525,76 @@ test('连线形态：属性面板可切 Visio/贝塞尔，工具栏决定新建�
   // 切过形态的那条仍为 bezier（没有被打回 visio）
   expect(restored[0]).toBe('bezier');
 });
+
+test('连线形态：工具栏下拉可直接改当前选中的连线（不必绕属性面板）', async ({ page }) => {
+  // 1) 先确保没有选中项：这时工具栏下拉只改「新建默认值」，已有连线一条都不该动
+  await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    if (designer.selectedId) {
+      designer.select(null);
+      (window as any).__renderPanel();
+    }
+  });
+  await page.waitForTimeout(200);
+
+  const initial = await page.evaluate(() => (window as any).__designer.relations.map((r: any) => r.state.linkShape));
+  expect(initial.length).toBeGreaterThan(0);
+  expect(initial.every((s: string) => s === 'visio')).toBe(true);
+
+  await page.selectOption('#rel-shape', 'bezier');
+  await page.waitForTimeout(300);
+  const untouched = await page.evaluate(() => (window as any).__designer.relations.map((r: any) => r.state.linkShape));
+  expect(untouched).toEqual(initial);
+
+  // 2) 选中一条连线 → 工具栏下拉应跟随这条线的形态（与属性面板显示一致）
+  const relationId = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const id = designer.relations[0].state.id;
+    designer.select(id);
+    (window as any).__renderPanel();
+    return id;
+  });
+  await page.waitForTimeout(300);
+  expect(await page.inputValue('#rel-shape')).toBe('visio');
+
+  const routeBefore = await page.evaluate(() =>
+    (window as any).__designer.relations[0].state.points.map((p: number[]) => [...p])
+  );
+  const regionBefore = await relationRegionHash(page, relationId);
+
+  // 3) 只动工具栏下拉（完全不碰属性面板）→ 这条连线立即变贝塞尔，且画布真的重绘
+  await page.selectOption('#rel-shape', 'bezier');
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => {
+    const r = (window as any).__designer.relations[0];
+    return {
+      linkShape: r.state.linkShape,
+      count: r.state.points.length,
+      points: r.state.points.map((p: number[]) => [...p]),
+    };
+  });
+  expect(after.linkShape).toBe('bezier');
+  // 采样成密集折线（Visio 正交路线只有几个点）
+  expect(after.count).toBeGreaterThanOrEqual(8);
+  // 路线几何真的变了 —— 用来挡住「state 改了、内核仍按 Visio 布线」的半更新状态
+  expect(maxDeviation(routeBefore, after.points)).toBeGreaterThan(5);
+  // 该关系所在的画布区域像素必须变化
+  const regionAfter = await relationRegionHash(page, relationId);
+  expect(regionAfter.ink).toBeGreaterThan(0);
+  expect(regionAfter.hash).not.toBe(regionBefore.hash);
+
+  // 4) 属性面板同步显示「贝塞尔曲线」，工具栏下拉也能反向切回 visio
+  await expect(
+    page.locator('.ant-form-item').filter({ hasText: '连线形态' }).locator('.ant-select-selection-item')
+  ).toHaveText('贝塞尔曲线');
+
+  await page.selectOption('#rel-shape', 'visio');
+  await page.waitForTimeout(500);
+  const back = await page.evaluate(() => {
+    const r = (window as any).__designer.relations[0];
+    return { linkShape: r.state.linkShape, count: r.state.points.length };
+  });
+  expect(back.linkShape).toBe('visio');
+  expect(back.count).toBeLessThan(8);
+  expect(await page.inputValue('#rel-shape')).toBe('visio');
+});
