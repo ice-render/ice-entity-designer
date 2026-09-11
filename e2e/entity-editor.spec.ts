@@ -38,6 +38,81 @@ async function counts(page: Page) {
   });
 }
 
+/** 折线等距采样（用于比较两条路线的几何差异） */
+function samplePath(pts: number[][], n: number): number[][] {
+  if (!pts || pts.length < 2) return [];
+  const segs: number[] = [];
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+    segs.push(d);
+    total += d;
+  }
+  const out: number[][] = [];
+  for (let k = 0; k <= n; k++) {
+    const target = (total * k) / n;
+    let acc = 0;
+    for (let i = 0; i < segs.length; i++) {
+      if (acc + segs[i] >= target || i === segs.length - 1) {
+        const t = segs[i] === 0 ? 0 : (target - acc) / segs[i];
+        out.push([pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t]);
+        break;
+      }
+      acc += segs[i];
+    }
+  }
+  return out;
+}
+
+/** 两条路线的最大偏差（世界坐标） */
+function maxDeviation(a: number[][], b: number[][]): number {
+  const sa = samplePath(a, 24);
+  const sb = samplePath(b, 24);
+  let max = 0;
+  for (let i = 0; i < Math.min(sa.length, sb.length); i++) {
+    max = Math.max(max, Math.hypot(sa[i][0] - sb[i][0], sa[i][1] - sb[i][1]));
+  }
+  return max;
+}
+
+/**
+ * 只统计「这条关系所在的画布区域」的像素指纹。
+ *
+ * 为什么不用整屏指纹：选中高亮、右侧面板重渲染都会让整屏像素变化，无法区分
+ * 「画布上真的画出了曲线」和「只是别处变了」。这里在页面内用 getImageData 采样该关系的
+ * world 包围盒（换成画布像素坐标）—— 全部在页面内完成，不依赖截图裁切的坐标系。
+ */
+async function relationRegionHash(page: Page, id: string, pad = 24) {
+  return page.evaluate(
+    ({ id, pad }) => {
+      const ice = (window as any).__ice;
+      const r = (window as any).__designer.relations.find((x: any) => x.state.id === id);
+      const canvas = document.getElementById('canvas-1') as HTMLCanvasElement;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('拿不到 canvas 2d context');
+      const vp = ice.getRenderViewport();
+      const xs = r.state.points.map((p: number[]) => p[0] * vp.scale + vp.tx);
+      const ys = r.state.points.map((p: number[]) => p[1] * vp.scale + vp.ty);
+      const x0 = Math.max(0, Math.floor(Math.min(...xs)) - pad);
+      const y0 = Math.max(0, Math.floor(Math.min(...ys)) - pad);
+      const x1 = Math.min(canvas.width, Math.ceil(Math.max(...xs)) + pad);
+      const y1 = Math.min(canvas.height, Math.ceil(Math.max(...ys)) + pad);
+      const w = x1 - x0;
+      const h = y1 - y0;
+      if (w <= 0 || h <= 0) return { hash: 0, w: 0, h: 0, ink: 0 };
+      const d = ctx.getImageData(x0, y0, w, h).data;
+      let hash = 0;
+      let ink = 0;
+      for (let p = 0; p < d.length; p += 4) {
+        if (d[p + 3] > 40 && Math.abs(d[p] - 255) + Math.abs(d[p + 1] - 255) + Math.abs(d[p + 2] - 255) > 40) ink++;
+        hash = (hash * 31 + d[p + 3]) >>> 0;
+      }
+      return { hash, w, h, ink };
+    },
+    { id, pad }
+  );
+}
+
 /** 画布像素指纹（采样 alpha），用于断言"确实重绘了" */
 async function canvasHash(page: Page) {
   return page.evaluate(() => {
@@ -387,19 +462,40 @@ test('连线形态：属性面板可切 Visio/贝塞尔，工具栏决定新建�
   await expect(shapeField).toHaveCount(1);
 
   const beforeHash = await canvasHash(page);
+  const beforeRoute = await page.evaluate(() => {
+    const r = (window as any).__designer.relations[0];
+    return { points: r.state.points.map((p: number[]) => [...p]), count: r.state.points.length };
+  });
+  const relationId = await page.evaluate(() => (window as any).__designer.relations[0].state.id);
+  const regionBefore = await relationRegionHash(page, relationId);
 
-  // 3) 切到贝塞尔：状态变化 + 采样成密集折线 + 画布确实重绘
+  // 3) 切到贝塞尔：状态变化 + 采样成密集折线 + **该关系所在区域**确实重绘
   await shapeField.locator('.ant-select').click();
   await page.locator('.ant-select-item-option').filter({ hasText: '贝塞尔曲线' }).click();
   await page.waitForTimeout(400);
 
   const afterSwitch = await page.evaluate(() => {
     const relation = (window as any).__designer.relations[0];
-    return { linkShape: relation.state.linkShape, points: relation.state.points.length };
+    return {
+      linkShape: relation.state.linkShape,
+      points: relation.state.points.map((p: number[]) => [...p]),
+      count: relation.state.points.length,
+    };
   });
   expect(afterSwitch.linkShape).toBe('bezier');
-  // 贝塞尔是「控制点 → 等分采样成折线」，所以点数必然多于两点
-  expect(afterSwitch.points).toBeGreaterThan(2);
+
+  // ① 点集必须是「采样后的密集折线」：Visio 正交路线只有几个点，贝塞尔是 8~25 个采样点
+  expect(afterSwitch.count).toBeGreaterThanOrEqual(8);
+  expect(afterSwitch.count).toBeGreaterThan(beforeRoute.count * 2);
+
+  // ② 路线几何必须真的变了 —— 这一条专门用来挡住「页面更新了、内核产物没更新」的半更新状态：
+  //    那种情况下 linkShape 只是被写进 state，引擎仍按 Visio 布线，路线一模一样。
+  expect(maxDeviation(beforeRoute.points, afterSwitch.points)).toBeGreaterThan(5);
+
+  // ③ 该关系所在的画布区域像素必须变化（证明画布重绘了这条线，而不是只有面板在变）
+  const regionAfter = await relationRegionHash(page, relationId);
+  expect(regionAfter.ink).toBeGreaterThan(0);
+  expect(regionAfter.hash).not.toBe(regionBefore.hash);
   expect(await canvasHash(page)).not.toBe(beforeHash);
 
   // 4) 工具栏选 bezier → 新建的连线即贝塞尔
