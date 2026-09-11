@@ -28,6 +28,15 @@
   "plugins": ["@typescript-eslint", "jest", "prettier"],
   "overrides": [
     {
+      // 构建配置 / CJS 垫片：它们是 CommonJS 写法（require / snake_case 选项名），
+      // 不是库代码，按普通源码规则会被误判（rollup.config.js 的 keep_classnames 等是 terser 要求的键名）
+      "files": ["rollup.config.js", "react.js", "jest.config.js"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": 0,
+        "@typescript-eslint/camelcase": 0
+      }
+    },
+    {
       "files": ["e2e/**/*.ts", "playwright.config.ts"],
       "env": { "jest": false, "node": true },
       "rules": {

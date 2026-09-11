@@ -3,21 +3,34 @@
   "name": "ice-entity-designer",
   "version": "0.0.17",
   "description": "An entity designer based on ice-render.",
-  "repository": "https://github.com/ice-render/ice-entity-designer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ice-render/ice-entity-designer.git"
+  },
   "browser": "dist/index.umd.js",
-  "main": "dist/index.cjs.js",
-  "module": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
   "types": "dist/types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs.js"
+      "import": {
+        "types": "./dist/types/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./react": {
-      "types": "./dist/types/react/index.d.ts",
-      "import": "./dist/react.js",
-      "require": "./dist/react.cjs.js"
+      "import": {
+        "types": "./dist/types/react/index.d.mts",
+        "default": "./dist/react.mjs"
+      },
+      "require": {
+        "types": "./dist/types/react/index.d.ts",
+        "default": "./dist/react.cjs"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -30,11 +43,14 @@
     "start": "rollup -c -w  --environment NODE_ENV:development",
     "build": "npm run clean && npm run build:types && npm run build:js",
     "build:js": "rollup -c --environment NODE_ENV:production",
-    "build:types": "tsc --emitDeclarationOnly && node scripts/vendor-engine-types.cjs",
+    "build:types": "tsc --emitDeclarationOnly && node scripts/vendor-engine-types.cjs && node scripts/emit-dmts.cjs",
     "clean": "rimraf dist",
     "test": "jest --runInBand",
     "test:coverage": "jest --runInBand --coverage",
     "test:e2e": "playwright test",
+    "pkg:lint": "publint",
+    "pkg:types": "attw --pack .",
+    "pkg:check": "npm run pkg:lint && npm run pkg:types",
     "pretty": "prettier src/**/* --write",
     "types:check": "tsc --noEmit",
     "types:watch": "npm run types:check -- --watch"
@@ -52,6 +68,7 @@
     }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
     "@babel/core": "7.17.8",
     "@babel/preset-env": "7.16.11",
     "@babel/preset-typescript": "7.9.0",
@@ -80,6 +97,7 @@
     "lint-staged": "10.1.7",
     "lodash": "4.17.21",
     "prettier": "2.8.8",
+    "publint": "0.3.24",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "rimraf": "3.0.2",

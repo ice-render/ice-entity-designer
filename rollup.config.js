@@ -91,7 +91,7 @@ const configs = [
     input: 'src/react/index.ts',
     external,
     output: {
-      file: 'dist/react.js',
+      file: 'dist/react.mjs',
       format: 'esm',
       globals: { ...globals, react: 'React' },
     },
@@ -101,7 +101,7 @@ const configs = [
     input: 'src/react/index.ts',
     external,
     output: {
-      file: 'dist/react.cjs.js',
+      file: 'dist/react.cjs',
       format: 'cjs',
       globals: { ...globals, react: 'React' },
     },
