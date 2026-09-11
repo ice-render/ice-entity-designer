@@ -39,13 +39,13 @@ export default class Entity extends ICEGroup {
   protected entityFieldsComponent: Array<ICEText> = [];
 
   constructor(props) {
-    let param = Entity.arrangeParam(props);
+    const param = Entity.arrangeParam(props);
     super(param);
     this.syncEntityNameAndFields();
   }
 
   protected static arrangeParam(props) {
-    let param = merge(
+    const param = merge(
       {
         entityName: 'Entity Name',
         fields: [],
@@ -189,7 +189,7 @@ export default class Entity extends ICEGroup {
       for (let i = 0; i < len; i++) {
         const field = this.state.fields[i];
         const display = this.fieldDisplay(field);
-        let text = new ICEText({
+        const text = new ICEText({
           left: 0,
           top: 0,
           text: display.text,
@@ -316,11 +316,11 @@ export default class Entity extends ICEGroup {
    * @see https://orkhan.gitbook.io/typeorm/docs/separating-entity-definition
    */
   public toEntityObject(): any {
-    let result = {
+    const result = {
       name: this.state.entityName,
       columns: {},
     };
-    this.state.fields.forEach((field, index) => {
+    this.state.fields.forEach((field) => {
       const column: any = {};
       if (field.type !== undefined) column.type = field.type;
       if (field.length !== undefined) column.length = field.length;

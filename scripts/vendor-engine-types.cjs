@@ -127,5 +127,8 @@ entries.forEach((file) => {
 });
 
 console.log(
-  `[vendor-engine-types] 引擎类型已并入 ${path.relative(root, engineDest)}（改写 ${rewritten} 个 .d.ts，补 reference ${referenced} 个）`
+  `[vendor-engine-types] 引擎类型已并入 ${path.relative(
+    root,
+    engineDest
+  )}（改写 ${rewritten} 个 .d.ts，补 reference ${referenced} 个）`
 );

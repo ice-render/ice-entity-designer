@@ -4,6 +4,9 @@
 *log*
 .history
 *lock*
+# *lock* 会误伤 package-lock.json —— 它因此从未被跟踪，每次安装都重新解析依赖、不可复现。
+# 显式放行。
+!package-lock.json
 /stats.html
 /test-results
 /playwright-report

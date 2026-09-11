@@ -113,7 +113,7 @@ export default class Relation extends ICEVisioLink {
    * 实体类的 JSON 格式描述，与 type-orm 规定的格式对应
    */
   public toEntityObject(): any {
-    let {
+    const {
       title,
       relationType,
       referencedColumnName,
@@ -138,7 +138,7 @@ export default class Relation extends ICEVisioLink {
       toName = toComponent.state.entityName;
     }
 
-    let result = {
+    const result = {
       title,
       fromId,
       fromName,

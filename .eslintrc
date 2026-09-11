@@ -11,7 +11,6 @@
     "plugin:@typescript-eslint/eslint-recommended",
     "plugin:@typescript-eslint/recommended",
     "prettier",
-    "prettier/@typescript-eslint",
     "plugin:prettier/recommended",
     "plugin:jest/recommended"
   ],
@@ -21,19 +20,29 @@
     "sourceType": "module",
     "ecmaFeatures": {
       "jsx": false
-    },
-    "project": "./tsconfig.json",
-    "createDefaultProgram": true
+    }
   },
   "plugins": ["@typescript-eslint", "jest", "prettier"],
+  "ignorePatterns": ["/dist", "/coverage", "/test-results", "/playwright-report", "src/utils/pluralize_util.ts"],
   "overrides": [
     {
-      // 构建配置 / CJS 垫片：它们是 CommonJS 写法（require / snake_case 选项名），
+      // 构建配置 / CJS 垫片 / 构建脚本：它们是 CommonJS 写法（require / snake_case 选项名），
       // 不是库代码，按普通源码规则会被误判（rollup.config.js 的 keep_classnames 等是 terser 要求的键名）
-      "files": ["rollup.config.js", "react.js", "jest.config.js"],
+      "files": ["rollup.config.js", "react.js", "jest.config.js", "scripts/**/*.cjs"],
       "rules": {
-        "@typescript-eslint/no-var-requires": 0,
-        "@typescript-eslint/camelcase": 0
+        "@typescript-eslint/no-var-requires": 0
+      }
+    },
+    {
+      // React 绑定：补上 hooks 规则（组件里存在刻意的「只挂载一次」副作用，需要能写规则名）
+      "files": ["src/react/**/*.ts"],
+      "extends": ["plugin:react-hooks/recommended"]
+    },
+    {
+      // 单测里刻意用 require 延后加载被测模块（要等 jest.mock / spyOn 先就位），import 会被提升，不能用
+      "files": ["tests/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": 0
       }
     },
     {

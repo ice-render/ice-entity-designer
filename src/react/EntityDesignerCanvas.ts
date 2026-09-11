@@ -4,6 +4,43 @@ import { createDesignerSession, shouldApplyControlledValue } from './session';
 import type { DesignerSession } from './session';
 import type { EntityDesignerCanvasProps, EntityDesignerHandle } from './types';
 
+/** 把会话包装成对外的命令式句柄；会话为空时各方法安全空转 */
+function createHandle(session: DesignerSession | null): EntityDesignerHandle {
+  const d = session ? session.designer : null;
+  return {
+    ice: session ? session.ice : null,
+    designer: d,
+    addEntity: (p?: any) => (d ? d.createEntity(p) : null),
+    connect: (p: any) => (d ? d.createRelation(p) : null),
+    updateEntity: (id: string, patch: any) => (d ? d.updateEntity(id, patch) : null),
+    updateRelation: (id: string, patch: any) => (d ? d.updateRelation(id, patch) : null),
+    remove: (id: string) => {
+      if (d) {
+        d.removeComponent(id);
+      }
+    },
+    loadProject: (json: string) => {
+      if (d) {
+        d.loadProject(json);
+      }
+    },
+    undo: () => {
+      if (d) {
+        d.undo();
+      }
+    },
+    redo: () => {
+      if (d) {
+        d.redo();
+      }
+    },
+    toSchemaObject: () => (d ? d.toSchemaObject() : []),
+    toSchemaString: () => (d ? d.toSchemaString() : '[]'),
+    validate: () => (d ? d.validate() : []),
+    serializeProject: () => (d ? d.serializeProject() : ''),
+  };
+}
+
 /**
  * <EntityDesignerCanvas> —— 在 React 中承载 ER 图设计器的画布组件。
  *
@@ -88,6 +125,9 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
     designer.loadProject(props.value as string);
   }, [props.value, designer]);
 
+  // designer 是刻意的依赖：句柄从 ref 里取实例，只有 designer 变化时才需要重建，
+  // 否则它会在挂载时（ref 还是 null）被固化成一个全部空转的句柄。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useImperativeHandle(ref, () => createHandle(sessionRef.current), [designer]);
 
   return createElement(
@@ -111,42 +151,5 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
     createElement(EntityDesignerProvider, { designer, children: props.children })
   );
 });
-
-/** 把会话包装成对外的命令式句柄；会话为空时各方法安全空转 */
-function createHandle(session: DesignerSession | null): EntityDesignerHandle {
-  const d = session ? session.designer : null;
-  return {
-    ice: session ? session.ice : null,
-    designer: d,
-    addEntity: (p?: any) => (d ? d.createEntity(p) : null),
-    connect: (p: any) => (d ? d.createRelation(p) : null),
-    updateEntity: (id: string, patch: any) => (d ? d.updateEntity(id, patch) : null),
-    updateRelation: (id: string, patch: any) => (d ? d.updateRelation(id, patch) : null),
-    remove: (id: string) => {
-      if (d) {
-        d.removeComponent(id);
-      }
-    },
-    loadProject: (json: string) => {
-      if (d) {
-        d.loadProject(json);
-      }
-    },
-    undo: () => {
-      if (d) {
-        d.undo();
-      }
-    },
-    redo: () => {
-      if (d) {
-        d.redo();
-      }
-    },
-    toSchemaObject: () => (d ? d.toSchemaObject() : []),
-    toSchemaString: () => (d ? d.toSchemaString() : '[]'),
-    validate: () => (d ? d.validate() : []),
-    serializeProject: () => (d ? d.serializeProject() : ''),
-  };
-}
 
 export default EntityDesignerCanvas;

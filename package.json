@@ -45,12 +45,15 @@
     "build:js": "rollup -c --environment NODE_ENV:production",
     "build:types": "tsc --emitDeclarationOnly && node scripts/vendor-engine-types.cjs && node scripts/emit-dmts.cjs",
     "clean": "rimraf dist",
+    "prepare": "husky install",
     "test": "jest --runInBand",
     "test:coverage": "jest --runInBand --coverage",
     "test:e2e": "playwright test",
     "pkg:lint": "publint",
     "pkg:types": "attw --pack .",
     "pkg:check": "npm run pkg:lint && npm run pkg:types",
+    "lint": "eslint . --ext .ts,.tsx,.js,.cjs",
+    "lint:fix": "eslint . --ext .ts,.tsx,.js,.cjs --fix",
     "pretty": "prettier src/**/* --write",
     "types:check": "tsc --noEmit",
     "types:watch": "npm run types:check -- --watch"
@@ -83,18 +86,19 @@
     "@types/lodash": "4.14.180",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@typescript-eslint/eslint-plugin": "2.29.0",
-    "@typescript-eslint/parser": "2.29.0",
+    "@typescript-eslint/eslint-plugin": "5.62.0",
+    "@typescript-eslint/parser": "5.62.0",
     "antd": "5.26.5",
-    "eslint": "6.8.0",
-    "eslint-config-prettier": "6.11.0",
-    "eslint-plugin-jest": "23.8.2",
-    "eslint-plugin-prettier": "3.1.3",
+    "eslint": "8.57.1",
+    "eslint-config-prettier": "8.10.0",
+    "eslint-plugin-jest": "27.9.0",
+    "eslint-plugin-prettier": "4.2.1",
+    "eslint-plugin-react-hooks": "4.6.0",
     "http-server": "14.1.1",
-    "husky": "4.2.5",
+    "husky": "8.0.3",
     "ice-render": "file:../ice-render",
     "jest": "25.4.0",
-    "lint-staged": "10.1.7",
+    "lint-staged": "15.5.2",
     "lodash": "4.17.21",
     "prettier": "2.8.8",
     "publint": "0.3.24",
@@ -113,14 +117,9 @@
     ]
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "eslint --fix",
-      "git add"
-    ],
-    "*.{json,md,yml}": [
-      "prettier --write",
-      "git add"
-    ]
+    "*.{ts,tsx,js,cjs}": "eslint --fix",
+    "*.{json,md,yml,yaml}": "prettier --write",
+    ".eslintrc": "prettier --write"
   },
   "keywords": [
     "canvas",
