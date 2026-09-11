@@ -80,6 +80,12 @@ function normalizeColumn(field: any): any {
     column.generated = true;
     column.strategy = 'increment';
   }
+  // 兼容「已归一化过的列」：Entity.toEntityObject() 产出的是**列形状**（generated + strategy，
+  // 没有 autoIncrement 键），而 toSchemaObject() 会再归一化一次。若这里不认 strategy，
+  // 就会把显式策略静默丢掉（表现为导出的 schema 里 PK 少了 strategy: 'increment'）。
+  if (field.strategy !== undefined) {
+    column.strategy = field.strategy;
+  }
   if (field.nullable === false) column.nullable = false;
   if (field.unique) column.unique = true;
   if (field.default !== undefined) column.default = field.default;
@@ -105,13 +111,13 @@ function buildJoinColumn(fkColumn: any, referencedColumn: any): any {
 }
 
 export function toSchemaObject(componentList): object {
-  let _objs = [...componentList];
-  let entities = [];
-  let relations = [];
-  let cache = {};
+  const _objs = [...componentList];
+  const entities = [];
+  const relations = [];
+  const cache = {};
 
   for (let i = 0; i < _objs.length; i++) {
-    let obj = _objs[i];
+    const obj = _objs[i];
     if (obj.constructor.name === 'Relation') {
       relations.push(obj);
     } else if (obj.constructor.name === 'Entity') {
@@ -123,8 +129,8 @@ export function toSchemaObject(componentList): object {
   }
 
   for (let i = 0; i < relations.length; i++) {
-    let relation = relations[i];
-    let {
+    const relation = relations[i];
+    const {
       fromId,
       fromName,
       toId,
@@ -140,8 +146,8 @@ export function toSchemaObject(componentList): object {
       fromKey: relationFromKey,
       toKey: relationToKey,
     } = relation.toEntityObject();
-    let fromObj = cache[fromId];
-    let toObj = cache[toId];
+    const fromObj = cache[fromId];
+    const toObj = cache[toId];
 
     if (!fromObj || !toObj) {
       continue;
@@ -214,8 +220,8 @@ export function toSchemaObject(componentList): object {
     }
   }
 
-  let result = [];
-  for (let p in cache) {
+  const result = [];
+  for (const p in cache) {
     result.push(cache[p]);
   }
   return result;

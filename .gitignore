@@ -5,5 +5,7 @@
 .history
 *lock*
 /stats.html
+/test-results
+/playwright-report
 .DS_Store
 *.tsbuildinfo

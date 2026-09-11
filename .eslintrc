@@ -26,14 +26,26 @@
     "createDefaultProgram": true
   },
   "plugins": ["@typescript-eslint", "jest", "prettier"],
+  "overrides": [
+    {
+      "files": ["e2e/**/*.ts", "playwright.config.ts"],
+      "env": { "jest": false, "node": true },
+      "rules": {
+        "jest/no-test-callback": 0,
+        "jest/valid-expect": 0,
+        "jest/no-standalone-expect": 0,
+        "jest/expect-expect": 0
+      }
+    }
+  ],
   "rules": {
     "@typescript-eslint/explicit-function-return-type": 0,
-    "@typescript-eslint/no-explicit-any": 0
-  },
-  "prettier/prettier": [
-    "error",
-    {
-      "endOfLine": "auto"
-    }
-  ]
+    "@typescript-eslint/no-explicit-any": 0,
+    "prettier/prettier": [
+      "error",
+      {
+        "endOfLine": "auto"
+      }
+    ]
+  }
 }

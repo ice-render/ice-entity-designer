@@ -3,11 +3,13 @@
 <html lang="en">
   <meta charset="utf-8" />
   <title>IED-entity-editor</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5.26.5/dist/reset.css" />
-  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/antd@5.26.5/dist/antd.min.js"></script>
+  <!-- 依赖走本地 node_modules（离线可跑）：e2e 回归需要确定性，不能依赖 CDN/网络。
+       不要改回 CDN —— e2e/entity-editor.spec.ts 会因此变得不可复现。 -->
+  <link rel="stylesheet" href="../node_modules/antd/dist/reset.css" />
+  <script crossorigin src="../node_modules/react/umd/react.production.min.js"></script>
+  <script crossorigin src="../node_modules/react-dom/umd/react-dom.production.min.js"></script>
+  <script src="../node_modules/dayjs/dayjs.min.js"></script>
+  <script src="../node_modules/antd/dist/antd.min.js"></script>
   <style>
     html,
     body {
@@ -1237,9 +1239,12 @@
             );
           }
           if (selected.constructor.name === 'Relation') {
-            return React.createElement(RelationPropertyPanel, { relation: selected, refresh });
+            // key 绑定选中项 id：面板里的输入框是**非受控**（defaultValue）的，
+            // 不换 key 的话 React 复用旧 DOM，切换选中后仍显示上一个对象的旧值
+            //（用户照着旧值编辑，会写到新选中的对象上）。
+            return React.createElement(RelationPropertyPanel, { relation: selected, refresh, key: selected.state.id });
           }
-          return React.createElement(EntityFieldsTable, { entity: selected, refresh });
+          return React.createElement(EntityFieldsTable, { entity: selected, refresh, key: selected.state.id });
         };
 
         let jsonText = designer.serializeProject();

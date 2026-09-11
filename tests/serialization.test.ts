@@ -264,7 +264,13 @@ describe('列类型规范化（TypeORM）', () => {
 
   it('把画布类型名映射为 TypeORM 列类型', () => {
     const sample = result.find((item: any) => item.name === 'Sample');
-    expect(sample.columns.id).toEqual({ type: 'int', primary: true, generated: true, strategy: 'increment', nullable: false });
+    expect(sample.columns.id).toEqual({
+      type: 'int',
+      primary: true,
+      generated: true,
+      strategy: 'increment',
+      nullable: false,
+    });
     expect(sample.columns.name).toEqual({ type: 'varchar', length: 128, nullable: false });
     expect(sample.columns.active).toEqual({ type: 'boolean', nullable: false, default: true });
   });
