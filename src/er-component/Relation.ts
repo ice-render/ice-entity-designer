@@ -18,6 +18,12 @@ import { ICEVisioLink } from 'ice-render';
  * @author 大漠穷秋<damoqiongqiu@126.com>
  */
 export default class Relation extends ICEVisioLink {
+  /**
+   * 稳定的类型标识。判型与序列化都用它，**不要用 `constructor.name`** ——
+   * 下游打包会 mangle 类名（实测 webpack 生产构建下 Relation → `Br`），基于类名的判断会静默失效。
+   */
+  public static readonly typeId = 'Relation';
+
   constructor(props: any = {}) {
     const normalizedProps = Relation.normalizeLinks(props || {});
     const relationType = normalizedProps.relationType || 'one-to-one';

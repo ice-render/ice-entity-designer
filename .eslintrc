@@ -34,6 +34,21 @@
       }
     },
     {
+      // 判类型不得依赖类名：下游打包器会 mangle 类名（实测 webpack 生产构建下 Entity/Relation → Dr/Br），
+      // `constructor.name === 'Entity'` 会**静默失效**，而开发态与包自身的构建都保留类名、看不出来。
+      // 只约束 src/**（风险在出货代码）；tests/** 里断言类名本身是合法的。
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "MemberExpression[object.property.name='constructor'][property.name='name']",
+            "message": "不要用 constructor.name 判类型：下游打包会压缩类名导致判断静默失效。请用 src/utils/component_type_util.ts 的 isEntity/isRelation，或 ice.getTypeId(ctor) 反查注册名。"
+          }
+        ]
+      }
+    },
+    {
       // React 绑定：补上 hooks 规则（组件里存在刻意的「只挂载一次」副作用，需要能写规则名）
       "files": ["src/react/**/*.ts"],
       "extends": ["plugin:react-hooks/recommended"]

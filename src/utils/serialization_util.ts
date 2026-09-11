@@ -1,4 +1,5 @@
 import { camelCase } from './camelcase_util';
+import { isEntity, isRelation } from './component_type_util';
 import { pluralize } from './pluralize_util';
 
 /**
@@ -118,9 +119,9 @@ export function toSchemaObject(componentList): object {
 
   for (let i = 0; i < _objs.length; i++) {
     const obj = _objs[i];
-    if (obj.constructor.name === 'Relation') {
+    if (isRelation(obj)) {
       relations.push(obj);
-    } else if (obj.constructor.name === 'Entity') {
+    } else if (isEntity(obj)) {
       entities.push(obj);
       const entityObject = obj.toEntityObject();
       entityObject.columns = normalizeColumns(entityObject.columns);

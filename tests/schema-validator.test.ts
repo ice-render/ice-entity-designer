@@ -1,12 +1,13 @@
 import { validateSchema } from '../src/utils/schema_validator';
 
 function entity(id: string, name: string, fields: any[] = []) {
-  return { constructor: { name: 'Entity' }, state: { id, entityName: name, fields } };
+  // 判型走稳定 typeId，不依赖类名（下游压缩会 mangle 类名）
+  return { constructor: { typeId: 'Entity' }, state: { id, entityName: name, fields } };
 }
 
 function relation(id: string, startId: string, endId: string, relationType = 'one-to-many', extra: any = {}) {
   return {
-    constructor: { name: 'Relation' },
+    constructor: { typeId: 'Relation' },
     state: {
       id,
       relationType,

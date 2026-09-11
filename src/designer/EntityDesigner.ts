@@ -1,6 +1,7 @@
 import type { ICE } from 'ice-render';
 import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
+import { isEntity, isRelation } from '../utils/component_type_util';
 import { validateSchema } from '../utils/schema_validator';
 import { toSchemaObject, toSchemaString } from '../utils/serialization_util';
 
@@ -25,17 +26,17 @@ export default class EntityDesigner {
 
   constructor(ice: ICE) {
     this.ice = ice;
-    this.ice.registerType('Entity', Entity);
-    this.ice.registerType('Relation', Relation);
+    this.ice.registerType(Entity.typeId, Entity);
+    this.ice.registerType(Relation.typeId, Relation);
     this.ice.evtBus.on('mousedown', this.__mousedownHandler, this);
   }
 
   public get entities(): any[] {
-    return this.ice.childNodes.filter((item: any) => item.constructor && item.constructor.name === 'Entity');
+    return this.ice.childNodes.filter((item: any) => isEntity(item));
   }
 
   public get relations(): any[] {
-    return this.ice.childNodes.filter((item: any) => item.constructor && item.constructor.name === 'Relation');
+    return this.ice.childNodes.filter((item: any) => isRelation(item));
   }
 
   public get selected(): any {
@@ -98,7 +99,7 @@ export default class EntityDesigner {
 
   public updateEntity(id: string, patch: any): any {
     const entity = this.ice.findComponent(id);
-    if (entity && entity.constructor && entity.constructor.name === 'Entity') {
+    if (isEntity(entity)) {
       this.captureHistory();
       entity.setState(patch);
       this.__emitChange();
@@ -108,7 +109,7 @@ export default class EntityDesigner {
 
   public updateRelation(id: string, patch: any): any {
     const relation = this.ice.findComponent(id);
-    if (relation && relation.constructor && relation.constructor.name === 'Relation') {
+    if (isRelation(relation)) {
       this.captureHistory();
       const next = { ...relation.state, ...patch };
       const label = Relation.buildLabel(next, next.relationType || 'one-to-one');
@@ -126,7 +127,7 @@ export default class EntityDesigner {
     this.captureHistory();
 
     // 删除 Entity 时，先删除两端连接到该实体的 Relation，避免出现悬空关系。
-    if (component.constructor && component.constructor.name === 'Entity') {
+    if (isEntity(component)) {
       const linkedRelations = this.relations.filter((relation: any) => {
         const links = relation.state.links || {};
         return (links.start && links.start.id === id) || (links.end && links.end.id === id);
@@ -383,7 +384,7 @@ export default class EntityDesigner {
       root = root.parentNode;
     }
 
-    if (root && root.constructor && (root.constructor.name === 'Entity' || root.constructor.name === 'Relation')) {
+    if (isEntity(root) || isRelation(root)) {
       this.select(root.state.id);
     }
   }

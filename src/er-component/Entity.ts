@@ -33,6 +33,15 @@ export type EntityField = {
  * @author 大漠穷秋<damoqiongqiu@126.com>
  */
 export default class Entity extends ICEGroup {
+  /**
+   * 稳定的类型标识。
+   *
+   * 判型与序列化都用它，**不要用 `constructor.name`** —— 下游打包器会 mangle 类名
+   * （实测 webpack 生产构建下 Entity → `Dr`），基于类名的判断会静默失效。
+   * 属性名默认不会被压缩，子类也会继承这个值。
+   */
+  public static readonly typeId = 'Entity';
+
   protected entityNameComponent: ICEText;
   protected headerBackgroundComponent: ICERect;
   protected deviderLine: ICEPolyLine;

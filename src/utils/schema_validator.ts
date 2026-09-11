@@ -1,16 +1,10 @@
+import { isEntity, isRelation } from './component_type_util';
+
 export type SchemaIssue = {
   level: 'error' | 'warning';
   message: string;
   componentId?: string;
 };
-
-function isEntity(component: any): boolean {
-  return component && component.constructor && component.constructor.name === 'Entity';
-}
-
-function isRelation(component: any): boolean {
-  return component && component.constructor && component.constructor.name === 'Relation';
-}
 
 /**
  * 对当前画布做轻量 schema 校验。
