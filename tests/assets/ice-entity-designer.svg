@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" viewBox="0 0 940 940" role="img" aria-label="ice-entity-designer">
+  <title>ice-entity-designer</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7FE3FD"/>
+      <stop offset="0.5" stop-color="#61D9FB"/>
+      <stop offset="1" stop-color="#3FBEEB"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 底板：与 ice-render 引擎 logo 同一主色（引擎主色 #61D9FB），满版方块 -->
+  <rect x="0" y="0" width="940" height="940" fill="url(#tile)"/>
+
+  <!-- 四个方向的连接线（中心 ↔ 上/下/左/右） -->
+  <g stroke="#FFFFFF" stroke-width="24" stroke-linecap="round">
+    <line x1="470" y1="237" x2="470" y2="379"/>
+    <line x1="470" y1="561" x2="470" y2="703"/>
+    <line x1="237" y1="470" x2="379" y2="470"/>
+    <line x1="561" y1="470" x2="703" y2="470"/>
+  </g>
+
+  <!-- 中心实体：实心白方块 -->
+  <rect x="379" y="379" width="182" height="182" rx="16" fill="#FFFFFF"/>
+
+  <!-- 上/下/左/右四个关联实体：白色描边方块 -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="26">
+    <rect x="385" y="67" width="170" height="170" rx="16"/>
+    <rect x="385" y="703" width="170" height="170" rx="16"/>
+    <rect x="67" y="385" width="170" height="170" rx="16"/>
+    <rect x="703" y="385" width="170" height="170" rx="16"/>
+  </g>
+</svg>
