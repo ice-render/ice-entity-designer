@@ -12,6 +12,7 @@ import { ICE, EventBus, ICERect } from 'ice-render';
 import EntityDesigner from '../../src/designer/EntityDesigner';
 import Entity from '../../src/er-component/Entity';
 import Relation from '../../src/er-component/Relation';
+import { validateProjectSnapshot } from '../../src/utils/project_schema';
 
 function makeDesigner() {
   const ice: any = new ICE();
@@ -487,5 +488,74 @@ describe('EntityDesigner 连线形态（linkShape）', () => {
     designer.updateRelation(relation.state.id, { linkShape: 'bezier' });
 
     expect(relation.state.linkShape).toBe('bezier');
+  });
+});
+
+describe('EntityDesigner 快照完整性（通用 ICE 字段与箭头字段）', () => {
+  it('保存/加载保留通用组件属性与关系箭头参数', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createEntity({
+      entityName: 'A',
+      fields: [{ name: 'id', type: 'number', primary: true }],
+      display: true,
+      zIndex: 42,
+      lineDash: [2, 2],
+      lineDashOffset: 3,
+      lineDashFlow: true,
+      lineBorder: true,
+      lineBorderWidth: 2,
+      lineBorderColor: '#123456',
+      transformable: true,
+      linkable: true,
+      fill: false,
+      stroke: true,
+    });
+    const b = designer.createEntity({ entityName: 'B' });
+    designer.createRelation({
+      sourceId: a.state.id,
+      targetId: b.state.id,
+      arrowStyle: 'hollow',
+      arrowLength: 12,
+      arrowAngel: 0.4,
+      lineWidth: 3,
+      display: true,
+      zIndex: 7,
+    });
+
+    const json = designer.serializeProject();
+    designer.loadProject(json);
+
+    const entity = designer.entities.find((item: any) => item.state.entityName === 'A');
+    const relation = designer.relations[0];
+    expect(entity.state.zIndex).toBe(42);
+    expect(entity.state.lineDash).toEqual([2, 2]);
+    expect(entity.state.lineDashOffset).toBe(3);
+    expect(entity.state.lineDashFlow).toBe(true);
+    expect(entity.state.lineBorder).toBe(true);
+    expect(entity.state.lineBorderWidth).toBe(2);
+    expect(entity.state.lineBorderColor).toBe('#123456');
+    expect(entity.state.fill).toBe(false);
+    expect(entity.state.stroke).toBe(true);
+
+    expect(relation.state.arrowStyle).toBe('hollow');
+    expect(relation.state.arrowLength).toBe(12);
+    expect(relation.state.arrowAngel).toBe(0.4);
+    expect(relation.state.lineWidth).toBe(3);
+    expect(relation.state.zIndex).toBe(7);
+  });
+
+  it('快照包含 schemaVersion 和 typeId，且结构校验器能识别非法数据', () => {
+    const { designer } = makeDesigner();
+    designer.createEntity({ entityName: 'A', fields: [{ name: 'id', type: 'number' }] });
+    const payload = JSON.parse(designer.serializeProject());
+
+    expect(payload.schemaVersion).toBe(1);
+    expect(payload.entities[0].typeId).toBe('Entity');
+    expect(validateProjectSnapshot(payload).valid).toBe(true);
+
+    const broken = JSON.parse(designer.serializeProject());
+    delete broken.entities[0].entityName;
+    broken.relations = 'not-an-array';
+    expect(validateProjectSnapshot(broken).valid).toBe(false);
   });
 });

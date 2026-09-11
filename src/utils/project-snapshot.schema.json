@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ice-entity-designer project snapshot",
+  "type": "object",
+  "required": ["entities", "relations"],
+  "properties": {
+    "schemaVersion": {
+      "type": "number"
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "entityName", "fields"],
+        "properties": {
+          "id": { "type": "string" },
+          "entityName": { "type": "string" },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "length": { "type": ["number", "string"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "links"],
+        "properties": {
+          "id": { "type": "string" },
+          "relationType": { "type": "string" },
+          "links": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "position": { "type": "string" }
+                }
+              },
+              "end": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "position": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

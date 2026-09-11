@@ -2,6 +2,7 @@ import type { ICE } from 'ice-render';
 import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
 import { isEntity, isRelation } from '../utils/component_type_util';
+import { PROJECT_SCHEMA_VERSION, validateProjectSnapshot } from '../utils/project_schema';
 import { validateSchema } from '../utils/schema_validator';
 import { toSchemaObject, toSchemaString } from '../utils/serialization_util';
 
@@ -157,6 +158,7 @@ export default class EntityDesigner {
   public serializeProject(): string {
     const payload = {
       version: 1,
+      schemaVersion: PROJECT_SCHEMA_VERSION,
       entities: this.entities.map((entity: any) => this.__entitySnapshot(entity)),
       relations: this.relations.map((relation: any) => this.__relationSnapshot(relation)),
     };
@@ -172,10 +174,34 @@ export default class EntityDesigner {
     this.__emitChange();
   }
 
+  private __componentBaseSnapshot(state: any): any {
+    return {
+      display: state.display,
+      zIndex: state.zIndex,
+      transform: state.transform,
+      origin: state.origin,
+      originX: state.originX,
+      originY: state.originY,
+      lineDash: state.lineDash,
+      lineDashOffset: state.lineDashOffset,
+      lineDashFlow: state.lineDashFlow,
+      lineDashFlowSpeed: state.lineDashFlowSpeed,
+      lineBorder: state.lineBorder,
+      lineBorderWidth: state.lineBorderWidth,
+      lineBorderColor: state.lineBorderColor,
+      fill: state.fill,
+      stroke: state.stroke,
+      linkable: state.linkable,
+      transformable: state.transformable,
+      animations: state.animations,
+    };
+  }
+
   private __entitySnapshot(entity: any): any {
     const state = entity.state || {};
     return {
       id: state.id,
+      typeId: Entity.typeId,
       left: state.left,
       top: state.top,
       width: state.width,
@@ -190,6 +216,7 @@ export default class EntityDesigner {
       interactive: state.interactive,
       showMinBoundingBox: state.showMinBoundingBox,
       showMaxBoundingBox: state.showMaxBoundingBox,
+      ...this.__componentBaseSnapshot(state),
     };
   }
 
@@ -216,6 +243,7 @@ export default class EntityDesigner {
     const state = relation.state || {};
     return {
       id: state.id,
+      typeId: Relation.typeId,
       left: state.left,
       top: state.top,
       width: state.width,
@@ -243,9 +271,18 @@ export default class EntityDesigner {
       curveType: state.curveType,
       linkShape: state.linkShape, //连线形态（visio/bezier）；不加进来会导致保存/加载/undo/redo 丢失
       lineDash: state.lineDash,
+      lineWidth: state.lineWidth,
+      arrowLength: state.arrowLength,
+      arrowAngel: state.arrowAngel,
+      arrowStyle: state.arrowStyle,
       startPoint: state.startPoint,
       endPoint: state.endPoint,
       links: state.links,
+      draggable: state.draggable,
+      interactive: state.interactive,
+      showMinBoundingBox: state.showMinBoundingBox,
+      showMaxBoundingBox: state.showMaxBoundingBox,
+      ...this.__componentBaseSnapshot(state),
     };
   }
 
@@ -253,6 +290,13 @@ export default class EntityDesigner {
     const data = JSON.parse(json);
     if (!data || !Array.isArray(data.entities)) {
       return;
+    }
+    if (data.schemaVersion !== undefined && data.schemaVersion !== PROJECT_SCHEMA_VERSION) {
+      throw new Error(`Unsupported project schemaVersion: ${data.schemaVersion}`);
+    }
+    const validation = validateProjectSnapshot(data);
+    if (!validation.valid) {
+      throw new Error(`Invalid project snapshot:\n${validation.errors.join('\n')}`);
     }
 
     const renderer = this.ice.renderer;
@@ -279,7 +323,7 @@ export default class EntityDesigner {
         }
       });
 
-      data.relations.forEach((item: any) => {
+      (data.relations || []).forEach((item: any) => {
         const relation = new Relation(item);
         this.ice.addChild(relation);
       });

@@ -10,6 +10,7 @@ export { default as Relation } from './er-component/Relation';
 export { default as EntityDesigner } from './designer/EntityDesigner';
 export { toSchemaObject, toSchemaString } from './utils/serialization_util';
 export { validateSchema } from './utils/schema_validator';
+export { PROJECT_SCHEMA_VERSION, validateProjectSnapshot } from './utils/project_schema';
 
 /**
  * 引擎内核（ice-render）在构建时已被打包进本包，这里一并导出。
