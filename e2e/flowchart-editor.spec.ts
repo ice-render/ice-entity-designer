@@ -261,6 +261,129 @@ test('属性面板：选中节点可改标题/类型/配色，选中连线可改
   expect(edgeState.dots).toBeGreaterThan(visioDots);
 });
 
+test('属性面板：改颜色/标题不会被面板重绘打断（回归：原生取色器控件被销毁）', async ({ page }) => {
+  await clickCanvasAt(page, await nodeCanvasPoint(page, 0));
+  await page.waitForTimeout(300);
+
+  const nodeState = () =>
+    page.evaluate(() => {
+      const node = (window as any).__designer.nodes[0];
+      return {
+        fillColor: node.state.fillColor,
+        strokeColor: node.state.strokeColor,
+        title: node.state.title,
+        shapeFill: node.childNodes[0].state.style.fillStyle,
+        shapeStroke: node.childNodes[0].state.style.strokeStyle,
+      };
+    });
+  // 采样节点内部（左侧 25%、垂直居中，避开文字）的画布像素
+  const sampleInk = () =>
+    page.evaluate(() => {
+      const ice = (window as any).__ice;
+      const node = (window as any).__designer.nodes[0];
+      const box = node.getMinBoundingBox(true);
+      const wx = box.tl[0] + (box.br[0] - box.tl[0]) * 0.25;
+      const wy = box.tl[1] + (box.br[1] - box.tl[1]) * 0.5;
+      const [sx, sy] = ice.worldToScreen(wx, wy);
+      const canvas = document.getElementById('canvas-1') as HTMLCanvasElement;
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+      const data = context.getImageData(Math.round(sx), Math.round(sy), 1, 1).data;
+      return [data[0], data[1], data[2], data[3]];
+    });
+
+  const before = await nodeState();
+  const inkBefore = await sampleInk();
+
+  const fillInput = page.locator('#shape-panel input[type="color"]').first();
+  const fillHandle = await fillInput.elementHandle();
+  await fillInput.fill('#ff0000');
+  await page.waitForTimeout(300);
+
+  const afterFill = await nodeState();
+  expect(afterFill.fillColor).toBe('#ff0000');
+  expect(afterFill.shapeFill).toBe('#ff0000');
+  expect(await sampleInk()).not.toEqual(inkBefore);
+  // 控件没有被面板重绘替换（否则原生取色器一松手就失效）
+  expect(await fillInput.evaluate((element) => element.isConnected)).toBe(true);
+  expect(await fillInput.evaluate((element, previous) => element === previous, fillHandle)).toBe(true);
+
+  const strokeInput = page.locator('#shape-panel input[type="color"]').nth(1);
+  await strokeInput.fill('#0000ff');
+  await page.waitForTimeout(300);
+  const afterStroke = await nodeState();
+  expect(afterStroke.strokeColor).toBe('#0000ff');
+  expect(afterStroke.shapeStroke).toBe('#0000ff');
+
+  const titleInput = page.locator('#shape-panel input[type="text"]').first();
+  await titleInput.click();
+  // 点面板控件不能丢选中（引擎事件拦截是全局的，面板点击也会进 ice.evtBus）
+  expect(await page.evaluate(() => (window as any).__designer.selectedId)).not.toBeNull();
+  await titleInput.fill('改名测试');
+  await titleInput.press('Tab'); // 标题是 change/失焦提交（与 ER 示例一致）
+  await page.waitForTimeout(300);
+  expect((await nodeState()).title).toBe('改名测试');
+  expect(await titleInput.evaluate((element) => element.isConnected)).toBe(true);
+
+  // 而点画布空白处仍然会取消选中（保留原交互）
+  await moveToCanvasPoint(page, { x: 60, y: 60 });
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => (window as any).__designer.selectedId)).toBeNull();
+  expect(await page.locator('#shape-panel input').count()).toBe(0);
+
+  // 重新选中，继续验证历史
+  await clickCanvasAt(page, await nodeCanvasPoint(page, 0));
+  await page.waitForTimeout(300);
+
+  // 历史：一次取色会话只记一步 —— 撤销依次回 标题 → 边框 → 填充
+  await page.click('#btn-undo');
+  await page.waitForTimeout(250);
+  expect((await nodeState()).title).toBe(before.title);
+  expect((await nodeState()).fillColor).toBe('#ff0000');
+
+  await page.click('#btn-undo');
+  await page.waitForTimeout(250);
+  expect((await nodeState()).strokeColor).toBe(before.strokeColor);
+  expect((await nodeState()).fillColor).toBe('#ff0000');
+
+  await page.click('#btn-undo');
+  await page.waitForTimeout(250);
+  expect((await nodeState()).fillColor).toBe(before.fillColor);
+});
+
+test('联动：画布拖动节点后，右侧 JSON 与属性面板同步（回归）', async ({ page }) => {
+  const point = await moveToCanvasPoint(page, await nodeCanvasPoint(page, 2));
+  await page.mouse.down();
+  await page.mouse.move(point.x + 80, point.y + 50, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+
+  const node = await page.evaluate(() => {
+    const item = (window as any).__designer.nodes[2];
+    return { id: item.state.id, left: item.state.left, top: item.state.top };
+  });
+
+  // 右侧 JSON 预览反映拖动后的坐标（拖动前这里会是旧坐标）
+  const jsonNode = await page.evaluate(() => {
+    const parsed = JSON.parse(document.getElementById('json-output')?.textContent || '{}');
+    return { left: parsed.nodes[2].left, top: parsed.nodes[2].top };
+  });
+  expect(jsonNode.left).toBeCloseTo(node.left, 3);
+  expect(jsonNode.top).toBeCloseTo(node.top, 3);
+
+  // 拖动也是一步可撤销的操作
+  await page.click('#btn-undo');
+  await page.waitForTimeout(300);
+  const restored = await page.evaluate(() => {
+    const item = (window as any).__designer.nodes[2];
+    return { left: item.state.left, top: item.state.top };
+  });
+  expect(restored.left).not.toBeCloseTo(node.left, 1);
+  expect(restored.top).not.toBeCloseTo(node.top, 1);
+});
+
 test('保存 / 清空 / 加载：localStorage round-trip 能恢复整个流程', async ({ page }) => {
   const saved = await counts(page);
   await page.click('#btn-save');

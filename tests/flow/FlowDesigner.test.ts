@@ -228,4 +228,42 @@ describe('FlowDesigner 历史与视图', () => {
     expect(viewport.scale).toBeGreaterThan(0);
     expect(viewport.scale).toBeLessThanOrEqual(1.25);
   });
+
+  it('画布侧拖动节点（引擎 setPosition）会被感知：广播变更且可撤销', async () => {
+    const { designer } = makeDesigner();
+    const node = designer.createNode('process', { left: 100, top: 100 });
+    designer.resetHistory();
+
+    const snapshots: any[] = [];
+    designer.subscribe((snapshot: string) => snapshots.push(JSON.parse(snapshot)));
+
+    node.setPosition(300, 260);
+    expect(node.state.left).toBe(300);
+    // AFTER_MOVE 的广播按帧合并，等一拍
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(snapshots.length).toBeGreaterThan(0);
+    expect(snapshots[snapshots.length - 1].nodes[0]).toMatchObject({ left: 300, top: 260 });
+    // 拖拽前记了一步历史（BEFORE_MOVE 先于 setState）
+    expect(designer.canUndo()).toBe(true);
+    designer.undo();
+    expect(designer.nodes[0].state.left).toBe(100);
+    expect(designer.nodes[0].state.top).toBe(100);
+  });
+
+  it('一次拖拽会话只记一步历史（连续移动不刷屏）', async () => {
+    const { designer } = makeDesigner();
+    const node = designer.createNode('process', { left: 100, top: 100 });
+    designer.resetHistory();
+
+    for (let i = 1; i <= 10; i++) {
+      node.setPosition(100 + i * 10, 100 + i * 5);
+    }
+    expect((designer as any).__undoStack.length).toBe(1);
+
+    // 松开鼠标（引擎在 evtBus 上派发 mouseup）后，下一次拖拽重新记一步
+    (designer as any).__endMoveSession();
+    node.setPosition(500, 500);
+    expect((designer as any).__undoStack.length).toBe(2);
+  });
 });

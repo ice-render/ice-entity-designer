@@ -354,16 +354,67 @@
         statusOutput.style.color = color || '#64748b';
       }
 
+      /**
+       * 属性面板。
+       *
+       * 关键约定：**只有「选中的对象变了」才重建 DOM**，同一对象的后续变更走
+       * `syncPanelValues()` 原地同步。早期版本每次变更都 `innerHTML = ''` 重建，
+       * 会把正在交互的原生 `<input type="color">` 从 DOM 里摘掉 —— 真机上表现为
+       * 「点开取色器选颜色，一松手控件就没了，颜色改不动」。
+       */
+      let panelKey = null;
+      let panelControls = null;
+      let colorSession = false;
+
+      function syncPanelValues(selected) {
+        if (!selected || !panelControls) {
+          return;
+        }
+        // 正在输入 / 正在取色的控件不要被回写打断
+        const focused = document.activeElement;
+        const syncValue = (element, value) => {
+          if (!element || element === focused) {
+            return;
+          }
+          if (element.value !== String(value)) {
+            element.value = value;
+          }
+        };
+        if (selected.constructor.typeId === FlowNode.typeId) {
+          syncValue(panelControls.title, selected.state.title || '');
+          syncValue(panelControls.kind, selected.state.kind);
+          syncValue(panelControls.fill, selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill);
+          syncValue(panelControls.stroke, selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke);
+          syncValue(panelControls.width, selected.state.width);
+          syncValue(panelControls.height, selected.state.height);
+          return;
+        }
+        syncValue(panelControls.label, selected.state.label || '');
+        syncValue(panelControls.shape, selected.state.linkShape || 'visio');
+      }
+
       function renderPanel() {
         const selected = designer.selected;
         jsonOutput.textContent = JSON.stringify(designer.toSnapshot(), null, 2);
         document.getElementById('flow-stats').textContent = `当前流程：${designer.nodes.length} 个节点 / ${designer.edges.length} 条连线`;
         refreshHistoryButtons();
         if (!selected) {
+          panelKey = null;
+          panelControls = null;
           shapePanel.className = 'hint';
           shapePanel.textContent = '点击画布中的节点或连线进行编辑；滚轮缩放、空白处拖拽平移；打开「连接节点」后依次点击两个节点即可连线。';
           return;
         }
+
+        const key = `${selected.constructor.typeId}:${selected.state.id}`;
+        if (key === panelKey) {
+          syncPanelValues(selected);
+          return;
+        }
+        // 选中对象变了才重建
+        panelKey = key;
+        panelControls = null;
+        colorSession = false;
         shapePanel.className = '';
         shapePanel.innerHTML = '';
 
@@ -385,7 +436,7 @@
           titleInput.addEventListener('change', () => {
             designer.updateNode(selected.state.id, { title: titleInput.value });
           });
-          row('标题', titleInput);
+          panelControls = { title: row('标题', titleInput) };
 
           const kindSelect = document.createElement('select');
           Object.keys(FLOW_NODE_KINDS).forEach((kind) => {
@@ -405,23 +456,53 @@
               strokeColor: preset.stroke,
             });
           });
-          row('类型', kindSelect);
+          panelControls.kind = row('类型', kindSelect);
 
           const fillInput = document.createElement('input');
           fillInput.type = 'color';
           fillInput.value = selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill;
+          fillInput.addEventListener('input', () => {
+            // 取色器拖动过程中实时反馈：首次 input 记一次历史（记的是改之前的状态），
+            // 后续 input 直接改图元，避免拖一次产生几十条撤销记录
+            if (!colorSession) {
+              designer.captureHistory();
+              colorSession = true;
+            }
+            selected.applyPatch({ fillColor: fillInput.value });
+            renderPanel();
+          });
           fillInput.addEventListener('change', () => {
+            if (colorSession) {
+              colorSession = false;
+              selected.applyPatch({ fillColor: fillInput.value });
+              renderPanel();
+              return;
+            }
             designer.updateNode(selected.state.id, { fillColor: fillInput.value });
           });
-          row('填充', fillInput);
+          panelControls.fill = row('填充', fillInput);
 
           const strokeInput = document.createElement('input');
           strokeInput.type = 'color';
           strokeInput.value = selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke;
+          strokeInput.addEventListener('input', () => {
+            if (!colorSession) {
+              designer.captureHistory();
+              colorSession = true;
+            }
+            selected.applyPatch({ strokeColor: strokeInput.value });
+            renderPanel();
+          });
           strokeInput.addEventListener('change', () => {
+            if (colorSession) {
+              colorSession = false;
+              selected.applyPatch({ strokeColor: strokeInput.value });
+              renderPanel();
+              return;
+            }
             designer.updateNode(selected.state.id, { strokeColor: strokeInput.value });
           });
-          row('边框', strokeInput);
+          panelControls.stroke = row('边框', strokeInput);
 
           [
             ['宽度', 'width'],
@@ -434,7 +515,7 @@
             input.addEventListener('change', () => {
               designer.updateNode(selected.state.id, { [key]: Number(input.value) || selected.state[key] });
             });
-            row(labelText, input);
+            panelControls[key] = row(labelText, input);
           });
 
           const hint = document.createElement('div');
@@ -452,7 +533,7 @@
         labelInput.addEventListener('change', () => {
           designer.updateEdge(selected.state.id, { label: labelInput.value });
         });
-        row('标签', labelInput);
+        panelControls = { label: row('标签', labelInput) };
 
         const shapeSelect = document.createElement('select');
         [
@@ -468,7 +549,7 @@
         shapeSelect.addEventListener('change', () => {
           designer.updateEdge(selected.state.id, { linkShape: shapeSelect.value });
         });
-        row('形态', shapeSelect);
+        panelControls.shape = row('形态', shapeSelect);
 
         const hint = document.createElement('div');
         hint.className = 'hint';
@@ -656,10 +737,17 @@
         canvasEl.style.cursor = 'grabbing';
       });
 
-      // 点击空白处清除选中
+      // 点击画布空白处清除选中。
+      // 注意：引擎的事件拦截是**全局**的，右侧面板/工具条上的点击也会派发到 ice.evtBus
+      // （target 是面板里的 input，且没有命中任何组件）。这里必须按 target 过滤，
+      // 否则点一下面板输入框就会把选中清掉 —— 面板随即退回提示态、正在交互的
+      // 取色器/文本框被销毁（真实表现：颜色根本改不动）。
       ice.evtBus.on('mousedown', (evt) => {
         const component = evt && evt.param && evt.param.component;
-        if (!component && designer.selectedId) {
+        const original = evt && evt.originalEvent;
+        const target = original && original.target;
+        const fromCanvas = !target || target === canvasEl;
+        if (!component && fromCanvas && designer.selectedId) {
           designer.select(null);
         }
       });

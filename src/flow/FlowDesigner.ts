@@ -110,12 +110,27 @@ export default class FlowDesigner {
   private __maxHistory = 100;
   private __listeners: Array<(snapshot: string, designer: FlowDesigner) => void> = [];
   private __mousedownHandler = (evt: any) => this.__handleMouseDown(evt);
+  /** 画布拖拽节点时会话：BEFORE_MOVE 记一次历史，mouseup 结束会话 */
+  private __moveSession = false;
+  private __moveEmitQueued = false;
+
+  /**
+   * 节点在画布上被拖动（引擎 `setPosition()` → BEFORE_MOVE/AFTER_MOVE）。
+   *
+   * 这两个事件是**每一步移动都触发**的，所以：BEFORE_MOVE 只在会话内第一次记历史
+   * （此时 `setState` 还没执行，记下的是拖拽前的位置），AFTER_MOVE 按帧合并后广播，
+   * 避免拖动过程中每帧都序列化整个流程。
+   */
+  private __beforeMoveHandler = () => this.__onBeforeMove();
+  private __afterMoveHandler = () => this.__onAfterMove();
+  private __mouseupHandler = () => this.__endMoveSession();
 
   constructor(ice: ICE) {
     this.ice = ice;
     this.ice.registerType(FlowNode.typeId, FlowNode as any);
     this.ice.registerType(FlowEdge.typeId, FlowEdge as any);
     this.ice.evtBus.on('mousedown', this.__mousedownHandler, this);
+    this.ice.evtBus.on('mouseup', this.__mouseupHandler, this);
   }
 
   public get nodes(): any[] {
@@ -159,6 +174,52 @@ export default class FlowDesigner {
     this.__listeners.slice().forEach((listener) => listener(snapshot, this));
   }
 
+  /** 订阅节点的拖拽事件：拖动是画布侧的行为，designer 需要感知才能广播与记历史 */
+  private __attachNodeListeners(node: any): void {
+    if (!node || typeof node.on !== 'function') {
+      return;
+    }
+    node.on('BEFORE_MOVE', this.__beforeMoveHandler, this);
+    node.on('AFTER_MOVE', this.__afterMoveHandler, this);
+  }
+
+  private __detachNodeListeners(node: any): void {
+    if (!node || typeof node.off !== 'function') {
+      return;
+    }
+    node.off('BEFORE_MOVE', this.__beforeMoveHandler, this);
+    node.off('AFTER_MOVE', this.__afterMoveHandler, this);
+  }
+
+  private __onBeforeMove(): void {
+    if (this.__moveSession) {
+      return;
+    }
+    this.__moveSession = true;
+    // BEFORE_MOVE 先于 setState 触发：这里记下的是「拖拽前」的位置
+    this.__captureHistory();
+  }
+
+  private __onAfterMove(): void {
+    if (this.__moveEmitQueued) {
+      return;
+    }
+    this.__moveEmitQueued = true;
+    const flush = () => {
+      this.__moveEmitQueued = false;
+      this.__emitChange();
+    };
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(flush);
+    } else {
+      setTimeout(flush, 16);
+    }
+  }
+
+  private __endMoveSession(): void {
+    this.__moveSession = false;
+  }
+
   public select(id: string | null): this {
     this.selectedId = id;
     this.__emitChange();
@@ -193,6 +254,7 @@ export default class FlowDesigner {
       });
     }
     this.ice.addChild(node);
+    this.__attachNodeListeners(node);
     this.selectedId = node.state.id;
     this.__emitChange();
     return node;
@@ -269,6 +331,7 @@ export default class FlowDesigner {
     }
     this.__captureHistory();
     if (component.constructor.typeId === FlowNode.typeId) {
+      this.__detachNodeListeners(component);
       this.edges
         .filter((edge: any) => {
           const links = edge.state.links || {};
@@ -342,6 +405,7 @@ export default class FlowDesigner {
       const node = new FlowNode(item);
       delete node.state.typeId;
       this.ice.addChild(node);
+      this.__attachNodeListeners(node);
       report.nodes += 1;
     });
     (data.edges || []).forEach((item: any) => {
@@ -499,5 +563,7 @@ export default class FlowDesigner {
 
   public dispose(): void {
     this.ice.evtBus.off('mousedown', this.__mousedownHandler, this);
+    this.ice.evtBus.off('mouseup', this.__mouseupHandler, this);
+    this.nodes.forEach((node: any) => this.__detachNodeListeners(node));
   }
 }
