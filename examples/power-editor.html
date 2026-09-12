@@ -90,79 +90,86 @@
       let linking = false;
       let linkSource = null;
 
+      /** 一条间隔（串联设备链）垂直排布：第一个由 attachToBus 定位，其余按固定步长往下排 */
+      function layoutBay(chain, step) {
+        const box = chain[0].getMinBoundingBox(true);
+        const worldLeft = box.tl[0];
+        const worldTop = box.tl[1];
+        chain.forEach((node, index) => {
+          if (index === 0) {
+            return;
+          }
+          node.setState({ left: worldLeft, top: worldTop + index * step });
+        });
+      }
+
       /* ---------------- 案例：110kV 变电站（双母线 + 母联 + 两回进线 + 两台主变） ---------------- */
       function buildCase() {
         designer.clear();
         const v = '110kV';
         const add = (kind, props) => designer.createSymbol(kind, { voltageLevel: v, ...props });
 
-        // 两条 110kV 母线
-        const bus1 = add('busbar', { name: '#1M', left: 120, top: 320, width: 720 });
-        const bus2 = add('busbar', { name: '#2M', left: 120, top: 470, width: 720 });
+        /** 一条间隔（串联设备链）垂直排布：第一个由 attachToBus 定位，其余按固定步长往下排 */
+        function layoutBay(chain, step) {
+          const box = chain[0].getMinBoundingBox(true);
+          chain.forEach((node, index) => {
+            if (index === 0) {
+              return; // 第一个已经在母线上（attachToBus 摆好了）
+            }
+            node.setState({ left: box.tl[0], top: box.tl[1] + index * step });
+          });
+        }
 
-        // 进线 1：线路 → 隔离开关 → 断路器 → 隔离开关 → #1M（线路侧标成电源点）
-        const line1 = add('generator', { name: '线路1', left: 200, top: 60 });
-        const ds11 = add('disconnector', { name: '11016', left: 200, top: 140 });
-        const qf11 = add('breaker', { name: '1101', left: 200, top: 230 });
-        const ds12 = add('disconnector', { name: '11012', left: 200, top: 260 });
-        designer.createLine({ sourceId: line1.state.id, targetId: ds11.state.id });
-        designer.createLine({ sourceId: ds11.state.id, targetId: qf11.state.id });
-        designer.createLine({ sourceId: qf11.state.id, targetId: ds12.state.id });
-        designer.createLine({ sourceId: ds12.state.id, targetId: bus1.state.id });
+        // 两条 110kV 母线（母线之间留出母联的空间）
+        const bus1 = add('busbar', { name: '#1M', left: 120, top: 180, width: 760 });
+        const bus2 = add('busbar', { name: '#2M', left: 120, top: 420, width: 760 });
 
-        // 进线 2：同结构，接 #2M
-        const line2 = add('generator', { name: '线路2', left: 420, top: 60 });
-        const ds21 = add('disconnector', { name: '11026', left: 420, top: 140 });
-        const qf21 = add('breaker', { name: '1102', left: 420, top: 230 });
-        const ds22 = add('disconnector', { name: '11022', left: 420, top: 260 });
-        designer.createLine({ sourceId: line2.state.id, targetId: ds21.state.id });
-        designer.createLine({ sourceId: ds21.state.id, targetId: qf21.state.id });
-        designer.createLine({ sourceId: qf21.state.id, targetId: ds22.state.id });
-        designer.createLine({ sourceId: ds22.state.id, targetId: bus2.state.id });
+        // 间隔：母线侧隔离开关 → 断路器 → 隔离开关 → 出线（线路 / 主变）——全部挂在 #2M 下
+        const bay = (x, dsName, qfName, ds2Name, terminalKind, terminalName) => {
+          const ds = add('disconnector', { name: dsName, left: x, top: 460 });
+          const qf = add('breaker', { name: qfName, left: x, top: 560 });
+          const ds2 = add('disconnector', { name: ds2Name, left: x, top: 660 });
+          const terminal = add(terminalKind, { name: terminalName, left: x, top: 760 });
+          designer.createLine({ sourceId: ds.state.id, targetId: qf.state.id });
+          designer.createLine({ sourceId: qf.state.id, targetId: ds2.state.id });
+          designer.createLine({ sourceId: ds2.state.id, targetId: terminal.state.id });
+          designer.attachToBus(ds, bus2, { centerX: x });
+          layoutBay([ds, qf, ds2, terminal], 96);
+          return { ds, qf, ds2, terminal };
+        };
 
-        // 母联：两条母线之间用「隔离开关 + 断路器 + 隔离开关」连接
-        const ds31 = add('disconnector', { name: '10126', left: 660, top: 340 });
-        const qf31 = add('breaker', { name: '1012', left: 660, top: 390 });
-        const ds32 = add('disconnector', { name: '10122', left: 660, top: 420 });
-        designer.createLine({ sourceId: bus1.state.id, targetId: ds31.state.id });
+        const line1 = bay(200, '11026', '1102', '11022', 'generator', '线路1');
+        const line2 = bay(360, '11036', '1103', '11032', 'generator', '线路2');
+        const t1 = bay(520, '10116', '1011', '10112', 'transformer', 'T1');
+        const t2 = bay(680, '10216', '1021', '10212', 'transformer', 'T2');
+
+        // 母联：#1M 与 #2M 之间「隔离开关 + 断路器 + 隔离开关」，两端各自挂在一条母线上
+        const ds31 = add('disconnector', { name: '10126', left: 800, top: 300 });
+        const qf31 = add('breaker', { name: '1012', left: 800, top: 300 });
+        const ds32 = add('disconnector', { name: '10122', left: 800, top: 300 });
         designer.createLine({ sourceId: ds31.state.id, targetId: qf31.state.id });
         designer.createLine({ sourceId: qf31.state.id, targetId: ds32.state.id });
-        designer.createLine({ sourceId: ds32.state.id, targetId: bus2.state.id });
-
-        // 两台主变：母线 → 隔离开关 → 断路器 → 隔离开关 → 主变
-        const t1ds1 = add('disconnector', { name: '10116', left: 200, top: 560 });
-        const t1qf = add('breaker', { name: '1011', left: 200, top: 640 });
-        const t1ds2 = add('disconnector', { name: '10112', left: 200, top: 670 });
-        const t1 = add('transformer', { name: 'T1', left: 200, top: 760 });
-        designer.createLine({ sourceId: bus1.state.id, targetId: t1ds1.state.id });
-        designer.createLine({ sourceId: t1ds1.state.id, targetId: t1qf.state.id });
-        designer.createLine({ sourceId: t1qf.state.id, targetId: t1ds2.state.id });
-        designer.createLine({ sourceId: t1ds2.state.id, targetId: t1.state.id });
-
-        const t2ds1 = add('disconnector', { name: '10216', left: 420, top: 560 });
-        const t2qf = add('breaker', { name: '1021', left: 420, top: 640 });
-        const t2ds2 = add('disconnector', { name: '10212', left: 420, top: 670 });
-        const t2 = add('transformer', { name: 'T2', left: 420, top: 760 });
-        designer.createLine({ sourceId: bus1.state.id, targetId: t2ds1.state.id });
-        designer.createLine({ sourceId: t2ds1.state.id, targetId: t2qf.state.id });
-        designer.createLine({ sourceId: t2qf.state.id, targetId: t2ds2.state.id });
-        designer.createLine({ sourceId: t2ds2.state.id, targetId: t2.state.id });
+        designer.attachToBus(ds31, bus1, { centerX: 800 });
+        designer.attachToBus(ds32, bus2, { centerX: 800 });
+        // 母联的断路器摆到两把隔离开关中间
+        const ds31Box = ds31.getMinBoundingBox(true);
+        qf31.setState({ left: ds31Box.tl[0], top: ds31Box.tl[1] + 84 });
 
         // 每条母线上挂一把接地开关（默认分位）
-        const es1 = add('earthingSwitch', { name: '11019', left: 800, top: 380 });
-        const es2 = add('earthingSwitch', { name: '11029', left: 800, top: 530 });
-        designer.createLine({ sourceId: bus1.state.id, targetId: es1.state.id });
-        designer.createLine({ sourceId: bus2.state.id, targetId: es2.state.id });
+        const es1 = add('earthingSwitch', { name: '11019', left: 940, top: 240 });
+        const es2 = add('earthingSwitch', { name: '11029', left: 940, top: 480 });
+        designer.attachToBus(es1, bus1, { centerX: 940 });
+        designer.attachToBus(es2, bus2, { centerX: 940 });
 
         // 电源点：两回进线
-        designer.setEnergizedSource(line1.state.id, true);
-        designer.setEnergizedSource(line2.state.id, true);
+        designer.setEnergizedSource(line1.terminal.state.id, true);
+        designer.setEnergizedSource(line2.terminal.state.id, true);
 
-        // 运行态：进线断路器与母联在合位，两台主变断路器在合位
-        [qf11, qf21, qf31, t1qf, t2qf].forEach((item) => designer.setSwitchState(item.state.id, 'closed'));
-        [ds11, ds12, ds21, ds22, ds31, ds32, t1ds1, t1ds2, t2ds1, t2ds2].forEach((item) =>
-          designer.setSwitchState(item.state.id, 'closed')
-        );
+        // 运行态：全部合闸（正常运行方式）
+        [line1, line2, t1, t2].forEach((item) => {
+          [item.ds, item.qf, item.ds2].forEach((device) => designer.setSwitchState(device.state.id, 'closed'));
+        });
+        [ds31, qf31, ds32].forEach((device) => designer.setSwitchState(device.state.id, 'closed'));
 
         designer.select(null);
         designer.applyTopology();

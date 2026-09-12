@@ -236,3 +236,108 @@ describe('电力应用层 · 色标表', () => {
     expect(PowerLine.typeId).toBe('PowerLine');
   });
 });
+
+/**
+ * 母线 T 接（方案 A：容器语义 + 隐式等电位，引擎零改动）。
+ *
+ * 评估见 ice-render/docs/architecture/16-link-port-evaluation.md：
+ * 引擎的连线端点只有 5 个固定插槽，做不到「沿母线任意位置」；改成「母线当容器 + 几何贴合 = 等电位」，
+ * 既不用动引擎，画出来也比从母线中心拉绕行线更接近真实一次接线图。
+ */
+describe('电力应用层 · 母线 T 接（方案 A）', () => {
+  function makeBusWithBays() {
+    const { designer } = makeDesigner();
+    const bus = designer.createSymbol('busbar', {
+      name: '#1M',
+      voltageLevel: '110kV',
+      left: 100,
+      top: 200,
+      width: 600,
+    });
+    const ds = designer.createSymbol('disconnector', { name: '11016', voltageLevel: '110kV', left: 220, top: 260 });
+    const qf = designer.createSymbol('breaker', { name: '1101', voltageLevel: '110kV', left: 220, top: 340 });
+    const ds2 = designer.createSymbol('disconnector', { name: '11012', voltageLevel: '110kV', left: 220, top: 400 });
+    const source = designer.createSymbol('generator', { name: '线路1', voltageLevel: '110kV', left: 220, top: 120 });
+    designer.createLine({ sourceId: source.state.id, targetId: ds2.state.id });
+    designer.createLine({ sourceId: qf.state.id, targetId: ds.state.id });
+    designer.createLine({ sourceId: ds2.state.id, targetId: qf.state.id });
+    return { designer, bus, ds, qf, ds2, source };
+  }
+
+  it('attachToBus：设备收成母线子节点，顶部引线贴住母线中心线（横向落点可指定）', () => {
+    const { designer, bus, ds } = makeBusWithBays();
+    designer.attachToBus(ds, bus, { centerX: 300 });
+
+    expect(ds.state.attachedBusId).toBe(bus.state.id);
+    expect(designer.attachedBusOf(ds)).toBe(bus);
+    expect(designer.isAttachedToBus(ds)).toBe(true);
+
+    const busBox = bus.getMinBoundingBox(true);
+    const dsBox = ds.getMinBoundingBox(true);
+    expect(Math.round(dsBox.tc[0])).toBe(300); // 横向落点
+    expect(Math.round(dsBox.tl[1])).toBe(Math.round((busBox.tl[1] + busBox.br[1]) / 2 + 3)); // 纵向贴合
+  });
+
+  it('隐式等电位：不画任何导体，母线带电时挂在它上面的间隔也带电', () => {
+    const { designer, bus, ds, qf, ds2, source } = makeBusWithBays();
+    designer.attachToBus(ds, bus, { centerX: 220 });
+    designer.setEnergizedSource(source.state.id, true);
+    // 进线 → QS → QF → QS 全部合闸；QS 挂在母线上（没有导体）
+    [ds, qf, ds2].forEach((item) => designer.setSwitchState(item.state.id, 'closed'));
+
+    const topology = designer.topology();
+    expect(topology.energized).toContain(ds.state.id); // 挂着 → 隐式等电位
+    expect(topology.energized).toContain(bus.state.id);
+    expect(topology.energized).toContain(source.state.id);
+    // 挂在母线上的设备不会被误报成孤立设备
+    expect(designer.validatePower().some((issue: any) => issue.message.includes('孤立设备'))).toBe(false);
+  });
+
+  it('拖动母线，挂在它上面的间隔整体跟随（容器语义）', () => {
+    const { designer, bus, ds } = makeBusWithBays();
+    designer.attachToBus(ds, bus, { centerX: 300 });
+    const before = ds.getMinBoundingBox(true).tl.slice();
+
+    bus.setPosition(bus.state.left + 120, bus.state.top + 40);
+    const after = ds.getMinBoundingBox(true).tl.slice();
+
+    expect(Math.round(after[0] - before[0])).toBe(120);
+    expect(Math.round(after[1] - before[1])).toBe(40);
+    expect(designer.isAttachedToBus(ds)).toBe(true);
+  });
+
+  it('把间隔从母线上拖开：隐式连接自动断开，并提示「已经拖离」', () => {
+    const { designer, bus, ds } = makeBusWithBays();
+    designer.attachToBus(ds, bus, { centerX: 300 });
+    expect(designer.isAttachedToBus(ds)).toBe(true);
+
+    // 往下拖 80px：超出贴合容差
+    ds.setState({ top: ds.state.top + 80 });
+    expect(designer.isAttachedToBus(ds)).toBe(false);
+    expect(
+      designer.validatePower().some((issue: any) => issue.level === 'warning' && issue.message.includes('已经拖离'))
+    ).toBe(true);
+
+    // 再贴回去就恢复
+    designer.attachToBus(ds, bus, { centerX: 300 });
+    expect(designer.validatePower().some((issue: any) => issue.message.includes('已经拖离'))).toBe(false);
+  });
+
+  it('同一条母线上挂多个间隔：互不影响，且都在同一个电气连通域', () => {
+    const { designer, bus, ds } = makeBusWithBays();
+    const second = designer.createSymbol('breaker', { name: '1102', voltageLevel: '110kV', left: 500, top: 300 });
+    designer.attachToBus(ds, bus, { centerX: 220 });
+    designer.attachToBus(second, bus, { centerX: 520 });
+
+    expect(designer.attachedBusOf(ds)).toBe(bus);
+    expect(designer.attachedBusOf(second)).toBe(bus);
+    expect(designer.nodes.filter((node: any) => node.state.attachedBusId === bus.state.id).length).toBe(2);
+    // 两个间隔都挂在同一条母线上 → 母线与两个间隔同属一个电气连通域
+    // （进线那一支本身也通过 ds 挂在母线上，所以整张图就是 1 个连通域）
+    expect(designer.topology().islands.length).toBe(1);
+    expect(designer.topology().islands[0].length).toBe(designer.nodes.length);
+
+    // 母线挂两个间隔后，母线本身仍是一条母线段（宽度不变）
+    expect(bus.state.width).toBe(600);
+  });
+});

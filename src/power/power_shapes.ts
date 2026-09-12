@@ -57,7 +57,8 @@ type PowerSymbolPreset = {
 
 /** 文字符号取自 JB/T 5872-1991 的「图形符号 + 文字符号」对照表 */
 export const POWER_SYMBOL_PRESETS: Record<PowerSymbolKind, PowerSymbolPreset> = {
-  busbar: { label: '母线', tag: 'W', width: 260, height: 10, inline: false },
+  // height 给 20：母线的可点/可拖区域不能就是那 3px 的线（画出来的仍然是中间那条加粗实线）
+  busbar: { label: '母线', tag: 'W', width: 260, height: 20, inline: false },
   breaker: { label: '断路器', tag: 'QF', width: 44, height: 52, inline: true },
   disconnector: { label: '隔离开关', tag: 'QS', width: 44, height: 52, inline: true },
   loadSwitch: { label: '负荷开关', tag: 'QL', width: 44, height: 52, inline: true },
@@ -159,6 +160,13 @@ export default class PowerSymbol extends ICEGroup {
         energized: undefined as boolean | undefined,
         /** 电源点（发电机 / 进线 / 主变电源侧）—— 拓扑从这里开始推 */
         energizedSource: false,
+        /**
+         * 挂在哪条母线上（母线 T 接）。
+         *
+         * 只是**数据字段**（随 state 序列化），不把设备变成子节点：复合组件的
+         * `hasDerivedChildren() === true` 会让序列化器跳过全部子节点，嵌套会丢设备。
+         */
+        attachedBusId: '',
       },
       props
     );
@@ -607,9 +615,20 @@ export default class PowerSymbol extends ICEGroup {
     return component;
   }
 
+  /**
+   * 只清「派生部件」，**不能**清 `childNodes` 全集。
+   *
+   * 母线同时扮演容器（间隔作为真实子节点挂在它上面），如果这里把 childNodes 全删掉，
+   * 每次重建记法都会连挂在母线上的间隔一起删掉（`removeChild` 内部会 `destory()`）。
+   * 派生部件在 `parts` 里有登记，按登记删即可。
+   */
   private __clearParts(): void {
-    // 先拷贝再删：removeChildren 内部会 splice 原数组
-    this.removeChildren([...this.childNodes]);
+    const derived = this.parts
+      .map((item) => item.component)
+      .filter((component: any) => this.childNodes.indexOf(component) !== -1);
+    if (derived.length) {
+      this.removeChildren(derived);
+    }
     this.parts = [];
   }
 }

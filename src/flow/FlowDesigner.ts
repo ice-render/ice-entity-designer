@@ -219,7 +219,7 @@ export default class FlowDesigner {
     node.on('AFTER_MOVE', this.__afterMoveHandler, this);
   }
 
-  private __detachNodeListeners(node: any): void {
+  protected __detachNodeListeners(node: any): void {
     if (!node || typeof node.off !== 'function') {
       return;
     }
@@ -376,7 +376,9 @@ export default class FlowDesigner {
       return;
     }
     this.__captureHistory();
-    if (component.constructor.typeId === FlowNode.typeId) {
+    // 「本设计器自己的节点」= this.nodes 里的元素（每个域包的类型过滤不同）。
+    // 此前这里只判 FlowNode，导致 UML / 状态机 / 甘特删节点后监听不摘、悬空连线不级联删除。
+    if (this.nodes.indexOf(component) !== -1) {
       this.__detachNodeListeners(component);
       this.edges
         .filter((edge: any) => {

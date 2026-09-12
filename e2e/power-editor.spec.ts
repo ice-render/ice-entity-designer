@@ -34,13 +34,17 @@ test('加载：110kV 变电站案例渲染、编号与文字符号齐全、校�
       issues: designer.validatePower(),
       energized: designer.topology().energized.length,
       islands: designer.topology().islands.length,
+      attachedToBus: designer.nodes.filter((node: any) => !!node.state.attachedBusId).length,
     };
   });
 
   expect(info.nodes).toBe(23);
-  expect(info.edges).toBe(22);
+  // 母线接间隔不再画导体（方案 A：容器 + 几何贴合 = 隐式等电位），所以导体是 14 段
+  expect(info.edges).toBe(14);
   // 设备编号（调度命名）与文字符号都在
-  expect(info.names).toEqual(expect.arrayContaining(['线路1', '#1M', '#2M', '1101', '1102', '1012', 'T1', 'T2']));
+  expect(info.names).toEqual(
+    expect.arrayContaining(['线路1', '线路2', '#1M', '#2M', '11026', '1102', '10116', '1011', '1012', 'T1', 'T2'])
+  );
   expect(info.tags).toEqual(expect.arrayContaining(['QF', 'QS', 'QE', 'W', 'TM', 'G']));
   expect(info.kinds).toEqual(
     expect.arrayContaining(['busbar', 'breaker', 'disconnector', 'earthingSwitch', 'transformer'])
@@ -49,6 +53,8 @@ test('加载：110kV 变电站案例渲染、编号与文字符号齐全、校�
   // 案例本身是「全合闸」的正常运行方式：所有设备带电、一个连通域
   expect(info.energized).toBe(23);
   expect(info.islands).toBe(1);
+  // 8 个「母线侧」设备是挂上去的：4 条间隔首端 + 母联两端 + 2 把接地开关
+  expect(info.attachedToBus).toBe(8);
   expect((page as any).__errors).toEqual([]);
 });
 
@@ -116,11 +122,31 @@ test('矢量导出与快照往返：导出的 SVG 含设备编号，JSON 能原�
     const designer = (window as any).__designer;
     return { nodes: designer.nodes.length, edges: designer.edges.length, issues: designer.validatePower().length };
   });
-  expect(counts).toEqual({ nodes: 23, edges: 22, issues: 0 });
+  expect(counts).toEqual({ nodes: 23, edges: 14, issues: 0 });
   expect((page as any).__errors).toEqual([]);
 });
 
 test('画布：滚轮缩放、中键/空白拖拽平移、复位回到单位视口', async ({ page }) => {
   await expectCanvasInteractions(page);
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('母线 T 接（方案 A）：拖动母线，挂在它上面的间隔整体跟随', async ({ page }) => {
+  const delta = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const bus = designer.nodes.find((node: any) => node.state.name === '#2M');
+    const bay = designer.nodes.find((node: any) => node.state.name === '10116');
+    const before = [bay.getMinBoundingBox(true).tl[0], bay.getMinBoundingBox(true).tl[1]];
+    bus.setPosition(bus.state.left + 60, bus.state.top + 30);
+    const after = [bay.getMinBoundingBox(true).tl[0], bay.getMinBoundingBox(true).tl[1]];
+    return {
+      delta: [Math.round(after[0] - before[0]), Math.round(after[1] - before[1])],
+      stillAttached: designer.isAttachedToBus(bay),
+      attachedBusName: designer.attachedBusOf(bay) && designer.attachedBusOf(bay).state.name,
+    };
+  });
+  expect(delta.delta).toEqual([60, 30]);
+  expect(delta.stillAttached).toBe(true);
+  expect(delta.attachedBusName).toBe('#2M');
   expect((page as any).__errors).toEqual([]);
 });

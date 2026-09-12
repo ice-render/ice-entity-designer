@@ -14,6 +14,16 @@ import { defaultVoltageColors, voltageColorOf } from './power_voltage';
 
 export type PowerIssue = { level: 'error' | 'warning'; message: string; id?: string };
 
+/**
+ * 母线接间隔的几何约定：设备**顶部引线**贴在母线中心线下方这么多像素。
+ *
+ * 方案 A（零引擎改动）：母线当容器，挂在它上面的间隔用「几何贴合 + 父容器」表达等电位，
+ * 不再需要从母线中心拉一条绕行导体。评估见 `ice-render/docs/architecture/16-link-port-evaluation.md`。
+ */
+export const POWER_BUS_ATTACH_GAP = 3;
+/** 判定「仍然挂在母线上」的纵向容差（拖离出这个范围就算断开，走校验提示） */
+export const POWER_BUS_ATTACH_TOLERANCE = 8;
+
 export type PowerTopology = {
   /** 带电的设备 id（从电源点出发，只经过处于合位的开关） */
   energized: string[];
@@ -179,18 +189,7 @@ export default class PowerDesigner extends FlowDesigner {
     const byId = new Map<string, any>();
     nodes.forEach((node: any) => byId.set(node.state.id, node));
 
-    const adjacency = new Map<string, string[]>();
-    nodes.forEach((node: any) => adjacency.set(node.state.id, []));
-    this.edges.forEach((edge: any) => {
-      const links = edge.state.links || {};
-      const from = links.start && links.start.id;
-      const to = links.end && links.end.id;
-      if (!from || !to || !adjacency.has(from) || !adjacency.has(to)) {
-        return;
-      }
-      adjacency.get(from)!.push(to);
-      adjacency.get(to)!.push(from);
-    });
+    const adjacency = this.__buildAdjacency();
 
     const isClosed = (id: string): boolean => {
       const node = byId.get(id);
@@ -280,17 +279,7 @@ export default class PowerDesigner extends FlowDesigner {
     });
 
     // 2) 电压等级一致：直接相连（中间没有变压器）的两端等级必须一致
-    const neighbors = new Map<string, string[]>();
-    this.edges.forEach((edge: any) => {
-      const links = edge.state.links || {};
-      const from = links.start && links.start.id;
-      const to = links.end && links.end.id;
-      if (!from || !to) {
-        return;
-      }
-      neighbors.set(from, [...(neighbors.get(from) || []), to]);
-      neighbors.set(to, [...(neighbors.get(to) || []), from]);
-    });
+    const neighbors = this.__buildAdjacency();
     this.edges.forEach((edge: any) => {
       const links = edge.state.links || {};
       const from = byId.get(links.start && links.start.id);
@@ -369,7 +358,21 @@ export default class PowerDesigner extends FlowDesigner {
         }
       });
 
-    // 6) 孤立设备
+    // 6) 挂在母线上但已经拖离：隐式连接按几何判定，拖离后需要重新贴合或补一段导体
+    nodes.forEach((node: any) => {
+      const bus = this.attachedBusOf(node);
+      if (bus && !this.isAttachedToBus(node)) {
+        issues.push({
+          level: 'warning',
+          message: `设备「${node.state.name || node.state.kind}」挂在母线「${
+            bus.state.name || '未命名'
+          }」上但已经拖离，需要重新贴合或补一段导体`,
+          id: node.state.id,
+        });
+      }
+    });
+
+    // 7) 孤立设备
     nodes.forEach((node: any) => {
       if ((neighbors.get(node.state.id) || []).length === 0) {
         issues.push({
@@ -381,6 +384,154 @@ export default class PowerDesigner extends FlowDesigner {
     });
 
     return issues;
+  }
+
+  /**
+   * 把设备挂到母线上（母线 T 接）。
+   *
+   * 落地形态（方案 A 的精化版，见 `ice-render/docs/architecture/16-link-port-evaluation.md`）：
+   * **不把设备变成母线的子节点** —— 复合组件的 `hasDerivedChildren() === true` 会让序列化器
+   * 跳过全部子节点，嵌套会让挂上去的设备在快照里直接丢失（实测 23 → 15）。
+   * 改成三件事：
+   *
+   * 1. 设备 state 里记 `attachedBusId`（普通字段，随快照往返）；
+   * 2. 位置按「顶部引线贴住母线中心线下方 POWER_BUS_ATTACH_GAP 处」摆放；
+   * 3. 拖动母线时由应用层把挂上去的设备一起平移（`__followBusMove`），
+   *    设备之间的导体本来就会跟随宿主（引擎能力），所以整条间隔会跟着走。
+   *
+   * 电气语义：拓扑把「attachedBusId 指向的母线 **且** 几何仍然贴合」当成一条隐式连接，
+   * 所以把设备拖开就自动断开，不需要额外的「断开」操作。
+   */
+  public attachToBus(deviceOrId: any, busOrId: any, options: { centerX?: number } = {}): any {
+    const device = typeof deviceOrId === 'string' ? this.__symbolById(deviceOrId) : deviceOrId;
+    const bus = typeof busOrId === 'string' ? this.__symbolById(busOrId) : busOrId;
+    if (!device || !bus) {
+      throw new Error('attachToBus：设备与母线都必须已存在');
+    }
+    if (bus.state.kind !== 'busbar') {
+      throw new Error('attachToBus：第二个参数必须是母线（busbar）');
+    }
+    if (device === bus) {
+      throw new Error('attachToBus：母线不能挂到自己身上');
+    }
+    const currentBus = this.attachedBusOf(device);
+    if (currentBus && currentBus !== bus) {
+      throw new Error('attachToBus：设备已经挂在另一条母线上，请先断开');
+    }
+    this.__captureHistory();
+    const busBox = bus.getMinBoundingBox(true);
+    const margin = 24;
+    const fallbackCenter = device.getMinBoundingBox(true).tc[0];
+    const centerX = Math.min(
+      Math.max(options.centerX === undefined ? fallbackCenter : options.centerX, busBox.tl[0] + margin),
+      busBox.br[0] - margin
+    );
+    device.setState({
+      attachedBusId: bus.state.id,
+      left: centerX - device.state.width / 2,
+      top: (busBox.tl[1] + busBox.br[1]) / 2 + POWER_BUS_ATTACH_GAP,
+    });
+    this.__watchBusMove(bus);
+    this.applyTopology();
+    this.__emitChange();
+    return device;
+  }
+
+  /** 设备挂在哪条母线上（按 `attachedBusId` 解析；不要求几何仍然贴合） */
+  public attachedBusOf(device: any): any {
+    const busId = device && device.state && device.state.attachedBusId;
+    if (!busId) {
+      return null;
+    }
+    return this.__symbolById(busId);
+  }
+
+  /** 设备是否**真的**还挂在母线上（记录 + 几何贴合 + 横向仍落在母线段内；拖离后为 false） */
+  public isAttachedToBus(device: any): boolean {
+    const bus = this.attachedBusOf(device);
+    if (!bus) {
+      return false;
+    }
+    const busBox = bus.getMinBoundingBox(true);
+    const deviceBox = device.getMinBoundingBox(true);
+    const barY = (busBox.tl[1] + busBox.br[1]) / 2;
+    const expectedTop = barY + POWER_BUS_ATTACH_GAP;
+    const verticallyAttached = Math.abs(deviceBox.tl[1] - expectedTop) <= POWER_BUS_ATTACH_TOLERANCE;
+    const horizontallyOnBus = deviceBox.tc[0] >= busBox.tl[0] && deviceBox.tc[0] <= busBox.br[0];
+    return verticallyAttached && horizontallyOnBus;
+  }
+
+  /** 解除母线 T 接（设备留在原地，只是不再等电位） */
+  public detachFromBus(deviceOrId: any): any {
+    const device = typeof deviceOrId === 'string' ? this.__symbolById(deviceOrId) : deviceOrId;
+    if (!device) {
+      return null;
+    }
+    this.__captureHistory();
+    device.setState({ attachedBusId: '' });
+    this.applyTopology();
+    this.__emitChange();
+    return device;
+  }
+
+  /** 母线移动时，把挂在它上面的设备一起平移（应用层补上「容器」那部分行为） */
+  private __watchBusMove(bus: any): void {
+    if (!bus || bus.__powerBusWatched) {
+      return;
+    }
+    bus.__powerBusWatched = true;
+    bus.on(
+      'AFTER_MOVE',
+      () => {
+        const attached = this.nodes.filter((node: any) => node.state.attachedBusId === bus.state.id);
+        if (!attached.length) {
+          return;
+        }
+        // 母线自身刚移动过；子设备按「当前母线位置 - 上次记录位置」平移
+        const box = bus.getMinBoundingBox(true);
+        const last = bus.__powerBusLastBox || box;
+        const dx = box.tl[0] - last.tl[0];
+        const dy = box.tl[1] - last.tl[1];
+        bus.__powerBusLastBox = box;
+        if (!dx && !dy) {
+          return;
+        }
+        attached.forEach((node: any) => {
+          if (node.getMinBoundingBox) {
+            node.setState({ left: node.state.left + dx, top: node.state.top + dy });
+          }
+        });
+      },
+      this
+    );
+    bus.__powerBusLastBox = bus.getMinBoundingBox(true);
+  }
+
+  private __buildAdjacency(): Map<string, string[]> {
+    const adjacency = new Map<string, string[]>();
+    this.nodes.forEach((node: any) => adjacency.set(node.state.id, []));
+    const link = (a: string, b: string) => {
+      if (!adjacency.has(a) || !adjacency.has(b)) {
+        return;
+      }
+      adjacency.get(a)!.push(b);
+      adjacency.get(b)!.push(a);
+    };
+    this.edges.forEach((edge: any) => {
+      const links = edge.state.links || {};
+      const from = links.start && links.start.id;
+      const to = links.end && links.end.id;
+      if (from && to) {
+        link(from, to);
+      }
+    });
+    this.nodes.forEach((node: any) => {
+      const bus = this.attachedBusOf(node);
+      if (bus && this.isAttachedToBus(node)) {
+        link(bus.state.id, node.state.id);
+      }
+    });
+    return adjacency;
   }
 
   private __symbolById(id: string): any {

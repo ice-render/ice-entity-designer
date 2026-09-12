@@ -448,6 +448,7 @@ const svg = power.toSvg({ background: '#ffffff' });
 | 电压等级色标 | `setVoltageColors({ '110kV': '#xxxxxx' })` 覆盖；默认值见规格文档 |
 | 运行态 | `setSwitchState(id, 'open' / 'closed')`：刀臂形状 + 分合标签 + 带电范围一起更新 |
 | 拓扑 | `topology()` 返回带电设备与电气连通域；`applyTopology()` 把带电状态写回节点（不带电自动变灰） |
+| 母线 T 接 | `attachToBus(device, bus, { centerX })`：设备记 `attachedBusId` 并把顶部引线贴住母线（隐式等电位，不用画绕行导体）；`detachFromBus()` / 拖离几何范围即断开；拖动母线时挂上去的间隔整体跟随 |
 | 语义校验 | 设备编号唯一、直接相连的电压等级一致（变压器两侧例外）、母线要有进线、断路器两侧应有隔离开关，以及**带电合接地刀闸 / 带接地线合闸送电**这两条五防相关规则 |
 
 可运行示例：`examples/power-editor.html`（110kV 变电站：双母线 + 母联 + 两回进线 + 两台主变）；
