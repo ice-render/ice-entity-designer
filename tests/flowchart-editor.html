@@ -277,22 +277,17 @@
         button.dataset.tooltip = button.getAttribute('title');
       });
 
-      /* 画布默认支持滚轮缩放（以光标为锚点，0.3~3 倍）+ 空白处/中键拖拽平移，与 ER 示例一致 */
-      function zoomAtClientPoint(clientX, clientY, factor) {
-        const oldScale = ice.viewport.scale;
-        const nextScale = Math.max(0.3, Math.min(3, oldScale * factor));
-        const rect = canvasEl.getBoundingClientRect();
-        const cx = clientX - rect.left;
-        const cy = clientY - rect.top;
-        const tx = cx - ((cx - ice.viewport.tx) * nextScale) / oldScale;
-        const ty = cy - ((cy - ice.viewport.ty) * nextScale) / oldScale;
-        ice.setViewport(nextScale, tx, ty);
-      }
-
-      canvasEl.addEventListener('wheel', (evt) => {
-        evt.preventDefault();
-        zoomAtClientPoint(evt.clientX, evt.clientY, evt.deltaY > 0 ? 0.9 : 1.1);
-      });
+      /* 画布交互：滚轮缩放走引擎原语 ICE.zoomAt（锚点缩放，内部已做钳制），
+         空白处/中键拖拽平移由应用层实现（引擎只提供 setViewport/hitTest 原语） */
+      canvasEl.addEventListener(
+        'wheel',
+        (evt) => {
+          evt.preventDefault();
+          // 参数：锚点 canvas 坐标、缩放倍数、最小/最大 scale
+          ice.zoomAt(evt.offsetX, evt.offsetY, evt.deltaY > 0 ? 1 / 1.1 : 1.1, 0.3, 3);
+        },
+        { passive: false }
+      );
 
       let panning = false;
       let panLastX = 0;
