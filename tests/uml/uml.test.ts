@@ -14,6 +14,7 @@ import { ICE, EventBus } from 'ice-render';
 import UmlClass from '../../src/uml/UmlClass';
 import UmlRelation, { UML_RELATION_KINDS } from '../../src/uml/UmlRelation';
 import UmlDesigner from '../../src/uml/UmlDesigner';
+import { toPlantUml, fromPlantUml, detectUmlDialect, arrowOf } from '../../src/uml/uml_text';
 
 function makeDesigner() {
   const ice: any = new ICE();
@@ -249,5 +250,135 @@ describe('UML 域包 · 设计器（复用 FlowDesigner 的选择/历史/快照�
     expect(UmlDesigner.describeRelationKind('inheritance')).toBe('实线 + 空心三角');
     expect(UmlDesigner.describeRelationKind('composition')).toBe('实线 + 实心菱形');
     expect(UmlDesigner.describeRelationKind('dependency')).toBe('虚线 + 开放箭头');
+  });
+});
+
+describe('UML 域包 · 文本互操作（PlantUML / Mermaid 类图语法子集）', () => {
+  it('导出 PlantUML：类/接口/抽象类/枚举 + 成员 + 六种关系连接符', () => {
+    const { designer } = makeDesigner();
+    const entity = designer.createClass({
+      kind: 'class',
+      className: 'Entity',
+      abstract: true,
+      methods: ['+ save(): void'],
+    });
+    const user = designer.createClass({
+      className: 'User',
+      attributes: ['- email: string'],
+      methods: ['+ placeOrder(): Order'],
+    });
+    const payable = designer.createClass({
+      kind: 'interface',
+      className: 'Payable',
+      methods: ['+ pay(amount: number): void'],
+    });
+    const order = designer.createClass({ className: 'Order' });
+    const item = designer.createClass({ className: 'OrderItem' });
+    const status = designer.createClass({ kind: 'enum', className: 'OrderStatus', attributes: ['PAID'] });
+    designer.createRelation({ sourceId: user.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
+    designer.createRelation({ sourceId: order.state.id, targetId: payable.state.id, relationKind: 'realization' });
+    designer.createRelation({
+      sourceId: user.state.id,
+      targetId: order.state.id,
+      relationKind: 'association',
+      label: '1 : 0..*',
+    });
+    designer.createRelation({ sourceId: order.state.id, targetId: item.state.id, relationKind: 'aggregation' });
+    designer.createRelation({ sourceId: order.state.id, targetId: item.state.id, relationKind: 'composition' });
+    designer.createRelation({ sourceId: order.state.id, targetId: status.state.id, relationKind: 'dependency' });
+
+    const text = toPlantUml(designer, { title: '电商支付' });
+
+    expect(text.startsWith('@startuml')).toBe(true);
+    expect(text).toContain('title 电商支付');
+    expect(text).toContain('abstract class Entity {');
+    expect(text).toContain('interface Payable {');
+    expect(text).toContain('enum OrderStatus {');
+    expect(text).toContain('- email: string');
+    expect(text).toContain('+ placeOrder(): Order');
+    expect(text.endsWith('@enduml')).toBe(true);
+    // 方向约定：A <|-- B（B 继承 A）；菱形在左侧（整体）一侧
+    expect(text).toContain('Entity <|-- User');
+    expect(text).toContain('Payable <|.. Order');
+    expect(text).toContain('User --> Order : 1 : 0..*');
+    expect(text).toContain('Order o-- OrderItem');
+    expect(text).toContain('Order *-- OrderItem');
+    expect(text).toContain('Order ..> OrderStatus');
+  });
+
+  it('导入 PlantUML：类/成员/关系类型与方向都还原', () => {
+    const { designer } = makeDesigner();
+    const text = [
+      '@startuml',
+      'class User {',
+      '  - email: string',
+      '  --',
+      '  + placeOrder(): Order',
+      '}',
+      'abstract class Entity {',
+      '  + save(): void',
+      '}',
+      'interface Payable',
+      'enum OrderStatus {',
+      '  PAID',
+      '}',
+      'Entity <|-- User',
+      'Payable <|.. User',
+      'User --> OrderStatus : 1 : 0..*',
+      'User o-- OrderStatus',
+      'User *-- OrderStatus',
+      'User ..> OrderStatus',
+      '@enduml',
+    ].join('\n');
+
+    const result = fromPlantUml(text, designer);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.classes).toBe(4);
+    expect(result.relations).toBe(6);
+    const names = designer.nodes.map((n: any) => n.state.className).sort();
+    expect(names).toEqual(['Entity', 'OrderStatus', 'Payable', 'User']);
+    const user = designer.nodes.find((n: any) => n.state.className === 'User');
+    expect(user.state.attributes).toEqual(['- email: string']);
+    expect(user.state.methods).toEqual(['+ placeOrder(): Order']);
+    const entity = designer.nodes.find((n: any) => n.state.className === 'Entity');
+    expect(entity.state.abstract).toBe(true);
+    const kinds = designer.edges.map((e: any) => e.state.relationKind).sort();
+    expect(kinds).toEqual(['aggregation', 'association', 'composition', 'dependency', 'inheritance', 'realization']);
+  });
+
+  it('导入是容错的：不认识的行进 warnings，不阻断整体导入', () => {
+    const { designer } = makeDesigner();
+    const result = fromPlantUml(['@startuml', 'class A', 'something weird here', '@enduml'].join('\n'), designer);
+    expect(result.classes).toBe(1);
+    expect(result.warnings.length).toBe(1);
+    expect(result.warnings[0]).toContain('something weird here');
+  });
+
+  it('往返稳定：模型 → PlantUML → 模型，类与关系种类不变', () => {
+    const first = makeDesigner();
+    const a = first.designer.createClass({ className: 'A', attributes: ['- x: int'] });
+    const b = first.designer.createClass({ kind: 'interface', className: 'B', methods: ['+ m(): void'] });
+    first.designer.createRelation({ sourceId: a.state.id, targetId: b.state.id, relationKind: 'realization' });
+
+    const text = toPlantUml(first.designer);
+    const second = makeDesigner();
+    fromPlantUml(text, second.designer);
+
+    expect(second.designer.nodes.map((n: any) => [n.state.className, n.state.kind, n.state.methods]).sort()).toEqual(
+      first.designer.nodes.map((n: any) => [n.state.className, n.state.kind, n.state.methods]).sort()
+    );
+    expect(second.designer.edges.map((e: any) => e.state.relationKind)).toEqual(
+      first.designer.edges.map((e: any) => e.state.relationKind)
+    );
+    // 再导出一次文本应当稳定（幂等）
+    expect(toPlantUml(second.designer).replace(/\s+/g, '')).toBe(text.replace(/\s+/g, ''));
+  });
+
+  it('方言识别与连接符查询（供 UI 提示文案）', () => {
+    expect(detectUmlDialect('@startuml\nclass A\n@enduml')).toBe('plantuml');
+    expect(detectUmlDialect('classDiagram\n  A <|-- B')).toBe('mermaid');
+    expect(detectUmlDialect('class A {}')).toBe('unknown');
+    expect(arrowOf('composition')).toBe('*--');
   });
 });

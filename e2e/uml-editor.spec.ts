@@ -78,3 +78,31 @@ test('属性面板：改类成员后类框重排，导出 SVG 含三段文字与
   await expect(page.locator('#validate-output')).toContainText('已导出 SVG');
   expect((page as any).__errors).toEqual([]);
 });
+
+test('文本互操作：导出 PlantUML → 改文本 → 导入，模型随之更新', async ({ page }) => {
+  await page.click('#btn-export-text');
+  const text = await page.evaluate(() => (window as any).__exportedText as string);
+  expect(text.startsWith('@startuml')).toBe(true);
+  expect(text).toContain('abstract class Entity');
+  expect(text).toContain('interface Payable');
+  expect(text).toContain('Entity <|-- User'); // 方向约定：箭头指向父类
+  expect(text).toContain('Order *-- OrderItem'); // 组合：实心菱形在整体一侧
+
+  // 改名 + 新增一个类，再导回模型
+  const edited = text
+    .replace(/User/g, 'Customer')
+    .replace('@enduml', 'class Coupon {\n  - code: string\n}\nCustomer --> Coupon : 使用\n@enduml');
+  await page.fill('#text-output', edited);
+  await page.click('#btn-import-text');
+  await page.waitForTimeout(400);
+
+  const info = await page.evaluate(() => ({
+    classes: (window as any).__designer.nodes.map((n: any) => n.state.className),
+    status: document.getElementById('validate-output')!.textContent,
+  }));
+  expect(info.classes).toContain('Customer');
+  expect(info.classes).toContain('Coupon');
+  expect(info.classes).not.toContain('User');
+  expect(info.status).toContain('已导入');
+  expect((page as any).__errors).toEqual([]);
+});

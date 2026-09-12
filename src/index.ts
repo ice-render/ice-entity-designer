@@ -36,6 +36,9 @@ export { default as UmlRelation, UML_RELATION_KINDS, UML_RELATION_STYLE } from '
 export type { UmlRelationKind, UmlMarker } from './uml/UmlRelation';
 export { default as UmlDesigner } from './uml/UmlDesigner';
 export type { UmlIssue } from './uml/UmlDesigner';
+// 文本互操作：PlantUML / Mermaid 类图语法子集（导入导出）
+export { toPlantUml, fromPlantUml, arrowOf, detectUmlDialect } from './uml/uml_text';
+export type { UmlTextImportResult } from './uml/uml_text';
 
 /**
  * 引擎内核（ice-render）在构建时已被打包进本包，这里一并导出。
