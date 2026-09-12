@@ -277,3 +277,36 @@ test('记法不可变换：BPMN 图元只允许拖动与点选，容器尺寸走
   expect(pool.laneStillNested).toBe(true);
   expect((page as any).__errors).toEqual([]);
 });
+
+/**
+ * 快照往返（回归）：FlowNode 既是复合组件又是容器 —— 池/泳道/节点必须都活下来。
+ * 修前实测 `serialize() → load()` 会把 18 个元素打成只剩池（泳道与节点全丢）。
+ */
+test('快照往返：serialize → load 后元素数量与嵌套都保持', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const before = {
+      nodes: designer.nodes.length,
+      edges: designer.edges.length,
+      kinds: designer.nodes.map((node: any) => node.state.kind).sort(),
+    };
+    const report = designer.load(designer.serialize());
+    const lane = designer.nodes.find((node: any) => node.state.kind === 'bpmnLane');
+    const pool = designer.nodes.find((node: any) => node.state.kind === 'bpmnPool');
+    return {
+      before,
+      report,
+      after: {
+        nodes: designer.nodes.length,
+        edges: designer.edges.length,
+        kinds: designer.nodes.map((node: any) => node.state.kind).sort(),
+        laneNested: !!lane && !!pool && lane.parentNode === pool,
+      },
+    };
+  });
+  expect(result.after.nodes).toBe(result.before.nodes);
+  expect(result.report.nodes).toBe(result.before.nodes);
+  expect(result.after.kinds).toEqual(result.before.kinds);
+  expect(result.after.laneNested).toBe(true);
+  expect((page as any).__errors).toEqual([]);
+});

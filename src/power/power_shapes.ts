@@ -156,6 +156,12 @@ export default class PowerSymbol extends ICEGroup {
     return true;
   }
 
+  /** 真实子节点 = childNodes 减去派生部件（`parts`）；容器化的域包组件靠它做快照往返 */
+  public getSerializableChildren(): any[] {
+    const derived = this.parts.map((item) => item.component);
+    return this.childNodes.filter((child: any) => derived.indexOf(child) === -1);
+  }
+
   constructor(props: any = {}) {
     super(PowerSymbol.arrangeParam(props));
     this.syncShape();

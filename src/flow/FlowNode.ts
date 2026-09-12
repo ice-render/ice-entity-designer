@@ -211,6 +211,17 @@ export default class FlowNode extends ICEGroup {
     return true;
   }
 
+  /**
+   * FlowNode **既是复合组件、又是容器**：形状 / 标题 / BPMN 角标都是派生的（不进文档），
+   * 但池装泳道、泳道装节点、分组装子节点都是**真实子节点**，必须进文档 ——
+   * 不然 `serialize() → load()` 之后池里的泳道与节点会整套消失（实测：3 个元素只剩 1 个）。
+   * 引擎的 `getSerializableChildren()` 钩子正是为这种「复合 + 容器」组件准备的。
+   */
+  public getSerializableChildren(): any[] {
+    const derived = [this.shapeComponent, this.labelComponent, ...(this.decorationComponents || [])];
+    return this.childNodes.filter((child: any) => derived.indexOf(child) === -1);
+  }
+
   constructor(props: any = {}) {
     const kind: FlowNodeKind = FLOW_NODE_KINDS[props.kind as FlowNodeKind] ? props.kind : 'process';
     const preset = FLOW_NODE_KINDS[kind];
