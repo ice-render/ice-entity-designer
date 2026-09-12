@@ -25,6 +25,8 @@
       <span class="hint">|</span>
       <label class="hint">每日像素 <input id="in-daywidth" type="number" value="28" min="8" max="80" style="width: 64px" /></label>
       <button id="btn-link">依赖</button>
+      <button id="btn-schedule">自动排程</button>
+      <button id="btn-critical">关键路径</button>
       <button id="btn-fit">适应视图</button>
       <button id="btn-validate">校验</button>
       <button id="btn-export-svg">导出 SVG</button>
@@ -91,6 +93,24 @@
       document.getElementById('btn-undo').addEventListener('click', () => { designer.undo(); renderPanel(); });
       document.getElementById('btn-redo').addEventListener('click', () => { designer.redo(); renderPanel(); });
       document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
+
+      // 自动排程：按依赖把任务推到「前置结束之后」（只推后、不提前）
+      document.getElementById('btn-schedule').addEventListener('click', () => {
+        designer.autoSchedule();
+        designer.fitViewport();
+        renderPanel();
+        validateOutput.className = 'hint';
+        validateOutput.textContent = '✅ 已按依赖自动排程（完成 → 开始）';
+      });
+      // 关键路径：浮时为 0 的任务高亮（用选中态标出，便于在画布上找到）
+      document.getElementById('btn-critical').addEventListener('click', () => {
+        const critical = designer.criticalPath();
+        validateOutput.className = critical.length ? '' : 'hint';
+        validateOutput.innerHTML =
+          critical.length === 0
+            ? '没有关键路径（依赖成环或没有任务）'
+            : `关键路径：${critical.map((task) => task.state.title).join(' → ')}`;
+      });
       document.getElementById('in-daywidth').addEventListener('change', (evt) => {
         designer.setDayWidth(Number(evt.target.value) || 28);
         designer.fitViewport();
@@ -182,6 +202,12 @@
           panel.appendChild(row('开始', input(selected.state.start, (v) => applyAndRender(() => selected.applyPatch({ start: v })))));
           panel.appendChild(row('天数', input(selected.state.days, (v) => applyAndRender(() => selected.applyPatch({ days: Number(v) || 1 })), 'number')));
           panel.appendChild(row('进度', input(selected.state.progress, (v) => applyAndRender(() => selected.applyPatch({ progress: Number(v) || 0 })), 'number')));
+          panel.appendChild(
+            row(
+              '负责人',
+              input(selected.state.resource || '', (v) => applyAndRender(() => selected.applyPatch({ resource: v })))
+            )
+          );
           return;
         }
         panel.textContent = '依赖线（完成 → 开始）';

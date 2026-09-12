@@ -20,6 +20,8 @@ export type GanttTaskInput = {
   days?: number;
   row?: number;
   progress?: number;
+  /** 负责人 / 资源名（用于资源冲突检查；空表示不参与） */
+  resource?: string;
 };
 
 /**
@@ -76,6 +78,7 @@ export default class GanttDesigner extends FlowDesigner {
       start: props.start,
       days: props.days || 3,
       progress: props.progress || 0,
+      resource: props.resource || '',
       row: props.row === undefined ? this.nodes.length : props.row,
       dayWidth: this.dayWidth,
       originDate: this.originDate || props.start,
@@ -123,6 +126,183 @@ export default class GanttDesigner extends FlowDesigner {
     });
     this.syncChrome();
     this.__emitChange();
+  }
+
+  /** 改任务（属性面板 / 应用层用）：走 setState，几何与框架自动跟着更新 */
+  public updateTask(id: string, patch: any = {}): any {
+    const task = this.ice.findComponent(id);
+    if (!task || task.constructor.typeId !== GanttTask.typeId) {
+      return null;
+    }
+    this.__captureHistory();
+    task.applyPatch(patch);
+    this.syncChrome();
+    this.__emitChange();
+    return task;
+  }
+
+  /**
+   * **自动排程**：把每个任务推到「所有前置任务结束之后」（完成 → 开始，结束日不含当天）。
+   *
+   * 语义：任务占 `[start, start + days)`，因此后置任务最早在前置任务 `start + days` 那天开工。
+   * 只在**推后**时生效（不提前任何任务）—— 人力排期里"提前"通常意味着别处的约束被破坏。
+   * 依赖图必须先无环（有环时本方法不动，交给 `validateGantt()` 报错）。
+   */
+  public autoSchedule(): void {
+    if (this.validateGantt().some((issue) => issue.level === 'error' && issue.message.includes('成环'))) {
+      return;
+    }
+    const tasks = this.nodes;
+    if (!tasks.length) {
+      return;
+    }
+    this.__captureHistory();
+    const byId = new Map<string, any>();
+    tasks.forEach((task: any) => byId.set(task.state.id, task));
+    const predecessors = new Map<string, string[]>();
+    tasks.forEach((task: any) => predecessors.set(task.state.id, []));
+    this.edges.forEach((edge: any) => {
+      const links = edge.state.links || {};
+      const from = links.start && links.start.id;
+      const to = links.end && links.end.id;
+      if (from && to && predecessors.has(to)) {
+        predecessors.get(to)!.push(from);
+      }
+    });
+
+    // 拓扑排序（Kahn），再按拓扑序推日期 —— 一轮就能收敛到最早开工日
+    const indegree = new Map<string, number>();
+    const outgoing = new Map<string, string[]>();
+    tasks.forEach((task: any) => {
+      indegree.set(task.state.id, (predecessors.get(task.state.id) || []).length);
+      outgoing.set(task.state.id, []);
+    });
+    predecessors.forEach((list, id) => {
+      list.forEach((from) => outgoing.get(from)!.push(id));
+    });
+    const queue = tasks
+      .filter((task: any) => (indegree.get(task.state.id) || 0) === 0)
+      .map((task: any) => task.state.id);
+    const order: string[] = [];
+    while (queue.length) {
+      const id = queue.shift() as string;
+      order.push(id);
+      (outgoing.get(id) || []).forEach((next) => {
+        indegree.set(next, (indegree.get(next) || 0) - 1);
+        if ((indegree.get(next) || 0) === 0) {
+          queue.push(next);
+        }
+      });
+    }
+
+    order.forEach((id) => {
+      const task = byId.get(id);
+      const earliest = (predecessors.get(id) || []).reduce((current: string, fromId: string) => {
+        const from = byId.get(fromId);
+        const end = addDays(from.state.start, Math.max(1, Number(from.state.days) || 1));
+        return diffDays(current, end) > 0 ? end : current;
+      }, task.state.start);
+      if (diffDays(task.state.start, earliest) > 0) {
+        task.applyPatch({ start: earliest });
+      }
+    });
+
+    this.syncChrome();
+    this.__emitChange();
+  }
+
+  /**
+   * **关键路径**：依赖图上「时长最长」的那条链（浮时为 0 的任务）。
+   *
+   * 用最早/最晚开工时间算总浮时：`float = 最晚开工 - 最早开工`，浮时为 0 的任务即在关键路径上。
+   * 有环时返回空数组（无关键路径可言）。
+   */
+  public criticalPath(): any[] {
+    const tasks = this.nodes;
+    if (!tasks.length) {
+      return [];
+    }
+    const byId = new Map<string, any>();
+    tasks.forEach((task: any) => byId.set(task.state.id, task));
+    const predecessors = new Map<string, string[]>();
+    const successors = new Map<string, string[]>();
+    tasks.forEach((task: any) => {
+      predecessors.set(task.state.id, []);
+      successors.set(task.state.id, []);
+    });
+    this.edges.forEach((edge: any) => {
+      const links = edge.state.links || {};
+      const from = links.start && links.start.id;
+      const to = links.end && links.end.id;
+      if (from && to && predecessors.has(to) && predecessors.has(from)) {
+        predecessors.get(to)!.push(from);
+        successors.get(from)!.push(to);
+      }
+    });
+
+    const durationOf = (task: any): number => Math.max(1, Number(task.state.days) || 1);
+    const topo: string[] = [];
+    const indegree = new Map<string, number>();
+    tasks.forEach((task: any) => indegree.set(task.state.id, (predecessors.get(task.state.id) || []).length));
+    const queue = tasks
+      .filter((task: any) => (indegree.get(task.state.id) || 0) === 0)
+      .map((task: any) => task.state.id);
+    while (queue.length) {
+      const id = queue.shift() as string;
+      topo.push(id);
+      (successors.get(id) || []).forEach((next) => {
+        indegree.set(next, (indegree.get(next) || 0) - 1);
+        if ((indegree.get(next) || 0) === 0) {
+          queue.push(next);
+        }
+      });
+    }
+    if (topo.length !== tasks.length) {
+      return []; // 有环
+    }
+
+    // 最早开工（用任务自身日期作为下界，保证与画布上看到的一致）
+    const earliestStart = new Map<string, string>();
+    topo.forEach((id) => {
+      const task = byId.get(id);
+      const earliest = (predecessors.get(id) || []).reduce((current: string, fromId: string) => {
+        const from = byId.get(fromId);
+        const end = addDays(earliestStart.get(fromId) as string, durationOf(from));
+        return diffDays(current, end) > 0 ? end : current;
+      }, task.state.start);
+      earliestStart.set(id, earliest);
+    });
+
+    // 项目结束 = 所有任务的最早完工的最大值
+    let projectEnd = '';
+    tasks.forEach((task: any) => {
+      const end = addDays(earliestStart.get(task.state.id) as string, durationOf(task));
+      if (!projectEnd || diffDays(projectEnd, end) > 0) {
+        projectEnd = end;
+      }
+    });
+
+    // 最晚开工（逆拓扑）
+    const latestStart = new Map<string, string>();
+    [...topo].reverse().forEach((id) => {
+      const task = byId.get(id);
+      const nexts = successors.get(id) || [];
+      if (!nexts.length) {
+        latestStart.set(id, addDays(projectEnd, -durationOf(task)));
+        return;
+      }
+      const latestEnd = nexts.reduce((current: string | null, nextId: string) => {
+        const nextStart = latestStart.get(nextId) as string;
+        return !current || diffDays(nextStart, current) > 0 ? nextStart : current;
+      }, null);
+      latestStart.set(id, addDays(latestEnd as string, -durationOf(task)));
+    });
+
+    return tasks.filter((task: any) => {
+      const lay = latestStart.get(task.state.id) as string;
+      const early = earliestStart.get(task.state.id) as string;
+      return diffDays(early, lay) === 0;
+    });
   }
 
   /** 项目起点 = 最早任务的开始日；没有任务时留空 */
@@ -212,6 +392,38 @@ export default class GanttDesigner extends FlowDesigner {
   public validateGantt(): GanttIssue[] {
     const issues: GanttIssue[] = [];
     const tasks = this.nodes;
+
+    // 资源冲突：同一负责人 / 资源的任务时间重叠 → 提醒（warning，不阻断）
+    const byResource = new Map<string, any[]>();
+    tasks.forEach((task: any) => {
+      const resource = String(task.state.resource || '').trim();
+      if (!resource) {
+        return;
+      }
+      if (!byResource.has(resource)) {
+        byResource.set(resource, []);
+      }
+      byResource.get(resource)!.push(task);
+    });
+    byResource.forEach((list, resource) => {
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const a = list[i];
+          const b = list[j];
+          const aEnd = addDays(a.state.start, Math.max(1, Number(a.state.days) || 1));
+          const bEnd = addDays(b.state.start, Math.max(1, Number(b.state.days) || 1));
+          // 半开区间重叠判定：a.start < b.end 且 b.start < a.end（diffDays(from,to) = to - from）
+          const overlap = diffDays(a.state.start, bEnd) > 0 && diffDays(b.state.start, aEnd) > 0;
+          if (overlap) {
+            issues.push({
+              level: 'warning',
+              message: `资源冲突：「${resource}」同时被「${a.state.title}」与「${b.state.title}」占用`,
+              id: b.state.id,
+            });
+          }
+        }
+      }
+    });
 
     tasks.forEach((task: any) => {
       const progress = Number(task.state.progress);

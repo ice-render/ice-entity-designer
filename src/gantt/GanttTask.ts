@@ -45,6 +45,8 @@ export default class GanttTask extends ICEGroup {
         progress: 0,
         /** 行号（0 起） */
         row: 0,
+        /** 负责人 / 资源名（用于资源冲突检查；空表示不参与） */
+        resource: '',
         /** 每天多少像素（由设计器统一给定） */
         dayWidth: 28,
         /** 项目起点日期（由设计器统一给定；x = (start - origin) × dayWidth） */
@@ -74,6 +76,7 @@ export default class GanttTask extends ICEGroup {
     'days',
     'progress',
     'row',
+    'resource',
     'dayWidth',
     'originDate',
     'labelColumnWidth',

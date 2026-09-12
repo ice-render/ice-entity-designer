@@ -180,3 +180,74 @@ describe('甘特域包 · 校验与快照', () => {
     expect(svg).toContain('<path');
   });
 });
+
+describe('甘特域包 · 自动排程 / 关键路径 / 资源冲突', () => {
+  it('自动排程：后置任务被推到「前置任务结束」之后（完成→开始，结束日不含当天）', () => {
+    const { designer } = makeDesigner();
+    designer.setDayWidth(30);
+    const a = designer.createTask({ title: 'A', start: '2026-03-02', days: 4, row: 0 });
+    const b = designer.createTask({ title: 'B', start: '2026-03-03', days: 2, row: 1 }); // 故意排早了
+    designer.createDependency({ sourceId: a.state.id, targetId: b.state.id });
+
+    designer.autoSchedule();
+
+    // A 占 3-02 ~ 3-05（4 天，不含 3-06 起算）→ B 最早 3-06 开工
+    expect(a.state.start).toBe('2026-03-02');
+    expect(b.state.start).toBe('2026-03-06');
+  });
+
+  it('自动排程会级联：整条链依次顺延（且不改变原本就合规的排期）', () => {
+    const { designer } = makeDesigner();
+    designer.setDayWidth(30);
+    const a = designer.createTask({ title: 'A', start: '2026-03-02', days: 3, row: 0 });
+    const b = designer.createTask({ title: 'B', start: '2026-03-02', days: 2, row: 1 });
+    const c = designer.createTask({ title: 'C', start: '2026-03-02', days: 1, row: 2 });
+    designer.createDependency({ sourceId: a.state.id, targetId: b.state.id });
+    designer.createDependency({ sourceId: b.state.id, targetId: c.state.id });
+
+    designer.autoSchedule();
+    expect([a.state.start, b.state.start, c.state.start]).toEqual(['2026-03-02', '2026-03-05', '2026-03-07']);
+
+    // 再排一次应当幂等（已经合规）
+    designer.autoSchedule();
+    expect([a.state.start, b.state.start, c.state.start]).toEqual(['2026-03-02', '2026-03-05', '2026-03-07']);
+  });
+
+  it('关键路径：时长最长的那条链，浮时为 0', () => {
+    const { designer } = makeDesigner();
+    designer.setDayWidth(30);
+    // 短链：A(2) → C(1)；长链：A(2) → B(10) → C(1)
+    const a = designer.createTask({ title: 'A', start: '2026-03-02', days: 2, row: 0 });
+    const b = designer.createTask({ title: 'B', start: '2026-03-04', days: 10, row: 1 });
+    const c = designer.createTask({ title: 'C', start: '2026-03-14', days: 1, row: 2 });
+    const fast = designer.createTask({ title: '快速通道', start: '2026-03-04', days: 1, row: 3 });
+    designer.createDependency({ sourceId: a.state.id, targetId: b.state.id });
+    designer.createDependency({ sourceId: b.state.id, targetId: c.state.id });
+    designer.createDependency({ sourceId: a.state.id, targetId: fast.state.id });
+    designer.createDependency({ sourceId: fast.state.id, targetId: c.state.id });
+
+    const critical = designer.criticalPath();
+    expect(critical.map((task: any) => task.state.title)).toEqual(['A', 'B', 'C']);
+    // 快速通道不在关键路径上（有浮时）
+    expect(critical.map((task: any) => task.state.title)).not.toContain('快速通道');
+  });
+
+  it('资源冲突：同一负责人的任务时间重叠时报出来，不重叠时不报', () => {
+    const { designer } = makeDesigner();
+    designer.setDayWidth(30);
+    const a = designer.createTask({ title: 'A', start: '2026-03-02', days: 4, row: 0, resource: '张三' });
+    const b = designer.createTask({ title: 'B', start: '2026-03-10', days: 3, row: 1, resource: '张三' });
+    expect(designer.validateGantt().filter((issue: any) => issue.message.includes('资源')).length).toBe(0);
+
+    // 把 B 挪到与 A 重叠
+    designer.updateTask(b.state.id, { start: '2026-03-04' });
+    const conflicts = designer.validateGantt().filter((issue: any) => issue.message.includes('资源'));
+    expect(conflicts.length).toBe(1);
+    expect(conflicts[0].message).toContain('张三');
+    expect(conflicts[0].level).toBe('warning');
+
+    // 换个人就不冲突
+    designer.updateTask(b.state.id, { resource: '李四' });
+    expect(designer.validateGantt().filter((issue: any) => issue.message.includes('资源')).length).toBe(0);
+  });
+});

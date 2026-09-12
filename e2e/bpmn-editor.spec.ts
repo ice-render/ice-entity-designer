@@ -200,3 +200,43 @@ test('连线：切换为消息流后线型变化，条件/默认流标记生成'
   // 标记是派生装饰（工具层），不进入文档
   expect(info.docHasMarker).toBe(false);
 });
+
+test('令牌仿真：从开始事件出发沿顺序流推进，停止后令牌清空且不污染文档', async ({ page }) => {
+  await page.click('#btn-simulate');
+  await page.waitForTimeout(500);
+
+  const running = await page.evaluate(() => {
+    const simulator = (window as any).__simulator();
+    const ice = (window as any).__ice;
+    return {
+      tokens: simulator.getTokens().length,
+      dots: ice.toolNodes.filter((node: any) => node.constructor.typeId === 'SimToken').length,
+      visited: simulator.getVisitedNodeIds().length,
+      running: simulator.isRunning(),
+      // 令牌是工具层组件：快照里不该出现
+      serialized: (window as any).__designer.serialize().includes('SimToken'),
+    };
+  });
+  expect(running.tokens).toBeGreaterThan(0);
+  expect(running.dots).toBe(running.tokens);
+  expect(running.visited).toBeGreaterThan(0);
+  expect(running.serialized).toBe(false);
+
+  // 跑一会儿：令牌会推进（访问到的节点变多）
+  await page.waitForTimeout(4000);
+  const progressed = await page.evaluate(() => (window as any).__simulator().getVisitedNodeIds().length);
+  expect(progressed).toBeGreaterThan(running.visited);
+
+  await page.click('#btn-simulate-stop');
+  const stopped = await page.evaluate(() => {
+    const simulator = (window as any).__simulator();
+    const ice = (window as any).__ice;
+    return {
+      tokens: simulator.getTokens().length,
+      dots: ice.toolNodes.filter((node: any) => node.constructor.typeId === 'SimToken').length,
+    };
+  });
+  expect(stopped.tokens).toBe(0);
+  expect(stopped.dots).toBe(0);
+  expect((page as any).__errors).toEqual([]);
+});

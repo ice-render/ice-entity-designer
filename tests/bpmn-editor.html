@@ -166,6 +166,8 @@
           <span class="divider"></span>
           <button id="btn-fit">适应视图</button>
           <button id="btn-validate">校验</button>
+          <button id="btn-simulate">仿真</button>
+          <button id="btn-simulate-stop">停止</button>
           <button id="btn-export-svg">导出 SVG</button>
           <button id="btn-export">导出 BPMN XML</button>
           <button id="btn-import">导入 XML</button>
@@ -466,6 +468,28 @@
         validateOutput.className = 'hint';
         validateOutput.textContent = '✅ 已导出 BPMN 2.0 XML（见右侧文本框）';
       });
+
+      // 令牌仿真：把「流程怎么走」演示出来（令牌挂在工具层，不污染文档）
+      let simulator = null;
+      document.getElementById('btn-simulate').addEventListener('click', () => {
+        if (!simulator) {
+          simulator = new IED.BpmnSimulator(designer, { nodeDuration: 500, edgeDuration: 700 });
+        }
+        simulator.stop();
+        simulator.reset();
+        simulator.start();
+        validateOutput.className = 'hint';
+        validateOutput.textContent = '▶ 仿真中：令牌从「开始事件」出发，沿顺序流前进（橙色圆点）';
+      });
+      document.getElementById('btn-simulate-stop').addEventListener('click', () => {
+        if (simulator) {
+          simulator.stop();
+          simulator.reset();
+        }
+        validateOutput.className = 'hint';
+        validateOutput.textContent = '⏹ 已停止并清除令牌';
+      });
+      window.__simulator = () => simulator;
 
       // SVG 矢量导出：与画布同一口径（几何/样式/透明度/阴影一致），放大不糊，可进设计工具
       document.getElementById('btn-export-svg').addEventListener('click', () => {

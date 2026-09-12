@@ -305,9 +305,32 @@ const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
 +| 时间轴 | `dayWidth` / `originDate` / `labelColumnWidth` 统一换算；框架（左列任务名 + 日期刻度 + 行线）由派生的 `GanttRuler` 渲染，模型一变就重建 |
 +| 按天吸附 | `GanttTask.setPosition()` 把 x 吸附到整天的格子并反推 `start`（排期不会出现「13:47 开工」） |
 +
-+可运行示例：`tests/gantt-editor.html`（移动端 2.0 发布排期，含依赖与进度）。
++可运行示例：`tests/gantt-editor.html`（移动端 2.0 发布排期，含依赖、进度、**自动排程**与**关键路径**按钮）。
+
+#### 5.6 BPMN 令牌仿真（`BpmnSimulator`）
 +
-+#### 5.6 UML 类图（域包示例）
++「流程怎么走」可以直接演示出来：令牌从开始事件出发，沿顺序流前进、在任务上停留、在排他网关选一条分支、
++在并行网关一分为多，到达结束事件后消失。
++
++```js
++import { BpmnSimulator } from 'ice-entity-designer';
++
++const simulator = new BpmnSimulator(bpmn, { nodeDuration: 500, edgeDuration: 700 });
++simulator.start();      // 每个开始事件一个令牌；浏览器里由引擎帧事件驱动
++simulator.step(50);     // 也可以手动推进（测试/单步调试用，确定性）
++simulator.stop();       // 清空令牌
++```
++
++| 能力 | 说明 |
++|---|---|
++| 令牌 | 工具层组件（`ice.toolNodes`）：**不进文档、不影响快照与 BPMN XML 导出**，停止即干净退场 |
++| 路由 | 令牌位置在连线的**实际折点**上按弧长插值，所以始终贴在画出来的线上（含正交绕线） |
++| 语义 | 排他网关优先走带 `condition` 的流、其次走非默认流；并行/包容网关分裂成多条令牌；结束事件上令牌消亡 |
++| 推进 | `step(dtMs)` 显式推进（测试可断言）；`start()` 后自动挂帧循环 |
++
++可运行示例：`tests/bpmn-editor.html` 的「仿真 / 停止」按钮（案例是信用卡申请审批）。
++
++#### 5.7 UML 类图（域包示例）
 
 UML 是**域包（domain pack）**的第一个完整示例：形状 + 应用层 + 语义校验，其余（选择/增删改/连线/
 撤销重做/快照/适应视图/矢量导出）全部沿用引擎与 `FlowDesigner`。
@@ -524,6 +547,7 @@ src/
 +│   ├── GanttDependency.ts         # 依赖线（完成 → 开始）
 +│   └── GanttDesigner.ts           # 时间轴换算 + syncChrome + validateGantt
 ├── bpmn/                          # BPMN 2.0（FlowDesigner 之上的业务记法）
+│   ├── BpmnSimulator.ts           # 令牌仿真：沿顺序流推进、网关分叉、结束消亡（令牌在工具层）
 │   ├── bpmn_shapes.ts             # 形状：事件圆 / 网关菱形 / 任务角标 / 子流程标记 / 数据对象 / 注释 / 池泳道
 │   ├── BpmnDesigner.ts            # 应用层：容器真嵌套（池→泳道→节点）、条件与默认流标记、语义校验
 │   ├── bpmn_validate.ts           # BPMN 语义校验（开始事件 / 跨池顺序流 / 网关分支 / 可达性）

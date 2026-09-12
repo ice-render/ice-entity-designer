@@ -26,6 +26,8 @@ export { FlowDiamond, FlowParallelogram } from './flow/flow_shapes';
 export { default as BpmnDesigner } from './bpmn/BpmnDesigner';
 export { validateBpmn } from './bpmn/bpmn_validate';
 export type { BpmnIssue } from './bpmn/bpmn_validate';
+export { default as BpmnSimulator } from './bpmn/BpmnSimulator';
+export type { SimToken, BpmnSimulatorOptions } from './bpmn/BpmnSimulator';
 export { toBpmnXml, fromBpmnXml } from './bpmn/bpmn_xml';
 export type { BpmnImportResult } from './bpmn/bpmn_xml';
 
