@@ -4,20 +4,34 @@
 
 <h1 align="center">IED · ice entity designer</h1>
 
-<p align="center">基于 ice-render 的可视化 ER 建模工具：拖拽建图，一键导出 TypeORM Schema。</p>
+<p align="center">基于 ice-render 的可视化建模工具集：一套引擎承载 8 个域包 —— ER、流程图、BPMN 2.0、UML 类图、状态机、甘特、电力一次、电力二次。</p>
 
 <p align="center">
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-047857.svg" /></a>
   <img alt="engine bundled" src="https://img.shields.io/badge/engine-bundled-047857.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/jest-168%20passed-047857.svg" />
+  <img alt="domain packs" src="https://img.shields.io/badge/domain%20packs-8-047857.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/jest-295%20passed-047857.svg" />
   <img alt="typescript" src="https://img.shields.io/badge/TypeScript-4.6-3178c6.svg" />
 </p>
 
 ## 1. 项目定位
 
-IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render/ice-render) 构建的**可视化 Entity-Relation 建模工具**。它以「节点 = 实体，连线 = 关系」组织数据模型，把画布上的设计结果序列化为符合 TypeORM `EntitySchema` 规范的 Schema，从而将「结构设计」与「实体类 / CRUD 代码生成」直接衔接。
+IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render/ice-render) 构建的**可视化建模工具集**：同一套引擎、同一套应用层机制（选择 / 增删改 / 连线 / 撤销重做 / 快照 / 语义校验 / 矢量导出）之上承载多个「域包」，每个域包 = **一个领域的记法 + 应用层 + 语义校验**。
 
-它不重复实现底层图元，而是在 ice-render 的通用图编辑内核之上，收敛出 ER 建模最常用的交互闭环：选择、创建、更新、删除、关系连接、校验与 Schema 输出。
+现已落地 8 个域包：
+
+| 域包 | 图种 | 标准依据 / 互操作 |
+|---|---|---|
+| **ER**（默认） | 实体-关系模型 | 导出 TypeORM `EntitySchema` |
+| 流程图 | 起止 / 处理 / 判定 / 输入输出 | — |
+| BPMN 2.0 | 池 / 泳道 / 事件 / 网关 / 任务 | BPMN 2.0 XML 导入 + 导出（含 BPMNDI 布局） |
+| UML 类图 | 三段式类框 + 六种关系 | PlantUML / Mermaid 类图文本互操作 |
+| 状态机 | 伪状态 / 状态 / 复合状态容器 | PlantUML 状态图文本互操作 |
+| 甘特图 | 任务条 / 依赖线 / 关键路径 | Mermaid gantt 文本互操作 |
+| 电力一次系统图 | 单线图（23 种设备符号） | JB/T 5872-1991、GB/T 4728；电压一致 / 母线 T 接 / 五防校验 |
+| 电力二次回路 | 保护电流回路 + 端子排 | GB/T 4728.7、C37.2；回路编号 / 三相成组 / 端子号 / 接地校验 |
+
+默认域包 ER 以「节点 = 实体，连线 = 关系」组织数据模型，把画布上的设计结果序列化为符合 TypeORM `EntitySchema` 规范的 Schema，从而将「结构设计」与「实体类 / CRUD 代码生成」直接衔接；其它域包复用同一套交互闭环（选择、创建、更新、删除、关系连接、校验与导出），只在**记法**与**语义校验**上做区分。
 
 > **引擎内核已打包进本包**：安装 `ice-entity-designer` 即可直接使用，无需再安装 `ice-render`——内核在构建时被打进产物并从本包一并导出（含完整类型声明），保证 `ICE` 实例与 `Entity` / `Relation` 组件来自同一份内核。
 
@@ -26,6 +40,8 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 - <https://github.com/craft-codeless-designer/craft-codeless-designer-server-koa>
 
 ## 2. 核心能力
+
+本节以默认域包 **ER** 为例展开；其余域包的能力见第 5 节「使用方式」与 `examples/` 下各自的示例页。
 
 ### 可视化建模
 
@@ -108,6 +124,31 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 跨池的消息流，右侧面板按图元类型给出网关类型、事件种类、任务类型等属性，并内置语义校验与 BPMN 2.0 XML 导出：
 
 <img src="./examples/assets/bpmn-editor.png" alt="BPMN 2.0 编辑器示例（信用卡申请审批）" />
+
+同一套引擎继续承载 **UML 类图**（`examples/uml-editor.html`）—— 三段式类框、六种关系、继承成环校验，
+以及 PlantUML / Mermaid 类图文本互操作：
+
+<img src="./examples/assets/uml-editor.png" alt="UML 类图编辑器示例" />
+
+**状态机**（`examples/statechart-editor.html`）—— 伪状态、普通状态、**复合状态容器**（拖动父容器时子状态跟随），
+转移标签写作 `事件 [守卫] / 动作`：
+
+<img src="./examples/assets/statechart-editor.png" alt="状态机编辑器示例" />
+
+**甘特图**（`examples/gantt-editor.html`）—— 时间轴与按天吸附、依赖线、自动排程与关键路径、
+资源冲突校验、Mermaid gantt 文本互操作：
+
+<img src="./examples/assets/gantt-editor.png" alt="甘特编辑器示例" />
+
+**电力一次系统图**（`examples/power-editor.html`）—— 110kV 双母线 + 10kV 单母线分段、69 台设备；
+开关分合、带电分析与电压色标、五防相关校验、SVG / JSON 导出：
+
+<img src="./examples/assets/power-editor.png" alt="电力一次系统图（单线图）编辑器示例" />
+
+**电力二次回路**（`examples/secondary-editor.html`）—— 保护电流回路：CT 二次绕组 → 三相电流回路 →
+端子排 → 保护装置，N 侧接地；端子排是真容器 —— 拖动跟随、快照往返不丢：
+
+<img src="./examples/assets/secondary-editor.png" alt="电力二次回路编辑器示例" />
 
 ## 4. 快速开始
 
@@ -635,7 +676,8 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 ### 7.1 一个「域包（domain pack）」由什么组成
 
 域包 = **一个领域的记法 + 应用层 + 语义校验**，跑在同一套引擎与同一套应用层机制上。现已落地
-6 类文档：ER、流程图、UML 类图、状态机、甘特、BPMN 2.0 —— 边际成本主要在「记法本身」，不在编辑器：
+8 个域包：ER、流程图、BPMN 2.0、UML 类图、状态机、甘特、电力一次系统图、电力二次回路 —— 边际成本
+主要在「记法本身」，不在编辑器：
 
 | 组成 | 复用什么 | 以 UML 为例 |
 |---|---|---|
@@ -675,6 +717,18 @@ src/
 │   ├── BpmnDesigner.ts            # 应用层：容器真嵌套（池→泳道→节点）、条件与默认流标记、语义校验
 │   ├── bpmn_validate.ts           # BPMN 语义校验（开始事件 / 跨池顺序流 / 网关分支 / 可达性）
 │   └── bpmn_xml.ts                # BPMN 2.0 XML 导入导出（含 BPMNDI 布局）
+├── statechart/                    # 状态机（domain pack：伪状态 / 状态 / 复合状态容器）
+│   ├── StateNode.ts               # 状态节点：伪状态 / 普通状态 / 复合状态（容器，子状态随父平移）
+│   ├── StateTransition.ts         # 转移：标签写作 `事件 [守卫] / 动作`
+│   ├── statechart_text.ts         # PlantUML 状态图文本互操作（导入 + 导出）
+│   └── StatechartDesigner.ts      # 应用层：建图元 + 复合状态自动尺寸 + 语义校验
+├── power/                         # 电力一次系统图（单线图：符号库 + 拓扑 + 带电 + 校验）
+│   ├── power_shapes.ts            # 23 种一次设备符号（JB/T 5872-1991、GB/T 4728.1/3/4/6）
+│   ├── power_voltage.ts           # 电压等级色标（500kV / 220kV / 110kV / 35kV / 10kV / 6kV）
+│   └── PowerDesigner.ts           # 应用层：开关分合 / 拓扑求解 / 带电着色 / 母线 T 接 / 语义校验
+├── secondary/                     # 电力二次回路（保护电流回路 + 端子排）
+│   ├── secondary_shapes.ts        # 10 种二次元件符号（GB/T 4728.7，文字符号用 C37.2 功能编号）
+│   └── SecondaryDesigner.ts       # 应用层：回路编号 / 端子排容器 / 二次语义校验
 ├── er-component/
 │   ├── Entity.ts                  # 实体：表头 + 字段列表 + 约束标记 + TypeORM 序列化
 │   └── Relation.ts                # 关系：基数 / 箭头 / 标签语义 / 连接槽位
@@ -699,7 +753,7 @@ src/
 | `npm run build` | 清理并完整构建（类型声明 + JS 产物） |
 | `npm run types:check` | 仅做 TypeScript 类型检查 |
 | `npm test` | 运行单元测试（Jest） |
-| `npm run test:e2e` | 浏览器端到端回归（Playwright，覆盖 `examples/entity-editor.html` 与 `examples/flowchart-editor.html`） |
+| `npm run test:e2e` | 浏览器端到端回归（Playwright，先 `npm run build`；覆盖 9 个示例页：ER / 流程图 / BPMN / UML / 状态机 / 甘特 / 电力一次 / 电力符号表 / 电力二次，各自做交互断言与 console 零报错检查） |
 | `npm run pretty` | Prettier 格式化源码 |
 
 ## 9. 环境要求与依赖
