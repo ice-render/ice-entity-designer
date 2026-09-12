@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { expectCanvasInteractions } from './canvas-helpers';
 
 /**
- * tests/gantt-editor.html 端到端回归：甘特域包（移动端 2.0 发布排期）。
+ * examples/gantt-editor.html 端到端回归：甘特域包（移动端 2.0 发布排期）。
  *
  * 覆盖域包四件事：时间轴与任务条渲染、**拖拽按天吸附**（排期语义）、依赖跟随、
  * 以及语义校验与矢量导出。与 uml/statechart spec 共用「零控制台报错」约定。
@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     }
   });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
-  await page.goto('/tests/gantt-editor.html');
+  await page.goto('/examples/gantt-editor.html');
   await page.waitForFunction(() => !!(window as any).__designer && !!(window as any).__ice);
   await page.waitForTimeout(400);
   (page as any).__errors = errors;

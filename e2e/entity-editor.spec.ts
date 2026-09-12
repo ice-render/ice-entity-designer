@@ -1,7 +1,7 @@
 /**
  * ice-entity-designer 端到端回归（真实页面 + 打好的内核产物）。
  *
- * 把 `tests/entity-editor.html` 这个完整编辑器页面当作「用户路径」跑：工具栏按钮、画布交互
+ * 把 `examples/entity-editor.html` 这个完整编辑器页面当作「用户路径」跑：工具栏按钮、画布交互
  * （命中 / 拖拽 / 连线 / 滚轮缩放 / 平移）、React+antd 实体面板、保存/加载、schema 与校验，
  * 并统一断言 **整页零 console error / 零 pageerror**。
  *
@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
   page.on('console', (msg) => {
     if (msg.type() === 'error') pageErrors.push('console.error: ' + msg.text().slice(0, 240));
   });
-  await page.goto('/tests/entity-editor.html');
+  await page.goto('/examples/entity-editor.html');
   await page.waitForFunction(() => Boolean((window as any).__designer && (window as any).__ice), null, {
     timeout: 30_000,
   });

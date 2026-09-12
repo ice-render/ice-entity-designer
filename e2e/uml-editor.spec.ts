@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { expectCanvasInteractions } from './canvas-helpers';
 
 /**
- * tests/uml-editor.html 端到端回归：UML 类图域包（电商支付类模型）。
+ * examples/uml-editor.html 端到端回归：UML 类图域包（电商支付类模型）。
  *
  * 覆盖域包的四件事：记法渲染（三段式类框 + 六种关系）、语义校验、属性面板改模型、
  * 以及矢量导出。与 bpmn-editor.spec.ts 共用一套「零控制台报错」约定。
@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     }
   });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
-  await page.goto('/tests/uml-editor.html');
+  await page.goto('/examples/uml-editor.html');
   await page.waitForFunction(() => !!(window as any).__designer && !!(window as any).__ice);
   await page.waitForTimeout(400);
   (page as any).__errors = errors;

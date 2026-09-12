@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="120" src="./tests/assets/ice-entity-designer.png" alt="ice entity designer" />
+  <img width="120" src="./examples/assets/ice-entity-designer.png" alt="ice entity designer" />
 </p>
 
 <h1 align="center">IED · ice entity designer</h1>
@@ -54,7 +54,7 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 ### 编辑器内核能力（继承自 ice-render）
 
 - 画布滚轮缩放、空白处拖拽平移。
-- 每个域包示例页统一接入上面这套视口交互（`tests/canvas-interactions.js`）：canvas 铺满可视区，
+- 每个域包示例页统一接入上面这套视口交互（`examples/canvas-interactions.js`）：canvas 铺满可视区，
   滚轮以光标为锚点缩放，空白处左键 / 任意位置中键拖拽平移，工具栏带「适应视图 / 复位视图」。
 - 拖拽对齐辅助线与磁吸效果。
 - Undo / Redo（基于项目快照，最多 100 步）。
@@ -79,31 +79,31 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 完整的 ER 模型（电商交易 + 用户权限）：
 
-<img src="./tests/assets/overview.png" alt="ER 模型总览" />
+<img src="./examples/assets/overview.png" alt="ER 模型总览" />
 
 实体字段与约束标记：
 
-<img src="./tests/assets/fields.png" alt="实体字段与约束" />
+<img src="./examples/assets/fields.png" alt="实体字段与约束" />
 
 关系语义：自引用、多对多、一对一：
 
-<img src="./tests/assets/relations.png" alt="关系语义" />
+<img src="./examples/assets/relations.png" alt="关系语义" />
 
 交互式编辑器（右侧面板可直接切换到「TypeORM Schema」查看导出结果）：
 
-<img src="./tests/assets/editor.png" alt="交互式编辑器与 TypeORM Schema" />
+<img src="./examples/assets/editor.png" alt="交互式编辑器与 TypeORM Schema" />
 
-同一套内核也能承载**流程图**（`tests/flowchart-editor.html`）：四类节点（开始/结束、处理、判定、输入/输出，
+同一套内核也能承载**流程图**（`examples/flowchart-editor.html`）：四类节点（开始/结束、处理、判定、输入/输出，
 其中判定菱形与输入输出平行四边形是自定义 `ICEPath` 形状）、正交/贝塞尔连线 + 分支标签（是/否）、
 拖拽 / 连线 / 撤销重做 / 快照存取：
 
-<img src="./tests/assets/flowchart-editor.png" alt="流程图编辑器示例" />
+<img src="./examples/assets/flowchart-editor.png" alt="流程图编辑器示例" />
 
-再加一层业务记法就是 **BPMN 2.0**（`tests/bpmn-editor.html`）：池 / 泳道真嵌套（拖动银行池，内部泳道、
+再加一层业务记法就是 **BPMN 2.0**（`examples/bpmn-editor.html`）：池 / 泳道真嵌套（拖动银行池，内部泳道、
 任务和连线一起平移）、事件 / 网关 / 任务角标 / 数据对象 / 注释、顺序流 + 条件与默认流标记、
 跨池的消息流，右侧面板按图元类型给出网关类型、事件种类、任务类型等属性，并内置语义校验与 BPMN 2.0 XML 导出：
 
-<img src="./tests/assets/bpmn-editor.png" alt="BPMN 2.0 编辑器示例（信用卡申请审批）" />
+<img src="./examples/assets/bpmn-editor.png" alt="BPMN 2.0 编辑器示例（信用卡申请审批）" />
 
 ## 4. 快速开始
 
@@ -112,17 +112,20 @@ npm install
 npm run build
 ```
 
-可运行的示例（`tests/` 下的页面会加载同级 `dist` 与 `node_modules`，建议通过静态服务器打开）：
+可运行的示例（`examples/` 下的页面加载上一级 `dist` 与本仓 `node_modules`，建议通过静态服务器打开）：
 
 | 示例 | 说明 |
 |---|---|
-| `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
-| `tests/flowchart-editor.html` | 流程图编辑器：四类节点形状、拖拽、连线（含分支标签）、撤销重做、localStorage 存取与 JSON 导出；纯 DOM 面板，只依赖 `dist` 产物 |
-| `tests/bpmn-editor.html` | BPMN 2.0 编辑器：信用卡申请审批案例（两个池 / 三条泳道）、八类图元、条件与默认流标记、语义校验、BPMN 2.0 XML 导入导出 |
+| `examples/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
+| `examples/flowchart-editor.html` | 流程图编辑器：四类节点形状、拖拽、连线（含分支标签）、撤销重做、localStorage 存取与 JSON 导出；纯 DOM 面板，只依赖 `dist` 产物 |
+| `examples/bpmn-editor.html` | BPMN 2.0 编辑器：信用卡申请审批案例（两个池 / 三条泳道）、八类图元、条件与默认流标记、语义校验、BPMN 2.0 XML 导入导出 |
+| `examples/uml-editor.html` | UML 类图编辑器：三段式类框、六种关系、语义校验、矢量导出、PlantUML / Mermaid 文本互操作 |
+| `examples/statechart-editor.html` | 状态机编辑器：伪状态 / 普通状态 / 复合状态容器、转移标签 `事件 [守卫] / 动作` |
+| `examples/gantt-editor.html` | 甘特编辑器：时间轴与按天吸附、依赖线、自动排程、关键路径、资源冲突校验、矢量导出 |
 | [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
 
 ```bash
-python3 -m http.server 8899   # 然后访问 http://localhost:8899/tests/entity-editor.html
+python3 -m http.server 8899   # 然后访问 http://localhost:8899/examples/entity-editor.html
 ```
 
 ## 5. 使用方式
@@ -213,7 +216,7 @@ flow.undo(); // 100 步历史
 自定义形状（判定菱形 / 输入输出平行四边形）在 `src/flow/flow_shapes.ts`，走的是引擎的 `ICEPath` 子类机制。
 流程图节点是**复合组件**（形状 + 标题由 kind/标题/配色派生）：它们实现了引擎的 `hasDerivedChildren()`，
 内部子组件不写进文档、载入时由构造函数按 state 重建——避免重复挂载，也让同一份数据的两次序列化结果保持一致。
-可运行的完整示例见 `tests/flowchart-editor.html`；React 用法见 [6.6](#66-流程图的-react-绑定)；
+可运行的完整示例见 `examples/flowchart-editor.html`；React 用法见 [6.6](#66-流程图的-react-绑定)；
 AI Agent 生成流程图的 JSON DSL 见 `ice-entity-designer-dsl`。
 
 #### 5.3 BPMN 2.0（`BpmnDesigner`）
@@ -272,7 +275,7 @@ const svg = IED.exportSvg(ice, { scale: 2 });
 const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
 ```
 
-`tests/bpmn-editor.html` 与 `tests/flowchart-editor.html` 上都有「导出 SVG」按钮，点一下即可下载
+`examples/bpmn-editor.html` 与 `examples/flowchart-editor.html` 上都有「导出 SVG」按钮，点一下即可下载
 （BPMN 案例导出的池/泳道/事件/网关/连线/标签都是矢量）。服务端出图见引擎的 `ICE.headless()`。
 
 限制（与引擎一致）：阴影用 `feDropShadow` 近似（模糊观感不会与画布逐像素相同）；SVG 与 canvas 的
@@ -307,7 +310,7 @@ const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
 +| 时间轴 | `dayWidth` / `originDate` / `labelColumnWidth` 统一换算；框架（左列任务名 + 日期刻度 + 行线）由派生的 `GanttRuler` 渲染，模型一变就重建 |
 +| 按天吸附 | `GanttTask.setPosition()` 把 x 吸附到整天的格子并反推 `start`（排期不会出现「13:47 开工」） |
 +
-+可运行示例：`tests/gantt-editor.html`（移动端 2.0 发布排期，含依赖、进度、**自动排程**与**关键路径**按钮）。
++可运行示例：`examples/gantt-editor.html`（移动端 2.0 发布排期，含依赖、进度、**自动排程**与**关键路径**按钮）。
 
 #### 5.6 BPMN 令牌仿真（`BpmnSimulator`）
 +
@@ -330,7 +333,7 @@ const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
 +| 语义 | 排他网关优先走带 `condition` 的流、其次走非默认流；并行/包容网关分裂成多条令牌；结束事件上令牌消亡 |
 +| 推进 | `step(dtMs)` 显式推进（测试可断言）；`start()` 后自动挂帧循环 |
 +
-+可运行示例：`tests/bpmn-editor.html` 的「仿真 / 停止」按钮（案例是信用卡申请审批）。
++可运行示例：`examples/bpmn-editor.html` 的「仿真 / 停止」按钮（案例是信用卡申请审批）。
 +
 +#### 5.7 UML 类图（域包示例）
 
@@ -367,7 +370,7 @@ const svg = uml.toSvg({ background: '#ffffff', padding: 16 });
 可见性/静态/泛型都由文本表达 —— 与 PlantUML/Mermaid 的通行写法一致，AI 生成不必学另一套结构化语法；
 接口与枚举带构造型，抽象类标 «abstract»；**框高随成员自动增长**，成员不会被画到框外。
 
-可运行示例：`tests/uml-editor.html`（电商支付的类模型：继承 / 实现 / 组合 / 关联 / 依赖）。
+可运行示例：`examples/uml-editor.html`（电商支付的类模型：继承 / 实现 / 组合 / 关联 / 依赖）。
 
 ## 6. 在 React 中使用
 
@@ -524,7 +527,7 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 | 语义校验 | 结构校验之外的部分自写，规则直白 | `validateUml()`：重名类 / 悬空关系 / 继承成环 |
 | 文档格式 | 引擎序列化（typeId 注册表 + `hasDerivedChildren`），零登记 | 类与关系统统自动往返 |
 | 互操作 | 有标准格式的域就做 | BPMN 2.0 XML（导入 + 导出，含 BPMNDI 布局）；UML 类图的 PlantUML / Mermaid 文本互操作 |
-| 交付物 | 示例页 + e2e + README + （可选）JSON DSL 与技能 | `tests/uml-editor.html` + `e2e/uml-editor.spec.ts` |
+| 交付物 | 示例页 + e2e + README + （可选）JSON DSL 与技能 | `examples/uml-editor.html` + `e2e/uml-editor.spec.ts` |
 
 新开一个域包时，按这张表从上往下填即可；**不要**在域包里另造序列化、另造选择/历史、另造导出。
 
@@ -578,7 +581,7 @@ src/
 | `npm run build` | 清理并完整构建（类型声明 + JS 产物） |
 | `npm run types:check` | 仅做 TypeScript 类型检查 |
 | `npm test` | 运行单元测试（Jest） |
-| `npm run test:e2e` | 浏览器端到端回归（Playwright，覆盖 `tests/entity-editor.html` 与 `tests/flowchart-editor.html`） |
+| `npm run test:e2e` | 浏览器端到端回归（Playwright，覆盖 `examples/entity-editor.html` 与 `examples/flowchart-editor.html`） |
 | `npm run pretty` | Prettier 格式化源码 |
 
 ## 9. 环境要求与依赖

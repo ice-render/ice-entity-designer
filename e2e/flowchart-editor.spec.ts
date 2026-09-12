@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * tests/flowchart-editor.html 端到端回归。
+ * examples/flowchart-editor.html 端到端回归。
  *
  * 覆盖流程图示例的「真·用户路径」：加载、四类节点、拖拽、连线、撤销/重做、
  * 属性面板、快照存取、视图操作，以及 console/pageerror 零报错。
@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     }
   });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
-  await page.goto('/tests/flowchart-editor.html');
+  await page.goto('/examples/flowchart-editor.html');
   await page.waitForFunction(() => !!(window as any).__designer && !!(window as any).__ice);
   await page.waitForTimeout(400);
   (page as any).__errors = errors;

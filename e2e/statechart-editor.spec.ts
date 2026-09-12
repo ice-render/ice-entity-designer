@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { expectCanvasInteractions } from './canvas-helpers';
 
 /**
- * tests/statechart-editor.html 端到端回归：状态机域包（订单状态机，含复合状态）。
+ * examples/statechart-editor.html 端到端回归：状态机域包（订单状态机，含复合状态）。
  *
  * 覆盖域包四件事：记法渲染（伪状态/状态/复合状态/转移标签）、复合状态的容器行为、
  * 语义校验、以及矢量导出。与 uml/bpmn 两个 spec 共用「零控制台报错」约定。
@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     }
   });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
-  await page.goto('/tests/statechart-editor.html');
+  await page.goto('/examples/statechart-editor.html');
   await page.waitForFunction(() => !!(window as any).__designer && !!(window as any).__ice);
   await page.waitForTimeout(400);
   (page as any).__errors = errors;

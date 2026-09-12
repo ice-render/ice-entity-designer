@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 /**
  * ice-entity-designer 端到端回归配置。
  *
- * 覆盖 tests/entity-editor.html 这个完整编辑器页面（它是应用层唯一的「真·用户路径」）：
+ * 覆盖 examples/entity-editor.html 这个完整编辑器页面（它是应用层唯一的「真·用户路径」）：
  * 工具栏 15 个按钮、画布交互（命中/拖拽/连线/滚轮缩放/平移）、React+antd 实体面板、
  * 以及 console/pageerror 零报错。
  *

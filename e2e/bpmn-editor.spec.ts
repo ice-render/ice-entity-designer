@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * tests/bpmn-editor.html 端到端回归：BPMN 案例（信用卡申请审批）。
+ * examples/bpmn-editor.html 端到端回归：BPMN 案例（信用卡申请审批）。
  *
  * 覆盖：加载与渲染、BPMN 语义校验、XML 导出→导入 round-trip、连线类型切换、
  * 以及 canvas 上的真实交互（连线模式、滚轮缩放）。
@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
     }
   });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
-  await page.goto('/tests/bpmn-editor.html');
+  await page.goto('/examples/bpmn-editor.html');
   await page.waitForFunction(() => !!(window as any).__designer && !!(window as any).__ice);
   await page.waitForTimeout(400);
   (page as any).__errors = errors;
