@@ -202,7 +202,7 @@ export default class FlowDesigner {
     };
   }
 
-  private __emitChange(): void {
+  protected __emitChange(): void {
     if (!this.__listeners.length) {
       return;
     }
@@ -211,7 +211,7 @@ export default class FlowDesigner {
   }
 
   /** 订阅节点的拖拽事件：拖动是画布侧的行为，designer 需要感知才能广播与记历史 */
-  private __attachNodeListeners(node: any): void {
+  protected __attachNodeListeners(node: any): void {
     if (!node || typeof node.on !== 'function') {
       return;
     }
@@ -263,7 +263,7 @@ export default class FlowDesigner {
   }
 
   /** 没有给坐标时，按已有节点包围盒的下方网格错开摆放，避免新建节点互相压住 */
-  private __defaultPlacement(width: number, height: number): { left: number; top: number } {
+  protected __defaultPlacement(width: number, height: number): { left: number; top: number } {
     const nodes = this.nodes;
     if (!nodes.length) {
       return { left: 120, top: 120 };
@@ -597,7 +597,7 @@ export default class FlowDesigner {
     this.__redoStack.length = 0;
   }
 
-  private __captureHistory(): void {
+  protected __captureHistory(): void {
     if (!this.__historyEnabled) {
       return;
     }

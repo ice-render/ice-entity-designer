@@ -277,6 +277,43 @@ const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
 字形栅格化是两套实现，文字位置**对齐口径一致、逐像素允许微差**；导出的是**静态瞬间**（蚂蚁线动画
 只保留当前相位）。
 
+#### 5.5 UML 类图（域包示例）
+
+UML 是**域包（domain pack）**的第一个完整示例：形状 + 应用层 + 语义校验，其余（选择/增删改/连线/
+撤销重做/快照/适应视图/矢量导出）全部沿用引擎与 `FlowDesigner`。
+
+```js
+import { ICE, UmlDesigner } from 'ice-entity-designer';
+
+const ice = new ICE().init('canvas-1');
+const uml = new UmlDesigner(ice);
+
+const entity = uml.createClass({ kind: 'class', className: 'Entity', abstract: true, methods: ['+ save(): void'] });
+const user = uml.createClass({ className: 'User', attributes: ['- email: string'], methods: ['+ placeOrder(): Order'] });
+const payable = uml.createClass({ kind: 'interface', className: 'Payable', methods: ['+ pay(amount: number): void'] });
+
+uml.createRelation({ sourceId: user.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
+uml.createRelation({ sourceId: payable.state.id, targetId: user.state.id, relationKind: 'realization' });
+
+uml.validateUml();  // 重名类 / 悬空关系 / 继承成环
+const svg = uml.toSvg({ background: '#ffffff', padding: 16 });
+```
+
+| 记法 | 线型 + 端点标记 |
+|---|---|
+| `inheritance` 继承 | 实线 + 空心三角（指向父类） |
+| `realization` 实现 | 虚线 + 空心三角（指向接口） |
+| `association` 关联 | 实线 |
+| `aggregation` 聚合 | 实线 + **空心菱形**（整体一侧） |
+| `composition` 组合 | 实线 + **实心菱形**（整体一侧） |
+| `dependency` 依赖 | 虚线 + 开放箭头 |
+
+类框是**三段式**（类名 / 属性 / 方法）：成员是自由文本（`- id: string`、`+ pay(): void`），
+可见性/静态/泛型都由文本表达 —— 与 PlantUML/Mermaid 的通行写法一致，AI 生成不必学另一套结构化语法；
+接口与枚举带构造型，抽象类标 «abstract»；**框高随成员自动增长**，成员不会被画到框外。
+
+可运行示例：`tests/uml-editor.html`（电商支付的类模型：继承 / 实现 / 组合 / 关联 / 依赖）。
+
 ## 6. 在 React 中使用
 
 包内置 React 绑定（子路径导出 `ice-entity-designer/react`），不需要自己写 ref / effect 胶水代码。
@@ -419,6 +456,25 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 
 ## 7. 项目结构
 
+### 7.1 一个「域包（domain pack）」由什么组成
+
+域包 = **一个领域的记法 + 应用层 + 语义校验**，跑在同一套引擎与同一套应用层机制上。已落地的三个
+域（ER / 流程图 / BPMN）再加 UML，边际成本主要在「记法本身」，不在编辑器：
+
+| 组成 | 复用什么 | 以 UML 为例 |
+|---|---|---|
+| 形状 | 引擎的复合组件（`hasDerivedChildren`）：内部子组件按 state 派生、不进文档 | `UmlClass`：三段式类框 |
+| 连线 | 引擎折线（插槽吸附 / 正交·贝塞尔路由 / 标签 / 跟随宿主）；**端点标记进路径点集**，因此描边、填充、导出都自动带上 | `UmlRelation`：六种关系 = 线型 + 三角/菱形/开放箭头 |
+| 应用层 | `FlowDesigner`（选择 / 增删改 / 连线 / 撤销重做 / 快照 / 适应视图 / 订阅 / `toSvg`） | `UmlDesigner` 只重写「建什么图元 + 类型过滤」 |
+| 语义校验 | 结构校验之外的部分自写，规则直白 | `validateUml()`：重名类 / 悬空关系 / 继承成环 |
+| 文档格式 | 引擎序列化（typeId 注册表 + `hasDerivedChildren`），零登记 | 类与关系统统自动往返 |
+| 互操作 | 有标准格式的域就做（BPMN 2.0 XML 已有） | UML 的 XMI / PlantUML 互操作待补 |
+| 交付物 | 示例页 + e2e + README + （可选）JSON DSL 与技能 | `tests/uml-editor.html` + `e2e/uml-editor.spec.ts` |
+
+新开一个域包时，按这张表从上往下填即可；**不要**在域包里另造序列化、另造选择/历史、另造导出。
+
+### 7.2 目录一览
+
 ```
 src/
 ├── designer/EntityDesigner.ts     # 应用层：选择 / 增删改 / 连接 / 校验 / 历史 / 项目存取 / 变更订阅
@@ -427,6 +483,10 @@ src/
 │   ├── FlowNode.ts                # 节点：四类预设（起止 / 处理 / 判定 / 输入输出）+ 居中标题
 │   ├── FlowEdge.ts                # 连线：正交 / 贝塞尔 + 箭头 + 分支标签，插槽吸附
 │   └── FlowDesigner.ts            # 应用层：建节点/连线、选择、增删改、历史、快照存取、适应视图
+├── uml/                           # UML 类图（domain pack：三段式类框 + 六种关系 + 语义校验）
+│   ├── UmlClass.ts                # 复合组件：类名 / 属性 / 方法三段，构造型，框高随成员增长
+│   ├── UmlRelation.ts             # 六种关系 = 线型 + 端点标记（三角/菱形/开放箭头，标记进路径点集）
+│   └── UmlDesigner.ts             # FlowDesigner 薄扩展：建 UML 图元 + 类型过滤 + validateUml()
 ├── bpmn/                          # BPMN 2.0（FlowDesigner 之上的业务记法）
 │   ├── bpmn_shapes.ts             # 形状：事件圆 / 网关菱形 / 任务角标 / 子流程标记 / 数据对象 / 注释 / 池泳道
 │   ├── BpmnDesigner.ts            # 应用层：容器真嵌套（池→泳道→节点）、条件与默认流标记、语义校验

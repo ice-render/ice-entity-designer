@@ -29,6 +29,14 @@ export type { BpmnIssue } from './bpmn/bpmn_validate';
 export { toBpmnXml, fromBpmnXml } from './bpmn/bpmn_xml';
 export type { BpmnImportResult } from './bpmn/bpmn_xml';
 
+// UML 类图（domain pack：形状 + 应用层 + 校验；快照/导出/容器等全部复用引擎）
+export { default as UmlClass } from './uml/UmlClass';
+export type { UmlClassKind } from './uml/UmlClass';
+export { default as UmlRelation, UML_RELATION_KINDS, UML_RELATION_STYLE } from './uml/UmlRelation';
+export type { UmlRelationKind, UmlMarker } from './uml/UmlRelation';
+export { default as UmlDesigner } from './uml/UmlDesigner';
+export type { UmlIssue } from './uml/UmlDesigner';
+
 /**
  * 引擎内核（ice-render）在构建时已被打包进本包，这里一并导出。
  *

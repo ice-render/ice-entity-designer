@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <meta charset="utf-8" />
+  <title>IED-UML-editor</title>
+  <style>
+    body {
+      margin: 0;
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #ffffff;
+    }
+    button,
+    select {
+      padding: 6px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      font: inherit;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      height: calc(100vh - 53px);
+    }
+    .canvas-wrap {
+      overflow: hidden;
+      background: #ffffff;
+    }
+    canvas {
+      display: block;
+    }
+    aside {
+      padding: 12px 14px;
+      border-left: 1px solid #e2e8f0;
+      background: #ffffff;
+      overflow: auto;
+    }
+    aside h3 {
+      margin: 14px 0 6px;
+      font-size: 13px;
+      color: #64748b;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .row label {
+      width: 72px;
+      color: #475569;
+      font-size: 13px;
+    }
+    .row input,
+    .row select,
+    .row textarea {
+      flex: 1;
+      padding: 5px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font: inherit;
+    }
+    .row textarea {
+      min-height: 64px;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .hint {
+      color: #64748b;
+      font-size: 12px;
+    }
+    .issue.error {
+      color: #b91c1c;
+    }
+    .issue.warning {
+      color: #b45309;
+    }
+  </style>
+  <body>
+    <div class="toolbar">
+      <button data-add="class">类</button>
+      <button data-add="interface">接口</button>
+      <button data-add="enum">枚举</button>
+      <span class="hint">|</span>
+      <button id="btn-delete">删除选中</button>
+      <button id="btn-undo">撤销</button>
+      <button id="btn-redo">重做</button>
+      <span class="hint">|</span>
+      <select id="relation-kind" title="关系类型">
+        <option value="inheritance">继承（实线空心三角）</option>
+        <option value="realization">实现（虚线空心三角）</option>
+        <option value="association" selected>关联（实线）</option>
+        <option value="aggregation">聚合（空心菱形）</option>
+        <option value="composition">组合（实心菱形）</option>
+        <option value="dependency">依赖（虚线开放箭头）</option>
+      </select>
+      <button id="btn-link">连接</button>
+      <span class="hint">|</span>
+      <button id="btn-fit">适应视图</button>
+      <button id="btn-validate">校验</button>
+      <button id="btn-export-svg">导出 SVG</button>
+    </div>
+    <div class="layout">
+      <div class="canvas-wrap">
+        <canvas id="canvas-1" width="1600" height="1100"></canvas>
+      </div>
+      <aside>
+        <h3>属性</h3>
+        <div id="panel" class="hint">点击画布中的类 / 关系进行编辑</div>
+        <h3>UML 校验</h3>
+        <div id="validate-output" class="hint">点击「校验」运行语义检查</div>
+      </aside>
+    </div>
+
+    <script src="../dist/index.umd.js"></script>
+    <script type="text/javascript">
+      const { ICE, UmlDesigner, UML_RELATION_KINDS } = IED;
+      const ice = new ICE().init('canvas-1');
+      const designer = new UmlDesigner(ice);
+      ice.alignmentGuide.enable({ threshold: 6 });
+      window.__ice = ice;
+      window.__designer = designer;
+
+      const panel = document.getElementById('panel');
+      const validateOutput = document.getElementById('validate-output');
+      let linking = false;
+      let linkSource = null;
+
+      /* ---------------- 案例：电商支付的类模型 ---------------- */
+      function buildCase() {
+        designer.clear();
+        const entity = designer.createClass({
+          kind: 'class',
+          className: 'Entity',
+          abstract: true,
+          attributes: ['# id: string', '# createdAt: Date'],
+          methods: ['+ save(): Promise<void>'],
+          left: 560,
+          top: 70,
+          width: 260,
+        });
+        const user = designer.createClass({
+          className: 'User',
+          attributes: ['- email: string', '- nickname: string'],
+          methods: ['+ placeOrder(): Order'],
+          left: 240,
+          top: 330,
+          width: 260,
+        });
+        const order = designer.createClass({
+          className: 'Order',
+          attributes: ['- id: string', '- total: number', '- status: OrderStatus'],
+          methods: ['+ pay(amount: number): void', '+ cancel(): void'],
+          left: 620,
+          top: 330,
+          width: 280,
+        });
+        const payable = designer.createClass({
+          kind: 'interface',
+          className: 'Payable',
+          methods: ['+ pay(amount: number): void'],
+          left: 620,
+          top: 620,
+          width: 280,
+        });
+        const status = designer.createClass({
+          kind: 'enum',
+          className: 'OrderStatus',
+          attributes: ['PENDING', 'PAID', 'CANCELLED'],
+          left: 1010,
+          top: 600,
+          width: 220,
+        });
+        const item = designer.createClass({
+          className: 'OrderItem',
+          attributes: ['- sku: string', '- quantity: number'],
+          left: 1010,
+          top: 330,
+          width: 260,
+        });
+
+        // 继承：User / Order / OrderItem 都继承抽象类 Entity
+        designer.createRelation({ sourceId: user.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
+        designer.createRelation({ sourceId: order.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
+        designer.createRelation({ sourceId: item.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
+        // 实现：Order 实现 Payable 接口
+        designer.createRelation({ sourceId: order.state.id, targetId: payable.state.id, relationKind: 'realization' });
+        // 组合：Order 由 OrderItem 组成（实心菱形在整体一侧）
+        designer.createRelation({
+          sourceId: order.state.id,
+          targetId: item.state.id,
+          relationKind: 'composition',
+          label: '1..*',
+        });
+        // 关联：User 下订单
+        designer.createRelation({
+          sourceId: user.state.id,
+          targetId: order.state.id,
+          relationKind: 'association',
+          label: '1 : 0..*',
+        });
+        // 依赖：Order 用到 OrderStatus
+        designer.createRelation({ sourceId: order.state.id, targetId: status.state.id, relationKind: 'dependency' });
+
+        designer.select(null);
+        designer.fitViewport();
+      }
+
+      /* ---------------- 工具栏 ---------------- */
+      document.querySelectorAll('[data-add]').forEach((button) => {
+        button.addEventListener('click', () => {
+          designer.createClass({ kind: button.dataset.add });
+          renderPanel();
+        });
+      });
+      document.getElementById('btn-delete').addEventListener('click', () => {
+        if (designer.selectedId) {
+          designer.remove(designer.selectedId);
+          renderPanel();
+        }
+      });
+      document.getElementById('btn-undo').addEventListener('click', () => {
+        designer.undo();
+        renderPanel();
+      });
+      document.getElementById('btn-redo').addEventListener('click', () => {
+        designer.redo();
+        renderPanel();
+      });
+      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
+      document.getElementById('btn-link').addEventListener('click', () => {
+        linking = !linking;
+        linkSource = null;
+        document.getElementById('btn-link').classList.toggle('active', linking);
+      });
+      document.getElementById('btn-validate').addEventListener('click', () => {
+        const issues = designer.validateUml();
+        validateOutput.innerHTML = '';
+        validateOutput.className = issues.length ? '' : 'hint';
+        if (!issues.length) {
+          validateOutput.textContent = '✅ 未发现问题';
+          return;
+        }
+        issues.forEach((issue) => {
+          const div = document.createElement('div');
+          div.className = `issue ${issue.level}`;
+          div.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
+          validateOutput.appendChild(div);
+        });
+      });
+      document.getElementById('btn-export-svg').addEventListener('click', () => {
+        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
+        window.__exportedSvg = svg;
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'uml-class-diagram.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+        validateOutput.className = 'hint';
+        validateOutput.textContent = `✅ 已导出 SVG（${svg.length} 字节）`;
+      });
+
+      /* ---------------- 画布交互：命中 / 拖拽 / 连线 ---------------- */
+      ice.evtBus.on('mousedown', (evt) => {
+        const target = evt.target;
+        if (!target) {
+          return;
+        }
+        const domain = designer.nodes.concat(designer.edges).filter((item) => {
+          let node = target;
+          while (node) {
+            if (node === item) {
+              return true;
+            }
+            node = node.parentNode;
+          }
+          return false;
+        })[0];
+        if (!domain) {
+          return;
+        }
+        if (linking) {
+          if (!linkSource) {
+            linkSource = domain;
+          } else if (linkSource !== domain) {
+            designer.createRelation({
+              sourceId: linkSource.state.id,
+              targetId: domain.state.id,
+              relationKind: document.getElementById('relation-kind').value,
+            });
+            linkSource = null;
+          }
+          designer.select(domain.state.id);
+          renderPanel();
+          return;
+        }
+        designer.select(domain.state.id);
+        renderPanel();
+      });
+      ice.evtBus.on('mouseup', () => renderPanel());
+
+      /* ---------------- 属性面板 ---------------- */
+      function row(label, control) {
+        const div = document.createElement('div');
+        div.className = 'row';
+        const span = document.createElement('label');
+        span.textContent = label;
+        div.appendChild(span);
+        div.appendChild(control);
+        return div;
+      }
+      function input(value, onChange) {
+        const el = document.createElement('input');
+        el.value = value;
+        el.addEventListener('change', () => onChange(el.value));
+        return el;
+      }
+      function textarea(value, onChange) {
+        const el = document.createElement('textarea');
+        el.value = value.join('\n');
+        el.addEventListener('change', () => onChange(el.value.split('\n').filter((line) => line.trim() !== '')));
+        return el;
+      }
+      function select(value, options, onChange) {
+        const el = document.createElement('select');
+        options.forEach(([val, text]) => {
+          const option = document.createElement('option');
+          option.value = val;
+          option.textContent = text;
+          if (val === value) {
+            option.selected = true;
+          }
+          el.appendChild(option);
+        });
+        el.addEventListener('change', () => onChange(el.value));
+        return el;
+      }
+
+      function renderPanel() {
+        panel.innerHTML = '';
+        const selected = designer.selected;
+        if (!selected) {
+          panel.className = 'hint';
+          panel.textContent = '点击画布中的类 / 关系进行编辑';
+          return;
+        }
+        panel.className = '';
+        if (designer.nodes.indexOf(selected) !== -1) {
+          const cls = selected;
+          panel.appendChild(row('类名', input(cls.state.className, (value) => applyAndRender(() => cls.applyPatch({ className: value })))));
+          panel.appendChild(
+            row(
+              '类型',
+              select(
+                cls.state.kind,
+                [
+                  ['class', '类'],
+                  ['interface', '接口'],
+                  ['enum', '枚举'],
+                ],
+                (value) => applyAndRender(() => cls.applyPatch({ kind: value }))
+              )
+            )
+          );
+          panel.appendChild(row('属性', textarea(cls.state.attributes, (value) => applyAndRender(() => cls.applyPatch({ attributes: value })))));
+          panel.appendChild(row('方法', textarea(cls.state.methods, (value) => applyAndRender(() => cls.applyPatch({ methods: value })))));
+        } else {
+          const relation = selected;
+          panel.appendChild(
+            row(
+              '关系',
+              select(
+                relation.state.relationKind,
+                UML_RELATION_KINDS.map((kind) => [kind, designer.constructor.describeRelationKind(kind)]),
+                (value) => applyAndRender(() => relation.applyPatch({ relationKind: value }))
+              )
+            )
+          );
+          panel.appendChild(row('标签', input(relation.state.label || '', (value) => applyAndRender(() => relation.applyPatch({ label: value })))));
+        }
+      }
+
+      function applyAndRender(action) {
+        action();
+        designer.captureHistory();
+        renderPanel();
+      }
+
+      buildCase();
+      renderPanel();
+    </script>
+  </body>
+</html>
