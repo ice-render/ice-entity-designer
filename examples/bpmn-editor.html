@@ -350,6 +350,25 @@
         const preset = FLOW_NODE_KINDS[node.state.kind] || {};
         controls = {
           title: row('名称', input('title', node.state.title, (value) => designer.updateNode(node.state.id, { title: value }))),
+          // 记法不可变换 → 需要变尺寸的元素（池 / 泳道 / 子流程 / 数据对象 / 注释）在这里用数值改
+          width: row(
+            '宽',
+            input(
+              'width',
+              Math.round(node.state.width),
+              (value) => designer.updateNode(node.state.id, { width: Math.max(20, Number(value) || node.state.width) }),
+              'number'
+            )
+          ),
+          height: row(
+            '高',
+            input(
+              'height',
+              Math.round(node.state.height),
+              (value) => designer.updateNode(node.state.id, { height: Math.max(20, Number(value) || node.state.height) }),
+              'number'
+            )
+          ),
         };
         if (node.state.kind === 'bpmnEvent') {
           controls.eventKind = row(

@@ -219,6 +219,40 @@ test('画布：滚轮缩放、空白处拖拽平移、复位按钮回到单位�
   expect(await viewport(page)).toMatchObject({ scale: 1, tx: 0, ty: 0 });
 });
 
+/**
+ * 记法不可变换：流程图图元的尺寸与朝向是记法的一部分（判定菱形、平行四边形、起止胶囊…），
+ * 只允许拖动与点选，不给缩放/旋转手柄；需要变尺寸时走属性面板的数值输入。
+ * 这条规则在电力域包上曾经被漏掉过（电力符号当时是可变换的），所以这里加回归断言守住。
+ */
+test('记法不可变换：节点/连线只允许拖动与点选，尺寸走属性面板数值', async ({ page }) => {
+  const info = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    return {
+      nodesTransformable: designer.nodes.map((node: any) => node.state.transformable),
+      edgesTransformable: designer.edges.map((edge: any) => edge.state.transformable),
+      allDraggable: designer.nodes.every((node: any) => node.state.draggable === true),
+      allInteractive: designer.nodes.every((node: any) => node.state.interactive === true),
+    };
+  });
+  expect(info.nodesTransformable).toEqual(info.nodesTransformable.map(() => false));
+  expect(info.edgesTransformable).toEqual(info.edgesTransformable.map(() => false));
+  expect(info.allDraggable).toBe(true);
+  expect(info.allInteractive).toBe(true);
+
+  // 拖动仍然生效，且尺寸可以由属性面板改
+  const dragged = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const node = designer.nodes[0];
+    const before = [node.state.left, node.state.top, node.state.width];
+    node.setPosition(node.state.left + 30, node.state.top + 20);
+    designer.updateNode(node.state.id, { width: before[2] + 40 });
+    return { before, after: [node.state.left, node.state.top, node.state.width] };
+  });
+  expect(dragged.after[0]).toBeGreaterThan(dragged.before[0]);
+  expect(dragged.after[2]).toBe(dragged.before[2] + 40);
+  expect((page as any).__errors).toEqual([]);
+});
+
 test('属性面板：选中节点可改标题/类型/配色，选中连线可改标签与形态', async ({ page }) => {
   await clickCanvasAt(page, await nodeCanvasPoint(page, 1));
   await page.waitForTimeout(300);

@@ -93,6 +93,8 @@ export default class UmlRelation extends ICEPolyLine {
   protected static arrangeParam(props: any) {
     return merge(
       {
+        // 记法不可变换：关系线不给缩放/旋转手柄
+        transformable: false,
         relationKind: 'association',
         label: '',
         arrowLength: 12,

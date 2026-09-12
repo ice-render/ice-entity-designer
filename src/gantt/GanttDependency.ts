@@ -21,6 +21,8 @@ export default class GanttDependency extends ICEPolyLine {
     super(
       merge(
         {
+          // 记法不可变换：依赖线不给缩放/旋转手柄
+          transformable: false,
           arrow: 'end',
           arrowStyle: 'filled',
           fill: false,

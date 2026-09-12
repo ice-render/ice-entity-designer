@@ -27,6 +27,8 @@ export default class StateTransition extends ICEPolyLine {
   protected static arrangeParam(props: any = {}) {
     const param = merge(
       {
+        // 记法不可变换：转移线不给缩放/旋转手柄
+        transformable: false,
         event: '',
         guard: '',
         action: '',

@@ -383,6 +383,8 @@
         };
         if (selected.constructor.typeId === FlowNode.typeId) {
           syncValue(panelControls.title, selected.state.title || '');
+          syncValue(panelControls.width, Math.round(selected.state.width));
+          syncValue(panelControls.height, Math.round(selected.state.height));
           syncValue(panelControls.kind, selected.state.kind);
           syncValue(panelControls.fill, selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill);
           syncValue(panelControls.stroke, selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke);
@@ -444,6 +446,25 @@
             designer.updateNode(selected.state.id, { title: titleInput.value });
           });
           panelControls = { title: row('标题', titleInput) };
+
+          // 记法不可变换（FlowNode 默认 transformable:false）→ 需要变尺寸时用数值改
+          const widthInput = document.createElement('input');
+          widthInput.type = 'number';
+          widthInput.dataset.field = 'width';
+          widthInput.value = String(Math.round(selected.state.width));
+          widthInput.addEventListener('change', () => {
+            designer.updateNode(selected.state.id, { width: Math.max(20, Number(widthInput.value) || selected.state.width) });
+          });
+          panelControls.width = row('宽', widthInput);
+
+          const heightInput = document.createElement('input');
+          heightInput.type = 'number';
+          heightInput.dataset.field = 'height';
+          heightInput.value = String(Math.round(selected.state.height));
+          heightInput.addEventListener('change', () => {
+            designer.updateNode(selected.state.id, { height: Math.max(20, Number(heightInput.value) || selected.state.height) });
+          });
+          panelControls.height = row('高', heightInput);
 
           const kindSelect = document.createElement('select');
           kindSelect.dataset.field = 'kind';

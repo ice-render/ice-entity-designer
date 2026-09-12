@@ -228,6 +228,12 @@ export default class FlowNode extends ICEGroup {
       stroke: false,
       draggable: true,
       interactive: true,
+      /**
+       * **不可变换（只允许拖动）**：流程图 / BPMN 的图元尺寸与朝向同样是记法的一部分 ——
+       * 判定菱形、平行四边形、事件圆、网关菱形、池/泳道的比例都是固定记法，拉伸或旋转会破坏它。
+       * 图纸整体缩放走视图缩放（滚轮 / ICE.zoomAt）。需要变尺寸的元素（池、泳道、子流程、
+       * 数据对象、注释）在属性面板里用数值改。
+       */
       transformable: false,
       ...props,
     });

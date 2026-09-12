@@ -36,6 +36,8 @@ export default class Relation extends ICEVisioLink {
     const arrow = normalizedProps.arrow || Relation.defaultArrow(relationType);
     super({
       title: 'Relation',
+      // 记法不可变换：关系线只允许点选 / 走属性面板，不给缩放旋转手柄（与其它域包的连线一致）
+      transformable: false,
       relationType,
       referencedColumnName: 'id',
       sourceField: 'id',

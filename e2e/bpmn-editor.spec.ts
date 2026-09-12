@@ -240,3 +240,40 @@ test('令牌仿真：从开始事件出发沿顺序流推进，停止后令牌�
   expect(stopped.dots).toBe(0);
   expect((page as any).__errors).toEqual([]);
 });
+
+/**
+ * 记法不可变换：BPMN 图元的尺寸与朝向是记法的一部分（事件圆、网关菱形、任务圆角矩形、
+ * 池/泳道的比例），只允许拖动与点选；需要变尺寸的元素（池 / 泳道 / 子流程 / 数据对象 / 注释）
+ * 走属性面板的「宽 / 高」数值输入。
+ */
+test('记法不可变换：BPMN 图元只允许拖动与点选，容器尺寸走属性面板数值', async ({ page }) => {
+  const info = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    return {
+      nodesTransformable: designer.nodes.map((node: any) => node.state.transformable),
+      edgesTransformable: designer.edges.map((edge: any) => edge.state.transformable),
+      allDraggable: designer.nodes.every((node: any) => node.state.draggable === true),
+    };
+  });
+  expect(info.nodesTransformable).toEqual(info.nodesTransformable.map(() => false));
+  expect(info.edgesTransformable).toEqual(info.edgesTransformable.map(() => false));
+  expect(info.allDraggable).toBe(true);
+
+  // 池 / 泳道这类容器：改尺寸走数值（变换手柄已禁用），改完不破坏嵌套
+  const pool = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const poolNode = designer.nodes.find((node: any) => node.state.kind === 'bpmnPool');
+    const before = { width: poolNode.state.width, height: poolNode.state.height };
+    designer.updateNode(poolNode.state.id, { width: before.width + 120, height: before.height + 60 });
+    const lane = designer.nodes.find((node: any) => node.state.kind === 'bpmnLane');
+    return {
+      before,
+      after: { width: poolNode.state.width, height: poolNode.state.height },
+      laneStillNested: !!lane && lane.parentNode === poolNode,
+    };
+  });
+  expect(pool.after.width).toBe(pool.before.width + 120);
+  expect(pool.after.height).toBe(pool.before.height + 60);
+  expect(pool.laneStillNested).toBe(true);
+  expect((page as any).__errors).toEqual([]);
+});
