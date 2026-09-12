@@ -1,5 +1,5 @@
 import { ICE } from 'ice-render';
-import { EntityDesigner } from '../index';
+import { EntityDesigner, FlowDesigner } from '../index';
 
 export type DesignerSessionOptions = {
   /** 渲染模式，默认 dirty-rect */
@@ -61,4 +61,56 @@ export function createDesignerSession(canvas: any, options: DesignerSessionOptio
  */
 export function shouldApplyControlledValue(value: string | undefined, lastApplied: string | null | undefined): boolean {
   return value !== undefined && value !== lastApplied;
+}
+
+export type FlowSessionOptions = {
+  /** 渲染模式，默认 dirty-rect */
+  renderMode?: 'dirty-rect' | 'full';
+  /** 初始流程图快照，等价于 load(initialFlow) */
+  initialFlow?: string;
+  /** 流程变更回调（含画布拖动节点） */
+  onChange?: (snapshot: string) => void;
+};
+
+export type FlowSession = {
+  ice: any;
+  designer: FlowDesigner;
+  /** 销毁会话：退订 + dispose designer + destroy ICE（可重复调用） */
+  destroy(): void;
+};
+
+/**
+ * 在给定的 canvas 元素上创建「ICE + FlowDesigner」会话。
+ *
+ * 与 createDesignerSession 同构：挂载即初始化、卸载即销毁；ICE.init() 幂等、
+ * ICE.destroy() 会解绑全局监听与事件总线，因此 StrictMode 双挂载不会累积监听。
+ */
+export function createFlowSession(canvas: any, options: FlowSessionOptions = {}): FlowSession {
+  const ice = new ICE();
+  ice.init(canvas, { renderMode: options.renderMode === 'full' ? 'full' : 'dirty-rect' });
+
+  const designer = new FlowDesigner(ice);
+  const onChange = options.onChange;
+  const unsubscribe = onChange ? designer.subscribe((snapshot: string) => onChange(snapshot)) : null;
+
+  if (options.initialFlow) {
+    designer.load(options.initialFlow);
+  }
+
+  let destroyed = false;
+  return {
+    ice,
+    designer,
+    destroy() {
+      if (destroyed) {
+        return;
+      }
+      destroyed = true;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      designer.dispose();
+      ice.destroy();
+    },
+  };
 }

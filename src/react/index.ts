@@ -14,5 +14,33 @@ export { createDesignerSession, shouldApplyControlledValue } from './session';
 export type { DesignerSession, DesignerSessionOptions } from './session';
 export type { EntityDesignerCanvasProps, EntityDesignerChangePayload, EntityDesignerHandle } from './types';
 
+// 流程图（FlowDesigner）的 React 绑定
+export { default as FlowDesignerCanvas } from './FlowDesignerCanvas';
+export { FlowDesignerContext, FlowDesignerProvider, useFlowDesigner } from './context';
+export type { FlowDesignerProviderProps } from './context';
+export { createFlowSession } from './session';
+export type { FlowSession, FlowSessionOptions } from './session';
+export type { FlowDesignerCanvasProps, FlowDesignerChangePayload, FlowDesignerHandle } from './types';
+
 // 复用核心能力
-export { Entity, Relation, toSchemaObject, toSchemaString, validateSchema } from '../index';
+export {
+  Entity,
+  Relation,
+  FlowNode,
+  FlowEdge,
+  FlowDesigner,
+  FLOW_NODE_KINDS,
+  toSchemaObject,
+  toSchemaString,
+  validateSchema,
+} from '../index';
+// 流程图相关类型（供调用方标注 kind / port / 快照）
+export type {
+  FlowNodeKind,
+  FlowNodePreset,
+  FlowNodeSnapshot,
+  FlowEdgeSnapshot,
+  FlowPort,
+  FlowSnapshot,
+  FlowLoadReport,
+} from '../index';

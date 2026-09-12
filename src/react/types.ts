@@ -1,7 +1,7 @@
 /**
  * React 绑定层的类型定义。
  */
-import type { EntityDesigner, ProjectLoadReport } from '../index';
+import type { EntityDesigner, FlowDesigner, FlowLoadReport, FlowNodeKind, ProjectLoadReport } from '../index';
 
 export type EntityDesignerChangePayload = {
   /** 项目快照，等价于 designer.serializeProject() 的结果 */
@@ -64,5 +64,67 @@ export type EntityDesignerCanvasProps = {
   width?: number;
   height?: number;
   /** 子节点渲染在上下文内部，可直接使用 useEntityDesigner() */
+  children?: any;
+};
+
+/* ------------------------------------------------------------------------- *
+ * 流程图（FlowDesigner）的 React 绑定
+ * ------------------------------------------------------------------------- */
+
+export type FlowDesignerChangePayload = {
+  /** 流程图快照，等价于 designer.serialize() 的结果 */
+  snapshot: string;
+  /** 当前节点 / 连线条数，便于直接渲染统计信息 */
+  counts: { nodes: number; edges: number };
+};
+
+export type FlowDesignerHandle = {
+  /** 底层 ICE 实例（卸载后为 null） */
+  ice: any;
+  /** 底层 FlowDesigner 实例（卸载后为 null） */
+  designer: FlowDesigner | null;
+  addNode(kind: FlowNodeKind, props?: any): any;
+  connect(props: any): any;
+  updateNode(id: string, patch: any): any;
+  updateEdge(id: string, patch: any): any;
+  remove(id: string): void;
+  load(json: string): FlowLoadReport;
+  undo(): void;
+  redo(): void;
+  serialize(): string;
+  toSnapshot(): any;
+  fitViewport(padding?: number): void;
+};
+
+export type FlowDesignerCanvasProps = {
+  /**
+   * 受控模式：流程图快照。变化时会同步进画布（内部变更通过 onChange 上报，带循环保护）。
+   * 与 defaultValue 互斥，value 优先。
+   */
+  value?: string;
+  /** 非受控模式：初始流程图快照（等价于 load(defaultValue)） */
+  defaultValue?: string;
+  /** 渲染模式，默认 dirty-rect */
+  renderMode?: 'dirty-rect' | 'full';
+  /**
+   * 流程变更回调（建节点 / 连线 / 改属性 / 画布拖动 / 载入 / undo / redo 之后触发）。
+   * 注意：画布上拖动节点也会触发（FlowDesigner 订阅了引擎的 BEFORE_MOVE / AFTER_MOVE），
+   * 因此依赖它的自动保存能拿到拖拽后的最新坐标。
+   */
+  onChange?: (payload: FlowDesignerChangePayload) => void;
+  /**
+   * 快照载入失败回调（非法 / 结构不合法）。不传时默认 console.error；
+   * 组件内部已捕获，不会把错误抛进 React 渲染树。
+   */
+  onError?: (payload: EntityDesignerErrorPayload) => void;
+  /** 实例就绪回调，回调里拿到命令式句柄 */
+  onReady?: (handle: FlowDesignerHandle) => void;
+  className?: string;
+  /** 容器内联样式（与 width/height 合并） */
+  style?: any;
+  /** 画布宽高（像素），同时作为容器尺寸，默认 1200 x 800 */
+  width?: number;
+  height?: number;
+  /** 子节点渲染在上下文内部，可直接使用 useFlowDesigner() */
   children?: any;
 };

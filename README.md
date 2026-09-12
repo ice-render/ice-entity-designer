@@ -183,7 +183,8 @@ flow.undo(); // 100 步历史
 | 视图与订阅 | `fitViewport(padding)`、`subscribe()`、`dispose()` |
 
 自定义形状（判定菱形 / 输入输出平行四边形）在 `src/flow/flow_shapes.ts`，走的是引擎的 `ICEPath` 子类机制。
-可运行的完整示例见 `tests/flowchart-editor.html`；AI Agent 生成流程图的 JSON DSL 见 `ice-entity-designer-dsl`。
+可运行的完整示例见 `tests/flowchart-editor.html`；React 用法见 [6.6](#66-流程图的-react-绑定)；
+AI Agent 生成流程图的 JSON DSL 见 `ice-entity-designer-dsl`。
 
 ## 6. 在 React 中使用
 
@@ -277,6 +278,49 @@ const session = createDesignerSession(canvasEl);
 - **子路径解析**：现代解析器（webpack 5 / Vite / Node ESM）走 `exports`；老版本 TypeScript（< 4.7，或 `moduleResolution: "node"`）建议改用 `node16` / `bundler`，包内另提供 `react.d.ts` 垫片以兼容旧解析器。
 
 > 完整可运行示例（**独立工程**，webpack 构建）：[`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo)
+
+### 6.6 流程图的 React 绑定
+
+流程图有与 ER 完全同构的一套绑定：`<FlowDesignerCanvas>` + `useFlowDesigner()` + `createFlowSession()` + 命令式句柄：
+
+```tsx
+import { useRef } from 'react';
+import { FlowDesignerCanvas, useFlowDesigner } from 'ice-entity-designer/react';
+import type { FlowDesignerHandle } from 'ice-entity-designer/react';
+
+function Stats() {
+  const flow = useFlowDesigner();
+  return <span>{flow ? `${flow.nodes.length} 个节点 / ${flow.edges.length} 条连线` : '初始化中…'}</span>;
+}
+
+export default function FlowEditor() {
+  const ref = useRef<FlowDesignerHandle>(null);
+  return (
+    <>
+      <button onClick={() => ref.current?.addNode('decision', { title: '库存充足？' })}>加判定</button>
+      <button onClick={() => ref.current?.fitViewport()}>适应视图</button>
+      <FlowDesignerCanvas
+        ref={ref}
+        width={900}
+        height={700}
+        defaultValue={flowJson}
+        // 画布上拖动节点、改属性、载入、undo/redo 都会触发（拖拽是按帧合并的）
+        onChange={({ snapshot, counts }) => save(snapshot, counts)}
+      >
+        <Stats />
+      </FlowDesignerCanvas>
+    </>
+  );
+}
+```
+
+| 项 | 与 ER 的差异 |
+|---|---|
+| 命令式句柄 | `addNode(kind, props)` / `connect({ sourceId, targetId, sourcePort, targetPort, label })` / `updateNode` / `updateEdge` / `remove` / `load` / `undo` / `redo` / `serialize` / `toSnapshot` / `fitViewport` |
+| `onChange` 载荷 | `{ snapshot, counts: { nodes, edges } }`（ER 是 `{ snapshot, schema }`） |
+| 初始快照键 | `value` / `defaultValue` 传**流程图快照**（`{ version, kind: 'flowchart', nodes, edges }`），不是 ER 的项目快照 |
+
+`onChange` 的语义与 ER 一致：任何改变模型的入口都会触发；额外多了一条——**画布上拖动节点也会触发**（`FlowDesigner` 订阅了引擎的 `BEFORE_MOVE` / `AFTER_MOVE`，并按帧合并），所以用 `onChange` 做自动保存能拿到拖拽后的最新坐标。
 
 ## 7. 项目结构
 

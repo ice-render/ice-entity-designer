@@ -2,29 +2,8 @@ import { createElement, forwardRef, Fragment, useEffect, useImperativeHandle, us
 import { EntityDesignerProvider } from './context';
 import { createDesignerSession, shouldApplyControlledValue } from './session';
 import type { DesignerSession } from './session';
-import type { EntityDesignerCanvasProps, EntityDesignerErrorPayload, EntityDesignerHandle } from './types';
-
-/**
- * 载入快照失败时上报给 onError（默认 console.error）。
- *
- * 组件内的两处 loadProject 都走这里兜底：非法 / 版本不兼容的快照只会被上报，
- * 不会把异常抛进 React 渲染树（挂载期抛错会直接崩掉整棵子树）。
- */
-function reportLoadError(
-  handler: ((payload: EntityDesignerErrorPayload) => void) | undefined,
-  phase: EntityDesignerErrorPayload['phase'],
-  snapshot: string,
-  error: unknown
-): void {
-  const normalized = error instanceof Error ? error : new Error(String(error));
-  if (handler) {
-    handler({ phase, snapshot, error: normalized });
-    return;
-  }
-  if (typeof console !== 'undefined' && console.error) {
-    console.error(`[ice-entity-designer] ${phase} 快照载入失败：`, normalized);
-  }
-}
+import { reportLoadError } from './reportLoadError';
+import type { EntityDesignerCanvasProps, EntityDesignerHandle } from './types';
 
 /** 把会话包装成对外的命令式句柄；会话为空时各方法安全空转 */
 function createHandle(session: DesignerSession | null): EntityDesignerHandle {

@@ -35,13 +35,30 @@ jest.mock('../../src/index', () => {
         (this.constructor as any).instances.push(this);
       }
     },
+    FlowDesigner: class MockFlowDesigner {
+      static instances: any[] = [];
+      static lastListener: any = null;
+      static unsubscribe = jest.fn();
+      ice: any;
+      dispose = jest.fn();
+      load = jest.fn();
+      subscribe = jest.fn((listener: any) => {
+        (this.constructor as any).lastListener = listener;
+        return (this.constructor as any).unsubscribe;
+      });
+      constructor(ice: any) {
+        this.ice = ice;
+        (this.constructor as any).instances.push(this);
+      }
+    },
   };
 });
 
-import { createDesignerSession, shouldApplyControlledValue } from '../../src/react/session';
+import { createDesignerSession, createFlowSession, shouldApplyControlledValue } from '../../src/react/session';
 
 const MockICE: any = require('ice-render').ICE;
 const MockEntityDesigner: any = require('../../src/index').EntityDesigner;
+const MockFlowDesigner: any = require('../../src/index').FlowDesigner;
 
 function fakeCanvas() {
   return { width: 800, height: 600, getContext: () => ({}) };
@@ -53,6 +70,9 @@ describe('createDesignerSession', () => {
     MockEntityDesigner.instances.length = 0;
     MockEntityDesigner.lastListener = null;
     MockEntityDesigner.unsubscribe.mockClear();
+    MockFlowDesigner.instances.length = 0;
+    MockFlowDesigner.lastListener = null;
+    MockFlowDesigner.unsubscribe.mockClear();
   });
 
   it('在 canvas 上创建 ICE + EntityDesigner，并按 renderMode 初始化', () => {
@@ -104,6 +124,59 @@ describe('createDesignerSession', () => {
   it('没有 onChange 时不订阅', () => {
     createDesignerSession(fakeCanvas());
     expect(MockEntityDesigner.instances[0].subscribe).not.toHaveBeenCalled();
+  });
+});
+
+describe('createFlowSession', () => {
+  beforeEach(() => {
+    MockICE.instances.length = 0;
+    MockFlowDesigner.instances.length = 0;
+    MockFlowDesigner.lastListener = null;
+    MockFlowDesigner.unsubscribe.mockClear();
+  });
+
+  it('在 canvas 上创建 ICE + FlowDesigner，并按 renderMode 初始化', () => {
+    const canvas = fakeCanvas();
+    const session = createFlowSession(canvas);
+
+    const ice = MockICE.instances[0];
+    expect(ice.init).toHaveBeenCalledWith(canvas, { renderMode: 'dirty-rect' });
+    expect(session.designer).toBe(MockFlowDesigner.instances[0]);
+    expect(session.designer.ice).toBe(ice);
+  });
+
+  it('renderMode: full 会透传；initialFlow 会调用 load', () => {
+    const session = createFlowSession(fakeCanvas(), { renderMode: 'full', initialFlow: '{"nodes":[]}' });
+    expect(MockICE.instances[0].init).toHaveBeenCalledWith(expect.anything(), { renderMode: 'full' });
+    expect(session.designer.load).toHaveBeenCalledWith('{"nodes":[]}');
+  });
+
+  it('onChange 会被订阅，并能收到流程变更（含画布拖动）', () => {
+    const onChange = jest.fn();
+    createFlowSession(fakeCanvas(), { onChange });
+
+    expect(MockFlowDesigner.instances[0].subscribe).toHaveBeenCalledTimes(1);
+    MockFlowDesigner.lastListener('{"nodes":[],"edges":[]}');
+    expect(onChange).toHaveBeenCalledWith('{"nodes":[],"edges":[]}');
+  });
+
+  it('destroy 会退订 + dispose + 销毁 ICE，且可重复调用不重复执行', () => {
+    const session = createFlowSession(fakeCanvas(), { onChange: jest.fn() });
+    const designer = session.designer as any;
+    const ice = session.ice;
+
+    session.destroy();
+    expect(MockFlowDesigner.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(designer.dispose).toHaveBeenCalledTimes(1);
+    expect(ice.destroy).toHaveBeenCalledTimes(1);
+
+    session.destroy();
+    expect(ice.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('没有 onChange 时不订阅', () => {
+    createFlowSession(fakeCanvas());
+    expect(MockFlowDesigner.instances[0].subscribe).not.toHaveBeenCalled();
   });
 });
 
