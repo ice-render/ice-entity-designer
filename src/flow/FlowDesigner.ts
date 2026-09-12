@@ -313,6 +313,10 @@ export default class FlowDesigner {
       endPoint: this.__slotPoint(target, targetPort),
       label: props.label || '',
       linkShape: props.linkShape || 'visio',
+      // BPMN 语义属性（sequence/message/association + 条件/默认流）
+      flowType: props.flowType || 'sequence',
+      condition: props.condition || '',
+      isDefault: !!props.isDefault,
       style: props.style,
       labelStyle: props.labelStyle,
     });
@@ -336,8 +340,13 @@ export default class FlowDesigner {
     const edge = this.ice.findComponent(id);
     if (edge && edge.constructor.typeId === FlowEdge.typeId) {
       this.__captureHistory();
-      edge.setState(patch);
-      edge.dirty = true;
+      // FlowEdge.applyPatch 会顺带重算 BPMN 派生样式（虚线/箭头）
+      if (typeof edge.applyPatch === 'function') {
+        edge.applyPatch(patch);
+      } else {
+        edge.setState(patch);
+        edge.dirty = true;
+      }
       this.__emitChange();
     }
     return edge;

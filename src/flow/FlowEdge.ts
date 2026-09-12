@@ -48,5 +48,33 @@ export default class FlowEdge extends ICEVisioLink {
         ...(props.labelStyle || {}),
       },
     });
+    // BPMN 连线类型（sequence / message / association）决定虚线、箭头样式与语义属性；
+    // props 里带过来时立即归一化一次，之后由 applyPatch 维护
+    this.applyPatch({
+      flowType: this.state.flowType,
+      condition: this.state.condition,
+      isDefault: this.state.isDefault,
+    });
+  }
+
+  /**
+   * 改连线属性，并按 BPMN 语义重算派生样式（线型 / 虚线 / 箭头）。
+   *
+   * - sequence：实线 + 实心箭头
+   * - message：虚线 + 空心箭头（跨参与者通信）
+   * - association：点线 + 无箭头
+   */
+  public applyPatch(patch: Record<string, any> = {}): this {
+    const next = { ...this.state, ...patch };
+    const flowType = next.flowType || 'sequence';
+    const derived =
+      flowType === 'message'
+        ? { lineDash: [7, 4], arrowStyle: 'hollow', lineWidth: next.lineWidth || 1.4 }
+        : flowType === 'association'
+        ? { lineDash: [2, 3], arrow: 'none', arrowStyle: 'hollow', lineWidth: next.lineWidth || 1.2 }
+        : { arrow: next.arrow || 'end', arrowStyle: 'filled', lineDash: [], lineWidth: next.lineWidth || 1.6 };
+    this.setState({ ...patch, ...derived });
+    this.dirty = true;
+    return this;
   }
 }

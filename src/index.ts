@@ -22,6 +22,13 @@ export { default as FlowDesigner, validateFlowSnapshot } from './flow/FlowDesign
 export type { FlowSnapshot, FlowLoadReport, FlowSnapshotValidationResult } from './flow/FlowDesigner';
 export { FlowDiamond, FlowParallelogram } from './flow/flow_shapes';
 
+// BPMN 2.0（复用流程图机制：同一套 FlowNode/FlowEdge/FlowDesigner，只扩语义与记法）
+export { default as BpmnDesigner } from './bpmn/BpmnDesigner';
+export { validateBpmn } from './bpmn/bpmn_validate';
+export type { BpmnIssue } from './bpmn/bpmn_validate';
+export { toBpmnXml, fromBpmnXml } from './bpmn/bpmn_xml';
+export type { BpmnImportResult } from './bpmn/bpmn_xml';
+
 /**
  * 引擎内核（ice-render）在构建时已被打包进本包，这里一并导出。
  *
