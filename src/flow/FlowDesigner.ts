@@ -5,19 +5,29 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
+import { Deserializer, Serializer } from 'ice-render';
 import type { ICE } from 'ice-render';
 import FlowEdge from './FlowEdge';
 import FlowNode from './FlowNode';
 import type { FlowNodeKind } from './FlowNode';
-import type { FlowEdgeSnapshot, FlowPort } from './FlowEdge';
-import type { FlowNodeSnapshot } from './FlowNode';
+import type { FlowPort } from './FlowEdge';
 
-/** 流程图快照：只含流程图自身的语义数据，跨版本可读 */
+/**
+ * 流程图文档。
+ *
+ * **直接复用引擎的序列化机制**：`scene` 是引擎 `Serializer` 的原生产物
+ * （`{ version, childNodes }`，只去掉 createTime/lastModifyTime 这类每次都会变的时间戳）。
+ * 于是「组件 state 上的一切」（含应用层自定义 `data`）自动往返，新字段不需要在任何清单里登记，
+ * 容错（未注册类型跳过 + unknownTypes）、版本迁移也全部沿用引擎那一套。
+ */
 export type FlowSnapshot = {
-  version: number;
+  version: 2;
   kind: 'flowchart';
-  nodes: FlowNodeSnapshot[];
-  edges: FlowEdgeSnapshot[];
+  scene: {
+    /** 引擎的序列化格式版本（SERIALIZATION_VERSION） */
+    version: number;
+    childNodes: any[];
+  };
 };
 
 /** load() 的载入报告 */
@@ -46,6 +56,16 @@ export function validateFlowSnapshot(data: any): FlowSnapshotValidationResult {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return { valid: false, errors: ['root must be an object'] };
   }
+  // v2：引擎 payload 的信封校验（节点级容错交给引擎的 Deserializer）
+  if (data.scene !== undefined) {
+    if (!data.scene || typeof data.scene !== 'object' || Array.isArray(data.scene)) {
+      errors.push('scene must be an object when present');
+    } else if (!Array.isArray(data.scene.childNodes)) {
+      errors.push('scene.childNodes must be an array');
+    }
+    return { valid: errors.length === 0, errors };
+  }
+  // v1（历史格式）：nodes / edges 数组
   if (!Array.isArray(data.nodes)) {
     errors.push('nodes must be an array');
   } else {
@@ -358,16 +378,33 @@ export default class FlowDesigner {
   }
 
   public toSnapshot(): FlowSnapshot {
+    const engineDoc: any = this.__serializer().toJSONObject();
     return {
-      version: 1,
+      version: 2,
       kind: 'flowchart',
-      nodes: this.nodes.map((node: any) => node.toFlowObject()),
-      edges: this.edges.map((edge: any) => edge.toFlowObject()),
+      // 只丢 createTime/lastModifyTime（每次序列化都会变，会让「两次 serialize 结果相同」的契约失效）
+      scene: { version: engineDoc.version, childNodes: engineDoc.childNodes },
     };
   }
 
+  /** 引擎 Serializer / Deserializer：ice 未 init 时 ice.serializer 不存在，这里按需构造（两者无状态） */
+  private __serializer(): any {
+    const ice: any = this.ice;
+    return ice.serializer || new Serializer(ice);
+  }
+
+  private __deserializer(): any {
+    const ice: any = this.ice;
+    return ice.deserializer || new Deserializer(ice);
+  }
+
   /**
-   * 载入流程图快照（整体替换当前流程）。
+   * 载入流程图文档（整体替换当前流程）。
+   *
+   * 支持两种格式：
+   * - **v2（当前）**：`scene` 为引擎序列化产物 → 直接交给引擎 `Deserializer` 重建，
+   *   未注册类型会被跳过并记入报告的 `skipped`（沿用引擎的容错语义）；
+   * - **v1（历史）**：`nodes` / `edges` 数组 → 走兼容读取路径（迁移，不再作为写出格式）。
    *
    * @throws 结构非法时抛错；此时当前流程与历史栈都不会被改动。
    */
@@ -375,8 +412,19 @@ export default class FlowDesigner {
     if (!json) {
       return createEmptyLoadReport();
     }
-    const data = JSON.parse(json);
-    if (!data || !Array.isArray(data.nodes)) {
+    let data: any;
+    try {
+      data = JSON.parse(json);
+    } catch (error) {
+      throw new Error(
+        `Invalid flow snapshot: 不是合法 JSON（${error instanceof Error ? error.message : String(error)}）`
+      );
+    }
+    if (!data || typeof data !== 'object') {
+      return createEmptyLoadReport();
+    }
+    const isEngineScene = !!data.scene;
+    if (!isEngineScene && !Array.isArray(data.nodes)) {
       return createEmptyLoadReport();
     }
     const validation = validateFlowSnapshot(data);
@@ -386,16 +434,32 @@ export default class FlowDesigner {
 
     // 先校验再动历史栈：非法输入不该污染 undo/redo，也不该清空当前流程
     this.__captureHistory();
-    const report: FlowLoadReport = { loaded: true, nodes: 0, edges: 0, skipped: [] };
-    this.__clearAndBuild(data, report);
+    const report = isEngineScene ? this.__applyEngineScene(data.scene) : this.__clearAndBuild(data);
     this.__emitChange();
     return report;
   }
 
-  /** 用快照数据重建整张流程图（不发变更广播，由调用方决定广播时机） */
-  private __clearAndBuild(data: any, report: FlowLoadReport): void {
+  /** v2：把引擎序列化产物交给引擎 Deserializer 重建（容错、类型分派全部复用引擎实现） */
+  private __applyEngineScene(scene: any): FlowLoadReport {
     this.ice.clearAll();
     this.selectedId = null;
+    const deserializer: any = this.__deserializer();
+    deserializer.fromJSONObject({ version: scene.version, childNodes: scene.childNodes });
+    const report: FlowLoadReport = {
+      loaded: true,
+      nodes: this.nodes.length,
+      edges: this.edges.length,
+      skipped: [...((deserializer.unknownTypes as string[]) || [])],
+    };
+    this.nodes.forEach((node: any) => this.__attachNodeListeners(node));
+    return report;
+  }
+
+  /** v1（历史格式）兼容读取：由 nodes / edges 数组重建（迁移路径，不参与写出） */
+  private __clearAndBuild(data: any): FlowLoadReport {
+    this.ice.clearAll();
+    this.selectedId = null;
+    const report: FlowLoadReport = { loaded: true, nodes: 0, edges: 0, skipped: [] };
 
     (data.nodes || []).forEach((item: any) => {
       if (item.typeId !== undefined && item.typeId !== FlowNode.typeId) {
@@ -433,6 +497,7 @@ export default class FlowDesigner {
       this.ice.addChild(edge);
       report.edges += 1;
     });
+    return report;
   }
 
   /** 把整个流程缩放到画布可视区内 */
@@ -496,8 +561,13 @@ export default class FlowDesigner {
   }
 
   private __applySnapshot(json: string): void {
-    // 历史栈里的快照是本类自己序列化出来的，结构必然合法，不再重复校验
-    this.__clearAndBuild(JSON.parse(json), { loaded: true, nodes: 0, edges: 0, skipped: [] });
+    // 历史栈里的快照是本类自己序列化出来的（v2 引擎 payload），结构必然合法，不再重复校验
+    const data = JSON.parse(json);
+    if (data && data.scene) {
+      this.__applyEngineScene(data.scene);
+      return;
+    }
+    this.__clearAndBuild(data);
   }
 
   /**

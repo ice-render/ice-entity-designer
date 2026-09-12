@@ -10,24 +10,6 @@ import { ICEVisioLink } from 'ice-render';
 /** 连线端点所在的插槽位置（上 / 右 / 下 / 左 / 中心） */
 export type FlowPort = 'T' | 'R' | 'B' | 'L' | 'C';
 
-/** 连线在快照里的纯数据 */
-export type FlowEdgeSnapshot = {
-  id: string;
-  typeId: string;
-  sourceId: string | null;
-  targetId: string | null;
-  sourcePort: FlowPort | null;
-  targetPort: FlowPort | null;
-  label: string;
-  linkShape: string;
-  startPoint: number[];
-  endPoint: number[];
-  /** 线色 / 线宽等（引擎 ICEPolyLine 的 style）；缺省时引擎用内置默认 */
-  style?: Record<string, any>;
-  /** 标签的字号 / 颜色 / 背景（引擎的 labelStyle） */
-  labelStyle?: Record<string, any>;
-};
-
 /**
  * @class FlowEdge 流程图连线
  *
@@ -36,6 +18,11 @@ export type FlowEdgeSnapshot = {
  */
 export default class FlowEdge extends ICEVisioLink {
   public static readonly typeId = 'FlowEdge';
+
+  /** 连线没有子组件；声明派生可保证将来即使加了内部装饰也不会被重复序列化 */
+  public hasDerivedChildren(): boolean {
+    return true;
+  }
 
   constructor(props: any = {}) {
     super({
@@ -61,26 +48,5 @@ export default class FlowEdge extends ICEVisioLink {
         ...(props.labelStyle || {}),
       },
     });
-  }
-
-  /** 流程快照用的纯数据 */
-  public toFlowObject(): FlowEdgeSnapshot {
-    const links = this.state.links || {};
-    const start = links.start || {};
-    const end = links.end || {};
-    return {
-      id: this.state.id,
-      typeId: FlowEdge.typeId,
-      sourceId: start.id || null,
-      targetId: end.id || null,
-      sourcePort: start.position || null,
-      targetPort: end.position || null,
-      label: this.state.label,
-      linkShape: this.state.linkShape,
-      startPoint: this.state.startPoint,
-      endPoint: this.state.endPoint,
-      style: { ...(this.state.style || {}) },
-      labelStyle: { ...(this.state.labelStyle || {}) },
-    };
   }
 }

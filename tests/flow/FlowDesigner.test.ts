@@ -23,6 +23,14 @@ function titles(designer: any): string[] {
   return designer.nodes.map((node: any) => node.state.title);
 }
 
+/**
+ * 从 v2 文档里取出节点 state：`{ version:2, kind:'flowchart', scene:{ version, childNodes:[{type,state,childNodes}] } }`
+ * （v2 直接复用引擎的序列化产物，所以取的是 `state`，不再是应用层自造的字段清单）
+ */
+function sceneNodes(json: string): any[] {
+  return JSON.parse(json).scene.childNodes;
+}
+
 describe('FlowDesigner 构造与类型注册', () => {
   it('注册 FlowNode / FlowEdge 并订阅 mousedown', () => {
     const { ice, designer } = makeDesigner();
@@ -83,7 +91,7 @@ describe('FlowDesigner 节点', () => {
     expect(node.state.fillColor).toBe('#fee2e2');
     expect(designer.selectedId).toBe(node.state.id);
     expect(seen.length).toBe(1);
-    expect(JSON.parse(seen[0]).nodes[0].title).toBe('库存充足？');
+    expect(sceneNodes(seen[0])[0].state.title).toBe('库存充足？');
   });
 
   it('updateNode 改标题不重建形状，改类型/尺寸会重建形状', () => {
@@ -149,7 +157,9 @@ describe('FlowDesigner 快照', () => {
     designer.createEdge({ sourceId: a.state.id, targetId: b.state.id, label: '是' });
 
     const first = designer.serialize();
-    expect(JSON.parse(first)).toMatchObject({ version: 1, kind: 'flowchart' });
+    expect(JSON.parse(first)).toMatchObject({ version: 2, kind: 'flowchart' });
+    // v2 用引擎的序列化产物当 payload：节点类型由引擎的 typeId 分派
+    expect(sceneNodes(first).map((item: any) => item.type)).toContain('FlowNode');
     expect(validateFlowSnapshot(JSON.parse(first))).toEqual({ valid: true, errors: [] });
 
     designer.load(first);
@@ -198,7 +208,7 @@ describe('FlowDesigner 快照', () => {
     expect(node.childNodes[1].state.style.fontSize).toBe(18);
 
     const first = designer.serialize();
-    expect(JSON.parse(first).nodes[0]).toMatchObject({ textColor: '#b91c1c', fontSize: 18 });
+    expect(sceneNodes(first)[0].state).toMatchObject({ textColor: '#b91c1c', fontSize: 18 });
 
     designer.load(first);
     const loaded = designer.nodes[0];
@@ -219,15 +229,60 @@ describe('FlowDesigner 快照', () => {
     });
 
     const first = designer.serialize();
-    const firstEdge = JSON.parse(first).edges[0];
-    expect(firstEdge.style.strokeStyle).toBe('#0284c7');
-    expect(firstEdge.labelStyle.fillStyle).toBe('#b91c1c');
+    const firstEdge = sceneNodes(first).find((item: any) => item.type === 'FlowEdge');
+    expect(firstEdge.state.style.strokeStyle).toBe('#0284c7');
+    expect(firstEdge.state.labelStyle.fillStyle).toBe('#b91c1c');
 
     designer.load(first);
     expect(designer.edges[0].state.style.strokeStyle).toBe('#0284c7');
     expect(designer.edges[0].state.style.lineWidth).toBe(3);
     expect(designer.edges[0].state.labelStyle.fillStyle).toBe('#b91c1c');
     expect(designer.serialize()).toBe(first);
+  });
+
+  it('文档即引擎 payload：自定义 data 与任何新增 state 字段自动往返，无需登记', () => {
+    const { designer } = makeDesigner();
+    const node = designer.createNode('process', {
+      title: 'A',
+      data: { kind: 'aggregate', tags: ['flow', 1], owner: { team: 'data' } },
+      customField: '随便挂',
+    });
+    node.setState({ anotherNewField: { deep: true } });
+
+    const json = designer.serialize();
+    const item = sceneNodes(json)[0];
+    // 1) 文档里直接可见（不需要任何字段清单）
+    expect(item.state.data).toEqual({ kind: 'aggregate', tags: ['flow', 1], owner: { team: 'data' } });
+    expect(item.state.customField).toBe('随便挂');
+    expect(item.state.anotherNewField).toEqual({ deep: true });
+    // 2) FlowNode 的内部形状/标题是派生组件，不写进文档（否则往返会重复挂载）
+    expect(item.childNodes).toEqual([]);
+
+    // 3) 往返后逐键回来，且文档字节稳定
+    designer.load(json);
+    const restored = designer.nodes[0];
+    expect(restored.state.data).toEqual({ kind: 'aggregate', tags: ['flow', 1], owner: { team: 'data' } });
+    expect(restored.state.customField).toBe('随便挂');
+    expect(restored.state.anotherNewField).toEqual({ deep: true });
+    expect(designer.serialize()).toBe(json);
+  });
+
+  it('兼容读取 v1（nodes/edges 数组）历史文档，再导出即为 v2', () => {
+    const { designer } = makeDesigner();
+    const legacy = JSON.stringify({
+      version: 1,
+      kind: 'flowchart',
+      nodes: [
+        { id: 'n1', typeId: 'FlowNode', kind: 'decision', title: '旧格式', left: 10, top: 20, width: 200, height: 120 },
+      ],
+      edges: [],
+    });
+    const report = designer.load(legacy);
+    expect(report).toMatchObject({ loaded: true, nodes: 1, edges: 0 });
+    expect(designer.nodes[0].state.title).toBe('旧格式');
+    expect(designer.nodes[0].state.kind).toBe('decision');
+    // 迁移是单向的：读旧写新
+    expect(JSON.parse(designer.serialize()).version).toBe(2);
   });
 });
 
@@ -282,7 +337,7 @@ describe('FlowDesigner 历史与视图', () => {
     await new Promise((resolve) => setTimeout(resolve, 40));
 
     expect(snapshots.length).toBeGreaterThan(0);
-    expect(snapshots[snapshots.length - 1].nodes[0]).toMatchObject({ left: 300, top: 260 });
+    expect(sceneNodes(JSON.stringify(snapshots[snapshots.length - 1]))[0].state).toMatchObject({ left: 300, top: 260 });
     // 拖拽前记了一步历史（BEFORE_MOVE 先于 setState）
     expect(designer.canUndo()).toBe(true);
     designer.undo();

@@ -42,6 +42,14 @@ export default class Entity extends ICEGroup {
    */
   public static readonly typeId = 'Entity';
 
+  /**
+   * 表头背景 / 标题 / 分隔线 / 字段文本都是由 entityName、fields、各 style 派生的内部子组件，
+   * 构造函数会按 state 重建 → 不参与引擎序列化（避免往返重复挂载）。
+   */
+  public hasDerivedChildren(): boolean {
+    return true;
+  }
+
   protected entityNameComponent: ICEText;
   protected headerBackgroundComponent: ICERect;
   protected deviderLine: ICEPolyLine;

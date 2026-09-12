@@ -24,6 +24,11 @@ export default class Relation extends ICEVisioLink {
    */
   public static readonly typeId = 'Relation';
 
+  /** 连线没有子组件；声明派生以保证引擎序列化只持久化自身 state */
+  public hasDerivedChildren(): boolean {
+    return true;
+  }
+
   constructor(props: any = {}) {
     const normalizedProps = Relation.normalizeLinks(props || {});
     const relationType = normalizedProps.relationType || 'one-to-one';

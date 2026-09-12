@@ -368,7 +368,9 @@ test('联动：画布拖动节点后，右侧 JSON 与属性面板同步（回�
   // 右侧 JSON 预览反映拖动后的坐标（拖动前这里会是旧坐标）
   const jsonNode = await page.evaluate(() => {
     const parsed = JSON.parse(document.getElementById('json-output')?.textContent || '{}');
-    return { left: parsed.nodes[2].left, top: parsed.nodes[2].top };
+    // v2 文档：scene 是引擎的原生序列化产物（{ type, state, childNodes }）
+    const nodeData = parsed.scene.childNodes.filter((item: any) => item.type === 'FlowNode')[2];
+    return { left: nodeData.state.left, top: nodeData.state.top };
   });
   expect(jsonNode.left).toBeCloseTo(node.left, 3);
   expect(jsonNode.top).toBeCloseTo(node.top, 3);
@@ -481,7 +483,9 @@ test('清空后可从零建流程：新增节点 + 连线 + 导出 JSON', async 
 
   await page.click('#btn-export');
   const json = await page.textContent('#json-output');
-  expect(json).toContain('"nodes"');
-  expect(json).toContain('"edges"');
+  // v2：文档即引擎 payload（scene.childNodes，节点类型由 type 字段标识）
+  expect(json).toContain('"scene"');
+  expect(json).toContain('"FlowNode"');
+  expect(json).toContain('"FlowEdge"');
   expect((page as any).__errors).toEqual([]);
 });

@@ -35,12 +35,4 @@ export {
   validateSchema,
 } from '../index';
 // 流程图相关类型（供调用方标注 kind / port / 快照）
-export type {
-  FlowNodeKind,
-  FlowNodePreset,
-  FlowNodeSnapshot,
-  FlowEdgeSnapshot,
-  FlowPort,
-  FlowSnapshot,
-  FlowLoadReport,
-} from '../index';
+export type { FlowNodeKind, FlowNodePreset, FlowPort, FlowSnapshot, FlowLoadReport } from '../index';

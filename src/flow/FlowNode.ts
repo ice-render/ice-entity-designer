@@ -47,22 +47,6 @@ const SHAPE_BY_KIND: Record<FlowNodePreset['shape'], any> = {
 const DEFAULT_TEXT_COLOR = '#0f172a';
 const DEFAULT_FONT_SIZE = 14;
 
-/** 流程图节点在快照里的纯数据（不含引擎内部状态） */
-export type FlowNodeSnapshot = {
-  id: string;
-  typeId: string;
-  kind: FlowNodeKind;
-  title: string;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  fillColor: string;
-  strokeColor: string;
-  textColor: string;
-  fontSize: number;
-};
-
 /**
  * @class FlowNode 流程图节点
  *
@@ -76,6 +60,14 @@ export default class FlowNode extends ICEGroup {
 
   protected shapeComponent: any = null;
   protected labelComponent: any = null;
+
+  /**
+   * 内部子组件（形状 + 标题）由 kind/尺寸/配色派生，构造函数会重建 →
+   * 不参与引擎序列化（否则往返会重复挂载，且子组件 zIndex 抖动，见 ICEComponent.hasDerivedChildren）。
+   */
+  public hasDerivedChildren(): boolean {
+    return true;
+  }
 
   constructor(props: any = {}) {
     const kind: FlowNodeKind = FLOW_NODE_KINDS[props.kind as FlowNodeKind] ? props.kind : 'process';
@@ -168,23 +160,5 @@ export default class FlowNode extends ICEGroup {
     }
     this.dirty = true;
     return this;
-  }
-
-  /** 流程快照用的纯数据 */
-  public toFlowObject(): FlowNodeSnapshot {
-    return {
-      id: this.state.id,
-      typeId: FlowNode.typeId,
-      kind: this.state.kind,
-      title: this.state.title,
-      left: this.state.left,
-      top: this.state.top,
-      width: this.state.width,
-      height: this.state.height,
-      fillColor: this.state.fillColor,
-      strokeColor: this.state.strokeColor,
-      textColor: this.state.textColor || DEFAULT_TEXT_COLOR,
-      fontSize: this.state.fontSize || DEFAULT_FONT_SIZE,
-    };
   }
 }

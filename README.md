@@ -139,6 +139,8 @@ designer.undo();
 - 快照带 `schemaVersion`（当前 `1`）与每个节点的 `typeId`；载入时**按 `typeId` 分派构造函数**（走 ICE 注册表，下游 `ice.registerType()` 注册的领域图元同样可载入）。旧快照没有 `typeId` 时，按所在数组归位（`entities[]` → `Entity`，`relations[]` → `Relation`）。
 - **容错加载**：遇到未注册的 `typeId` 只跳过该节点并记录（`report.unknownTypes` / `report.skipped`），不会让整份数据打不开——与引擎 `Deserializer` 的语义一致。
 - **自洽保证**：`serializeProject()` 的产物永远能通过 `loadProject()` 的结构校验（结构契约见 `src/utils/project-snapshot.schema.json`）；载入失败时当前项目与 `undo`/`redo` 栈都不会被改动。
+- **唯一字段定义**：快照写什么、校验查什么，都由 `src/utils/project_codec.ts` 的一份定义驱动（不再 snapshot 一份、validator 一份）。新增 state 字段却忘了登记时，`tests/designer/codec-completeness.test.ts` 会以「未覆盖的 state 键」直接报红。
+- **自定义 JSON 透传**：应用层把业务元数据挂在 `node.state.data` 上即可，它会原样写进快照并在载入时回填（与引擎序列化对 `state` 的处理一致）。
 
 也支持更底层的组件式用法：
 
@@ -180,10 +182,12 @@ flow.undo(); // 100 步历史
 | 连线 | `createEdge({ sourceId, targetId, sourcePort, targetPort, label, linkShape })`；插槽位置 `T/R/B/L/C`，节点拖动时连线自动跟随 |
 | 样式 | 节点：`fillColor` / `strokeColor` / `textColor` / `fontSize`（`updateNode` 即时生效）；连线：`style.strokeStyle`（线色，同时作为箭头填充）/ `style.lineWidth`、`labelStyle.fillStyle`（标签颜色），全部随快照存取 |
 | 增删改查 | `nodes` / `edges` / `selected` / `select()` / `updateNode()` / `updateEdge()` / `remove()`（删节点级联删连线）/ `clear()` |
-| 历史与快照 | `undo()` / `redo()` / `canUndo()` / `canRedo()`、`serialize()` / `toSnapshot()` / `load()`（返回 `{ loaded, nodes, edges, skipped }`） |
+| 历史与快照 | `undo()` / `redo()` / `canUndo()` / `canRedo()`、`serialize()` / `toSnapshot()` / `load()`（返回 `{ loaded, nodes, edges, skipped }`）。文档 **v2 直接复用引擎的序列化机制**：`{ version: 2, kind: 'flowchart', scene: <引擎 Serializer 产物> }`，因此自定义 `data` 与任何新增 state 字段自动往返；v1（`nodes`/`edges` 数组）仍可读，导出统一为 v2 |
 | 视图与订阅 | `fitViewport(padding)`、`subscribe()`、`dispose()` |
 
 自定义形状（判定菱形 / 输入输出平行四边形）在 `src/flow/flow_shapes.ts`，走的是引擎的 `ICEPath` 子类机制。
+流程图节点是**复合组件**（形状 + 标题由 kind/标题/配色派生）：它们实现了引擎的 `hasDerivedChildren()`，
+内部子组件不写进文档、载入时由构造函数按 state 重建——避免重复挂载，也让同一份数据的两次序列化结果保持一致。
 可运行的完整示例见 `tests/flowchart-editor.html`；React 用法见 [6.6](#66-流程图的-react-绑定)；
 AI Agent 生成流程图的 JSON DSL 见 `ice-entity-designer-dsl`。
 

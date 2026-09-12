@@ -1,7 +1,15 @@
 import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
+import { ENTITY_DOCUMENT_FIELDS, RELATION_DOCUMENT_FIELDS, validateDocumentNode } from './project_codec';
+import type { CodecField } from './project_codec';
 
 export const PROJECT_SCHEMA_VERSION = 1;
+
+/** 未知 / 自定义类型的最小通用检查（id 必填、typeId 出现时须为字符串） */
+const GENERIC_FIELDS: CodecField[] = [
+  { key: 'id', type: 'string', required: true },
+  { key: 'typeId', type: 'string' },
+];
 
 export type ProjectSnapshotValidationResult = {
   valid: boolean;
@@ -64,61 +72,17 @@ function validateNode(node: any, prefix: string, defaultTypeId: string, errors: 
     errors.push(`${prefix} must be an object`);
     return;
   }
-  if (typeof node.id !== 'string') errors.push(`${prefix}.id must be a string`);
-  if (node.typeId !== undefined && typeof node.typeId !== 'string') {
-    errors.push(`${prefix}.typeId must be a string when present`);
-  }
-
   const effectiveTypeId: string = node.typeId === undefined ? defaultTypeId : node.typeId;
+  // 字段定义与 serializeProject() 共用同一份 codec（见 utils/project_codec.ts）
   if (effectiveTypeId === Entity.typeId) {
-    validateEntityShape(node, prefix, errors);
-  } else if (effectiveTypeId === Relation.typeId) {
-    validateRelationShape(node, prefix, errors);
+    validateDocumentNode(node, prefix, ENTITY_DOCUMENT_FIELDS, errors);
+    return;
   }
-  // 其它类型（下游注册的自定义图元、未注册类型）只做上面的通用检查，
+  if (effectiveTypeId === Relation.typeId) {
+    validateDocumentNode(node, prefix, RELATION_DOCUMENT_FIELDS, errors);
+    return;
+  }
+  // 其它类型（下游注册的自定义图元、未注册类型）只做通用检查，
   // 未注册的由载入阶段跳过并记入 loadProject() 的 unknownTypes。
-}
-
-function validateEntityShape(node: any, prefix: string, errors: string[]): void {
-  if (typeof node.entityName !== 'string') errors.push(`${prefix}.entityName must be a string`);
-  if (node.fields !== undefined && !Array.isArray(node.fields)) {
-    errors.push(`${prefix}.fields must be an array when present`);
-    return;
-  }
-  if (!Array.isArray(node.fields)) {
-    return;
-  }
-  node.fields.forEach((field: any, fieldIndex: number) => {
-    if (!field || typeof field !== 'object' || Array.isArray(field)) {
-      errors.push(`${prefix}.fields[${fieldIndex}] must be an object`);
-    } else if (field.name !== undefined && typeof field.name !== 'string') {
-      errors.push(`${prefix}.fields[${fieldIndex}].name must be a string when present`);
-    }
-  });
-}
-
-function validateRelationShape(node: any, prefix: string, errors: string[]): void {
-  if (node.links === undefined) {
-    return;
-  }
-  if (!node.links || typeof node.links !== 'object' || Array.isArray(node.links)) {
-    errors.push(`${prefix}.links must be an object when present`);
-    return;
-  }
-  ['start', 'end'].forEach((terminal) => {
-    const link = node.links[terminal];
-    if (link === undefined) {
-      return;
-    }
-    if (!link || typeof link !== 'object' || Array.isArray(link)) {
-      errors.push(`${prefix}.links.${terminal} must be an object when present`);
-      return;
-    }
-    if (link.id !== undefined && typeof link.id !== 'string') {
-      errors.push(`${prefix}.links.${terminal}.id must be a string when present`);
-    }
-    if (link.position !== undefined && typeof link.position !== 'string') {
-      errors.push(`${prefix}.links.${terminal}.position must be a string when present`);
-    }
-  });
+  validateDocumentNode(node, prefix, GENERIC_FIELDS, errors);
 }

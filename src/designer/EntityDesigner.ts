@@ -2,6 +2,7 @@ import type { ICE } from 'ice-render';
 import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
 import { isEntity, isRelation } from '../utils/component_type_util';
+import { ENTITY_DOCUMENT_FIELDS, pickDocumentNode, RELATION_DOCUMENT_FIELDS } from '../utils/project_codec';
 import { PROJECT_SCHEMA_VERSION, validateProjectSnapshot } from '../utils/project_schema';
 import { validateSchema } from '../utils/schema_validator';
 import { toSchemaObject, toSchemaString } from '../utils/serialization_util';
@@ -222,50 +223,10 @@ export default class EntityDesigner {
     return report;
   }
 
-  private __componentBaseSnapshot(state: any): any {
-    return {
-      display: state.display,
-      zIndex: state.zIndex,
-      transform: state.transform,
-      origin: state.origin,
-      originX: state.originX,
-      originY: state.originY,
-      lineDash: state.lineDash,
-      lineDashOffset: state.lineDashOffset,
-      lineDashFlow: state.lineDashFlow,
-      lineDashFlowSpeed: state.lineDashFlowSpeed,
-      lineBorder: state.lineBorder,
-      lineBorderWidth: state.lineBorderWidth,
-      lineBorderColor: state.lineBorderColor,
-      fill: state.fill,
-      stroke: state.stroke,
-      linkable: state.linkable,
-      transformable: state.transformable,
-      animations: state.animations,
-    };
-  }
-
+  /** 节点快照由共享 codec 的字段定义驱动（写与校验同一份定义，见 utils/project_codec.ts） */
   private __entitySnapshot(entity: any): any {
     const state = entity.state || {};
-    return {
-      id: state.id,
-      typeId: Entity.typeId,
-      left: state.left,
-      top: state.top,
-      width: state.width,
-      height: state.height,
-      entityName: state.entityName,
-      fields: state.fields,
-      style: state.style,
-      headerStyle: state.headerStyle,
-      fieldStyle: state.fieldStyle,
-      dividerStyle: state.dividerStyle,
-      draggable: state.draggable,
-      interactive: state.interactive,
-      showMinBoundingBox: state.showMinBoundingBox,
-      showMaxBoundingBox: state.showMaxBoundingBox,
-      ...this.__componentBaseSnapshot(state),
-    };
+    return pickDocumentNode({ ...state, typeId: Entity.typeId }, ENTITY_DOCUMENT_FIELDS);
   }
 
   private __slotPoint(component: any, position: string): [number, number] {
@@ -289,49 +250,7 @@ export default class EntityDesigner {
 
   private __relationSnapshot(relation: any): any {
     const state = relation.state || {};
-    return {
-      id: state.id,
-      typeId: Relation.typeId,
-      left: state.left,
-      top: state.top,
-      width: state.width,
-      height: state.height,
-      relationType: state.relationType,
-      referencedColumnName: state.referencedColumnName,
-      sourceField: state.sourceField,
-      targetField: state.targetField,
-      nullable: state.nullable,
-      onDelete: state.onDelete,
-      onUpdate: state.onUpdate,
-      joinTableName: state.joinTableName,
-      fromKey: state.fromKey,
-      toKey: state.toKey,
-      sourceCardinality: state.sourceCardinality,
-      targetCardinality: state.targetCardinality,
-      label: state.label,
-      labelStyle: state.labelStyle,
-      style: state.style,
-      arrow: state.arrow,
-      lineType: state.lineType,
-      escapeDistance: state.escapeDistance,
-      routeType: state.routeType,
-      routeOffset: state.routeOffset,
-      curveType: state.curveType,
-      linkShape: state.linkShape, //连线形态（visio/bezier）；不加进来会导致保存/加载/undo/redo 丢失
-      lineDash: state.lineDash,
-      lineWidth: state.lineWidth,
-      arrowLength: state.arrowLength,
-      arrowAngel: state.arrowAngel,
-      arrowStyle: state.arrowStyle,
-      startPoint: state.startPoint,
-      endPoint: state.endPoint,
-      links: state.links,
-      draggable: state.draggable,
-      interactive: state.interactive,
-      showMinBoundingBox: state.showMinBoundingBox,
-      showMaxBoundingBox: state.showMaxBoundingBox,
-      ...this.__componentBaseSnapshot(state),
-    };
+    return pickDocumentNode({ ...state, typeId: Relation.typeId }, RELATION_DOCUMENT_FIELDS);
   }
 
   /**
@@ -434,6 +353,9 @@ export default class EntityDesigner {
           return null;
         }
         const component = new Clazz(item);
+        // typeId 只是文档的分派元数据，不该留在组件 state/props 里（否则 round-trip 会凭空多出这个键）
+        delete component.state.typeId;
+        delete component.props.typeId;
         this.ice.addChild(component);
         return component;
       };

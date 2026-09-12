@@ -15,9 +15,9 @@ export { PROJECT_SCHEMA_VERSION, validateProjectSnapshot } from './utils/project
 
 // 流程图（与 ER 并列的第二类领域图元与应用层）
 export { default as FlowNode, FLOW_NODE_KINDS } from './flow/FlowNode';
-export type { FlowNodeKind, FlowNodePreset, FlowNodeSnapshot } from './flow/FlowNode';
+export type { FlowNodeKind, FlowNodePreset } from './flow/FlowNode';
 export { default as FlowEdge } from './flow/FlowEdge';
-export type { FlowPort, FlowEdgeSnapshot } from './flow/FlowEdge';
+export type { FlowPort } from './flow/FlowEdge';
 export { default as FlowDesigner, validateFlowSnapshot } from './flow/FlowDesigner';
 export type { FlowSnapshot, FlowLoadReport, FlowSnapshotValidationResult } from './flow/FlowDesigner';
 export { FlowDiamond, FlowParallelogram } from './flow/flow_shapes';
