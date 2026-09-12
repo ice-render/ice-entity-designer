@@ -76,6 +76,12 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 <img src="./tests/assets/editor.png" alt="交互式编辑器与 TypeORM Schema" />
 
+同一套内核也能承载**流程图**（`tests/flowchart-editor.html`）：四类节点（开始/结束、处理、判定、输入/输出，
+其中判定菱形与输入输出平行四边形是自定义 `ICEPath` 形状）、正交/贝塞尔连线 + 分支标签（是/否）、
+拖拽 / 连线 / 撤销重做 / 快照存取：
+
+<img src="./tests/assets/flowchart-editor.png" alt="流程图编辑器示例" />
+
 ## 4. 快速开始
 
 ```bash
@@ -88,6 +94,7 @@ npm run build
 | 示例 | 说明 |
 |---|---|
 | `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
+| `tests/flowchart-editor.html` | 流程图编辑器：四类节点形状、拖拽、连线（含分支标签）、撤销重做、localStorage 存取与 JSON 导出；纯 DOM 面板，只依赖 `dist` 产物 |
 | [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
 
 ```bash
@@ -270,6 +277,7 @@ src/
 | `npm run build` | 清理并完整构建（类型声明 + JS 产物） |
 | `npm run types:check` | 仅做 TypeScript 类型检查 |
 | `npm test` | 运行单元测试（Jest） |
+| `npm run test:e2e` | 浏览器端到端回归（Playwright，覆盖 `tests/entity-editor.html` 与 `tests/flowchart-editor.html`） |
 | `npm run pretty` | Prettier 格式化源码 |
 
 ## 9. 环境要求与依赖
