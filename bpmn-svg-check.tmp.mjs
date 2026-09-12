@@ -1,0 +1,21 @@
+import pw from '/Users/felix/Windows-E-workspace/felix/ice-render/ice-entity-designer/node_modules/@playwright/test/index.js';
+const fs = await import('node:fs');
+const { chromium } = pw;
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+const errs = [];
+page.on('pageerror', (e) => errs.push(String(e)));
+page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+await page.goto('http://127.0.0.1:8091/tests/bpmn-editor.html');
+await page.waitForTimeout(1200);
+const svg = await page.evaluate(() => window.__designer.toSvg({ padding: 16, background: '#ffffff' }));
+console.log('svg bytes:', svg.length, '| paths:', (svg.match(/<path/g) || []).length, '| texts:', (svg.match(/<text/g) || []).length, '| filters:', (svg.match(/<filter/g) || []).length);
+console.log('errors:', errs);
+// 渲染矢量产物
+await page.setContent('<body style="margin:0">' + svg + '</body>');
+await page.waitForTimeout(300);
+const box = await page.locator('svg').boundingBox();
+console.log('rendered size:', Math.round(box.width), 'x', Math.round(box.height));
+await page.screenshot({ path: '/tmp/bpmn-vector.png', clip: { x: 0, y: 0, width: Math.min(box.width, 900), height: Math.min(box.height, 600) } });
+fs.writeFileSync('/tmp/bpmn-export.svg', svg);
+await browser.close();

@@ -205,6 +205,7 @@ flow.undo(); // 100 步历史
 | 样式 | 节点：`fillColor` / `strokeColor` / `textColor` / `fontSize`（`updateNode` 即时生效）；连线：`style.strokeStyle`（线色，同时作为箭头填充）/ `style.lineWidth`、`labelStyle.fillStyle`（标签颜色），全部随快照存取 |
 | 增删改查 | `nodes` / `edges` / `selected` / `select()` / `updateNode()` / `updateEdge()` / `remove()`（删节点级联删连线）/ `clear()` |
 | 历史与快照 | `undo()` / `redo()` / `canUndo()` / `canRedo()`、`serialize()` / `toSnapshot()` / `load()`（返回 `{ loaded, nodes, edges, skipped }`）。文档 **v2 直接复用引擎的序列化机制**：`{ version: 2, kind: 'flowchart', scene: <引擎 Serializer 产物> }`，因此自定义 `data` 与任何新增 state 字段自动往返；v1（`nodes`/`edges` 数组）仍可读，导出统一为 v2 |
+| 导出 | `toSvg(options)` —— 导出**矢量** SVG（放大不糊、可进设计工具/打印）；与画布同一口径 |
 | 视图与订阅 | `fitViewport(padding)`、`subscribe()`、`dispose()` |
 
 自定义形状（判定菱形 / 输入输出平行四边形）在 `src/flow/flow_shapes.ts`，走的是引擎的 `ICEPath` 子类机制。
@@ -251,6 +252,30 @@ const report = fromBpmnXml(xml, bpmn); // 导入并重建（含池 / 泳道容�
 
 BPMN 节点同样是**复合组件**（形状 + 角标 + 标记由 state 派生），内部子组件不写进文档、载入时重建。
 AI Agent 生成 BPMN 的 JSON DSL（`kind: 'bpmn'`）见 `ice-entity-designer-dsl`。
+
+#### 5.4 导出：矢量 SVG（与画布同一口径）
+
+画布的 `toDataURL()` 是**光栅快照**（分辨率写死、放大就糊）。需要出图给文档、打印或设计工具时用
+**矢量导出** —— 它复用引擎的 `exportSvg()`，从组件树 + 路径命令流重新生成 SVG，与画布逐像素同一口径
+（绘制顺序、世界矩阵、样式合并、透明度、祖先裁剪、虚线、渐变、阴影、连线标签）：
+
+```js
+// 流程图 / BPMN（应用层，FlowDesigner 与 BpmnDesigner 都有）
+const svg = designer.toSvg();                                   // 内容自适应 + 透明背景
+const svg = designer.toSvg({ background: '#ffffff', padding: 16 });
+const svg = designer.toSvg({ area: 'viewport' });               // 当前视口所见即所导
+
+// 任何场景（ER / 流程图 / BPMN 都能用，含 `{ svg, width, height }` 版本）
+const svg = IED.exportSvg(ice, { scale: 2 });
+const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
+```
+
+`tests/bpmn-editor.html` 与 `tests/flowchart-editor.html` 上都有「导出 SVG」按钮，点一下即可下载
+（BPMN 案例导出的池/泳道/事件/网关/连线/标签都是矢量）。服务端出图见引擎的 `ICE.headless()`。
+
+限制（与引擎一致）：阴影用 `feDropShadow` 近似（模糊观感不会与画布逐像素相同）；SVG 与 canvas 的
+字形栅格化是两套实现，文字位置**对齐口径一致、逐像素允许微差**；导出的是**静态瞬间**（蚂蚁线动画
+只保留当前相位）。
 
 ## 6. 在 React 中使用
 

@@ -465,6 +465,19 @@ test('保存 / 清空 / 加载：localStorage round-trip 能恢复整个流程',
   await expect(page.locator('#status-output')).toContainText('已加载');
 });
 
+test('SVG 导出：流程图可导出矢量（含节点文字与连线），下载文件名正确', async ({ page }) => {
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-svg')]);
+  expect(download.suggestedFilename()).toBe('flowchart.svg');
+  await page.waitForTimeout(300);
+
+  const svg = await page.evaluate(() => (window as any).__exportedSvg as string);
+  expect(svg).toContain('<svg');
+  expect(svg).toContain('<path');
+  expect(svg).toMatch(/<text/);
+  await expect(page.locator('#status-output')).toContainText('已导出 SVG');
+  expect((page as any).__errors).toEqual([]);
+});
+
 test('清空后可从零建流程：新增节点 + 连线 + 导出 JSON', async ({ page }) => {
   await page.click('#btn-clear');
   await page.waitForTimeout(300);

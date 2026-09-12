@@ -225,6 +225,7 @@
           <span class="toolbar-divider"></span>
           <button id="btn-save">保存</button>
           <button id="btn-load">加载</button>
+          <button id="btn-export-svg">导出 SVG</button>
           <button id="btn-export">导出 JSON</button>
         </div>
         <div class="canvas-wrap">
@@ -690,6 +691,20 @@
         jsonOutput.textContent = JSON.stringify(designer.toSnapshot(), null, 2);
         jsonOutput.scrollIntoView({ block: 'nearest' });
         setStatus('已导出 JSON（见右侧面板）', '#0f766e');
+      });
+
+      // SVG 矢量导出：与画布同一口径，放大不糊，可进设计工具 / 打印
+      document.getElementById('btn-export-svg').addEventListener('click', () => {
+        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
+        window.__exportedSvg = svg;
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'flowchart.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+        setStatus(`已导出 SVG（${svg.length} 字节）`, '#0f766e');
       });
 
       document.getElementById('edge-shape').addEventListener('change', () => {

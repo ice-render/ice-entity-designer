@@ -138,6 +138,26 @@ test('BPMN 校验：案例本身合法，注入违规后能报出具体问题', 
   expect(injected).toContain('unreachable-node');
 });
 
+test('SVG 导出：矢量产物含池/泳道/节点/连线，可下载且与画布口径一致', async ({ page }) => {
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-svg')]);
+  expect(download.suggestedFilename()).toBe('bpmn-process.svg');
+  await page.waitForTimeout(300);
+
+  const svg = await page.evaluate(() => (window as any).__exportedSvg as string);
+  expect(svg).toContain('<svg');
+  expect(svg).toContain('viewBox=');
+  // 节点文字进的是 <text><tspan>，标题与任务名应当都在
+  expect(svg).toContain('银行');
+  expect(svg).toContain('身份核验');
+  // 图形确实是路径（不是把画布贴成一张位图）
+  expect(svg).toContain('<path');
+  expect(svg).not.toContain('<image');
+  // 顺序流/消息流都在（示例里消息流是虚线）
+  expect(svg).toContain('stroke-dasharray');
+  await expect(page.locator('#validate-output')).toContainText('已导出 SVG');
+  expect((page as any).__errors).toEqual([]);
+});
+
 test('BPMN XML：导出含 2.0 命名空间与 DI 布局，导入后元素数量与语义保持', async ({ page }) => {
   await page.click('#btn-export');
   await page.waitForTimeout(300);

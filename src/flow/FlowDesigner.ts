@@ -5,8 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import { Deserializer, Serializer } from 'ice-render';
-import type { ICE } from 'ice-render';
+import { Deserializer, Serializer, exportSvg } from 'ice-render';
+import type { ICE, SvgExportOptions } from 'ice-render';
 import FlowEdge from './FlowEdge';
 import FlowNode from './FlowNode';
 import type { FlowNodeKind } from './FlowNode';
@@ -563,6 +563,24 @@ export default class FlowDesigner {
 
   public canUndo(): boolean {
     return this.__undoStack.length > 0;
+  }
+
+  /**
+   * 把当前流程图导出为 **SVG 矢量图**（打印、进设计工具、服务端出图都走它）。
+   *
+   * 与画布截图（`toDataURL`）的区别：这是矢量，放大不糊、可以再编辑；导出与画布**同一口径**
+   * （绘制顺序、世界矩阵、样式合并、透明度、裁剪、虚线、渐变、阴影），因此"所见即所导"。
+   *
+   * ```js
+   * const svg = designer.toSvg();                             // 内容自适应、透明背景
+   * const svg = designer.toSvg({ background: '#fff', padding: 16 });
+   * const svg = designer.toSvg({ area: 'viewport' });          // 当前视口所见即所得
+   * ```
+   *
+   * 具体实现复用引擎的 `exportSvg(this.ice, options)` —— 应用层不另造一套导出。
+   */
+  public toSvg(options: SvgExportOptions = {}): string {
+    return exportSvg(this.ice, options);
   }
 
   public canRedo(): boolean {

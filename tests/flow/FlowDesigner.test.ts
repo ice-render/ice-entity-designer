@@ -23,6 +23,38 @@ function titles(designer: any): string[] {
   return designer.nodes.map((node: any) => node.state.title);
 }
 
+describe('FlowDesigner.toSvg（SVG 矢量导出）', () => {
+  it('导出内容自适应的 SVG：节点/连线进产物，文字按行输出', () => {
+    const { designer } = makeDesigner();
+    const start = designer.createNode('terminator', { title: '开始', left: 100, top: 80 });
+    const check = designer.createNode('decision', { title: '库存充足？', left: 100, top: 260 });
+    designer.createEdge({ sourceId: start.state.id, targetId: check.state.id, label: '是' });
+
+    const svg = designer.toSvg({ padding: 8, background: '#ffffff' });
+
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('viewBox=');
+    expect(svg).toContain('<path'); // 形状与连线都是矢量路径
+    expect(svg).toContain('<text');
+    expect(svg).toContain('开始');
+    expect(svg).toContain('库存充足？');
+    expect(svg).toContain('是'); // 连线标签
+    expect(svg).toContain('fill="#ffffff"'); // 背景
+    expect(svg).not.toContain('<image'); // 不是把画布贴成位图
+  });
+
+  it('area: "viewport" 时按画布尺寸出图（所见即所导）', () => {
+    const { ice, designer } = makeDesigner();
+    ice.canvasWidth = 800;
+    ice.canvasHeight = 600;
+    designer.createNode('process', { title: '处理', left: 100, top: 100 });
+
+    const svg = designer.toSvg({ area: 'viewport' });
+    expect(svg).toContain('width="800"');
+    expect(svg).toContain('height="600"');
+  });
+});
+
 /**
  * 从 v2 文档里取出节点 state：`{ version:2, kind:'flowchart', scene:{ version, childNodes:[{type,state,childNodes}] } }`
  * （v2 直接复用引擎的序列化产物，所以取的是 `state`，不再是应用层自造的字段清单）
