@@ -123,7 +123,7 @@ npm run build
 | `examples/statechart-editor.html` | 状态机编辑器：伪状态 / 普通状态 / 复合状态容器、转移标签 `事件 [守卫] / 动作` |
 | `examples/gantt-editor.html` | 甘特编辑器：时间轴与按天吸附、依赖线、自动排程、关键路径、资源冲突校验、矢量导出 |
 | `examples/power-editor.html` | 电力一次系统图（单线图）编辑器：110kV 变电站案例（双母线 + 母联 + 两回进线 + 两台主变），开关分合、带电分析与色标、五防相关校验 |
-| `examples/power-symbols.html` | 电力符号表：15 种一次设备符号（记法对齐 JB/T 5872-1991），可缩放平移、导出 SVG |
+| `examples/power-symbols.html` | 电力符号表：23 种一次设备符号（记法对齐 JB/T 5872-1991 与 GB/T 4728.1/3/4/6），可缩放平移、导出 SVG |
 | [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
 
 ```bash

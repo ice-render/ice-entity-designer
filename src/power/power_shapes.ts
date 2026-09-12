@@ -40,6 +40,15 @@ export const POWER_SYMBOL_KINDS = [
   'generator',
   'motor',
   'load',
+  // 第一批补齐（记法依据：GB/T 4728.1/3/4/6 + JB/T 5872）
+  'capacitor',
+  'arcSuppressionCoil',
+  'threeWindingTransformer',
+  'groundingTransformer',
+  'groundingResistor',
+  'cable',
+  'cableTermination',
+  'cubicle',
 ] as const;
 
 export type PowerSymbolKind = (typeof POWER_SYMBOL_KINDS)[number];
@@ -73,6 +82,24 @@ export const POWER_SYMBOL_PRESETS: Record<PowerSymbolKind, PowerSymbolPreset> = 
   generator: { label: '发电机', tag: 'G', width: 52, height: 52, inline: false },
   motor: { label: '电动机', tag: 'M', width: 52, height: 52, inline: false },
   load: { label: '负荷 / 出线', tag: '-', width: 40, height: 40, inline: false },
+
+  // ---- 第一批补齐（标准出处见 docs/power-symbol-spec.md）----
+  /** GB/T 4728.4-2005 S00567「电容器一般符号」：两块平行板 */
+  capacitor: { label: '并联电容器', tag: 'C', width: 52, height: 56, inline: true },
+  /** JB/T 5872-1991 图例：线圈 + 接地符号 */
+  arcSuppressionCoil: { label: '消弧线圈', tag: 'L', width: 48, height: 76, inline: true },
+  /** GB/T 4728.6-2000 06-09：一个圆表示一个绕组 → 三绕组就是三个圆 */
+  threeWindingTransformer: { label: '三绕组变压器', tag: 'TM', width: 56, height: 92, inline: true },
+  /** 变压器（两圆）+ 中性点接地：接地变/站用变的常用画法 */
+  groundingTransformer: { label: '接地变压器', tag: 'TM', width: 56, height: 96, inline: true },
+  /** GB/T 4728.4 电阻器 + GB/T 4728.2 接地符号 */
+  groundingResistor: { label: '接地电阻', tag: 'R', width: 44, height: 72, inline: true },
+  /** GB/T 4728.3-1998 03-01-09「电缆中的导线」：导线 + 胶囊形包裹 */
+  cable: { label: '电缆', tag: 'W', width: 44, height: 72, inline: true },
+  /** GB/T 4728.3-1998 03-04-01「电缆密封终端」：导线 + 喇叭口 */
+  cableTermination: { label: '电缆终端', tag: 'W', width: 48, height: 64, inline: true },
+  /** GB/T 4728.1-85「方框符号」：只表示设备/元件、不反映细节（GIS 间隔、开关柜整体） */
+  cubicle: { label: '间隔 / 开关柜（方框）', tag: 'GIS', width: 200, height: 140, inline: false },
 };
 
 /** 全局外观基准：所有符号共用，保证「一张图上不花」 */
@@ -239,7 +266,15 @@ export default class PowerSymbol extends ICEGroup {
           style: { strokeStyle, fillStyle: strokeStyle, lineWidth: width },
         })
       );
-    const rect = (role: string, left: number, top: number, width: number, height: number, filled = false): any =>
+    const rect = (
+      role: string,
+      left: number,
+      top: number,
+      width: number,
+      height: number,
+      filled = false,
+      radius = 0
+    ): any =>
       this.__add(
         role,
         new ICERect({
@@ -248,6 +283,7 @@ export default class PowerSymbol extends ICEGroup {
           top,
           width,
           height,
+          radius,
           stroke: true,
           interactive: false,
           // 空心元件用白色填充（不能用 'none'：引擎按 canvas 颜色解析，非法值会退回上一次的填充色）
@@ -500,6 +536,122 @@ export default class PowerSymbol extends ICEGroup {
         // 电动机 M：圆 + 圆内字母 M
         circle('body', cx - w / 2 + 2, h / 2 - Math.min(w, h) / 2 + 2, Math.min(w, h) / 2 - 2);
         text('letter', 'M', 0, h / 2 - 26, w, 52, POWER_STYLE.letterFontSize);
+        break;
+      }
+      case 'capacitor': {
+        // 并联电容器 C（GB/T 4728.4 S00567）：两块平行板 + 上下引线
+        line('leadTop', [
+          [cx, 0],
+          [cx, h * 0.34],
+        ]);
+        line('plateTop', [
+          [cx - 15, h * 0.34],
+          [cx + 15, h * 0.34],
+        ]);
+        line('plateBottom', [
+          [cx - 15, h * 0.5],
+          [cx + 15, h * 0.5],
+        ]);
+        line('leadBottom', [
+          [cx, h * 0.5],
+          [cx, h],
+        ]);
+        break;
+      }
+      case 'arcSuppressionCoil': {
+        // 消弧线圈（JB/T 5872 图例）：线圈 + 接地符号
+        line('leadTop', [
+          [cx, 0],
+          [cx, h * 0.22],
+        ]);
+        line('coil', arcPoints(cx, h * 0.22 + 8, 8, 180, 360));
+        line('coil', arcPoints(cx, h * 0.22 + 24, 8, 180, 360));
+        line('coil', arcPoints(cx, h * 0.22 + 40, 8, 180, 360));
+        line('leadBottom', [
+          [cx, h * 0.22 + 48],
+          [cx, h * 0.68],
+        ]);
+        this.__earth(cx, h * 0.68, 14, strokeStyle, lw);
+        break;
+      }
+      case 'threeWindingTransformer': {
+        // 三绕组变压器（GB/T 4728.6 06-09：一个圆表示一个绕组）→ 三个相扣圆
+        line('leadTop', [
+          [cx, 0],
+          [cx, h * 0.14],
+        ]);
+        const r = 13;
+        circle('windingHigh', cx - r, h * 0.14, r);
+        circle('windingMid', cx - r, h * 0.14 + 18, r);
+        circle('windingLow', cx - r, h * 0.14 + 36, r);
+        line('leadBottom', [
+          [cx, h * 0.14 + 49],
+          [cx, h],
+        ]);
+        break;
+      }
+      case 'groundingTransformer': {
+        // 接地变 / 站用变：双绕组变压器 + 中性点接地符号
+        line('leadTop', [
+          [cx, 0],
+          [cx, h * 0.16],
+        ]);
+        circle('windingPrimary', cx - 12, h * 0.16, 12);
+        circle('windingSecondary', cx - 12, h * 0.16 + 18, 12);
+        line('leadBottom', [
+          [cx, h * 0.16 + 36],
+          [cx, h * 0.62],
+        ]);
+        this.__earth(cx, h * 0.62, 14, strokeStyle, lw);
+        break;
+      }
+      case 'groundingResistor': {
+        // 接地电阻：电阻器（矩形，GB/T 4728.4）+ 接地符号
+        line('leadTop', [
+          [cx, 0],
+          [cx, h * 0.24],
+        ]);
+        rect('resistorBody', cx - 8, h * 0.24, 16, h * 0.34);
+        line('leadBottom', [
+          [cx, h * 0.58],
+          [cx, h * 0.72],
+        ]);
+        this.__earth(cx, h * 0.72, 14, strokeStyle, lw);
+        break;
+      }
+      case 'cable': {
+        // 电缆（GB/T 4728.3 03-01-09「电缆中的导线」）：导线 + 胶囊形包裹
+        line('leadTop', [
+          [cx, 0],
+          [cx, h],
+        ]);
+        rect('cableEnvelope', cx - 10, h * 0.3, 20, h * 0.4, false, 10);
+        break;
+      }
+      case 'cableTermination': {
+        // 电缆终端（GB/T 4728.3 03-04-01「电缆密封终端」）：导线 + 喇叭口
+        line('leadTop', [
+          [cx, 0],
+          [cx, h],
+        ]);
+        // 注意：**不要用「首尾重复点」表达闭合** —— 引擎在这种情况下会拿零尺寸离屏 canvas
+        // 去 drawImage，控制台报错（已记录到引擎 13 号文档 §8）。喇叭口用开放折线画即可。
+        line('terminationFlare', [
+          [cx - 6, h * 0.34],
+          [cx + 6, h * 0.34],
+          [cx + 13, h * 0.62],
+          [cx - 13, h * 0.62],
+        ]);
+        break;
+      }
+      case 'cubicle': {
+        // 间隔 / 开关柜（GIS 等成套装置）：GB/T 4728.1 的「方框符号」——只表示设备，不反映细节
+        rect('cabinet', 0, 0, w, h);
+        // 内部一条横向分隔线，示意「柜内还有设备」，具体设备另行摆放/标注
+        line('cabinetDivider', [
+          [0, h * 0.24],
+          [w, h * 0.24],
+        ]);
         break;
       }
       case 'load': {

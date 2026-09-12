@@ -208,3 +208,91 @@ describe('电力符号库 · 外观统一与文档形态', () => {
     expect(roles(symbol)).toContain('contactBar');
   });
 });
+
+/**
+ * 第一批补齐的符号。记法出处：
+ * - GB/T 4728.4-2005（基本无源元件）：电容器 = 两块平行板；
+ * - GB/T 4728.6-2000（电能的发生与转换）：一个圆表示一个绕组 → 三绕组变压器 = 三个圆；
+ * - GB/T 4728.3-1998（导体和连接器件）：电缆 = 导线 + 胶囊形包裹；电缆密封终端 = 导线 + 喇叭口；
+ * - GB/T 4728.1-85（总则）：方框符号只表示设备/元件、不反映细节（GIS 间隔、开关柜整体）；
+ * - JB/T 5872-1991：消弧线圈 = 线圈 + 接地符号。
+ */
+describe('电力符号库 · 第一批补齐（电容器 / 消弧线圈 / 三绕组变 / 接地设备 / 电缆）', () => {
+  it('并联电容器：两块平行板 + 上下引线（GB/T 4728.4 S00567）', () => {
+    const capacitor = makeSymbol('capacitor');
+    const top = capacitor.part('plateTop');
+    const bottom = capacitor.part('plateBottom');
+    expect(roles(capacitor)).toContain('leadTop');
+    expect(roles(capacitor)).toContain('leadBottom');
+    // 两块板都是水平线、等长，且上下分开
+    expect(Math.round(top.state.points[0][1])).toBe(Math.round(top.state.points[1][1]));
+    const topWidth = Math.abs(top.state.points[1][0] - top.state.points[0][0]);
+    const bottomWidth = Math.abs(bottom.state.points[1][0] - bottom.state.points[0][0]);
+    expect(topWidth).toBe(bottomWidth);
+    expect(bottom.state.points[0][1]).toBeGreaterThan(top.state.points[0][1]);
+  });
+
+  it('消弧线圈：线圈（多段弧）+ 接地符号（JB/T 5872）', () => {
+    const coil = makeSymbol('arcSuppressionCoil');
+    expect(roleCount(coil, 'coil')).toBeGreaterThanOrEqual(3);
+    expect(roleCount(coil, 'earth')).toBe(3);
+    expect(roles(coil)).not.toContain('plateTop'); // 不是电容器
+  });
+
+  it('三绕组变压器：三个相扣圆（GB/T 4728.6「一个圆表示一个绕组」）', () => {
+    const transformer = makeSymbol('threeWindingTransformer');
+    expect(roles(transformer)).toContain('windingHigh');
+    expect(roles(transformer)).toContain('windingMid');
+    expect(roles(transformer)).toContain('windingLow');
+    expect(roles(transformer)).toContain('leadTop');
+    expect(roles(transformer)).toContain('leadBottom');
+  });
+
+  it('接地变 / 接地电阻：都带接地符号，但本体分别是「两圆」与「矩形」', () => {
+    const groundingTransformer = makeSymbol('groundingTransformer');
+    expect(roleCount(groundingTransformer, 'earth')).toBe(3);
+    expect(roles(groundingTransformer)).toContain('windingPrimary');
+    expect(roles(groundingTransformer)).toContain('windingSecondary');
+
+    const groundingResistor = makeSymbol('groundingResistor');
+    expect(roleCount(groundingResistor, 'earth')).toBe(3);
+    expect(roles(groundingResistor)).toContain('resistorBody');
+    expect(roles(groundingResistor)).not.toContain('windingPrimary');
+  });
+
+  it('电缆 / 电缆终端：导线 + 胶囊包裹 / 导线 + 喇叭口（GB/T 4728.3）', () => {
+    const cable = makeSymbol('cable');
+    expect(roles(cable)).toContain('cableEnvelope');
+    const envelope = cable.part('cableEnvelope');
+    // 胶囊是圆角矩形：宽 < 高、带 radius
+    expect(envelope.state.width).toBeLessThan(envelope.state.height);
+    expect(envelope.state.radius).toBeGreaterThan(0);
+    // 导线是贯穿的
+    expect(cable.part('leadTop').state.points[0][1]).toBe(0);
+
+    const termination = makeSymbol('cableTermination');
+    expect(roles(termination)).toContain('terminationFlare');
+    // 喇叭口是折线，且末端比首端宽
+    const flare = termination.part('terminationFlare').state.points;
+    const startWidth = Math.abs(flare[1][0] - flare[0][0]);
+    const endWidth = Math.abs(flare[3][0] - flare[2][0]);
+    expect(endWidth).toBeGreaterThan(startWidth);
+  });
+
+  it('间隔 / 开关柜：方框符号（GB/T 4728.1）+ 内部分隔线', () => {
+    const cubicle = makeSymbol('cubicle');
+    expect(roles(cubicle)).toContain('cabinet');
+    expect(roles(cubicle)).toContain('cabinetDivider');
+    const cabinet = cubicle.part('cabinet');
+    expect(cabinet.state.width).toBeGreaterThan(150); // 能装下内部设备/标注
+    expect(cabinet.state.height).toBeGreaterThan(100);
+  });
+
+  it('新符号的文字符号也在列（C / TM / W / GIS）', () => {
+    expect(POWER_SYMBOL_PRESETS.capacitor.tag).toBe('C');
+    expect(POWER_SYMBOL_PRESETS.threeWindingTransformer.tag).toBe('TM');
+    expect(POWER_SYMBOL_PRESETS.groundingTransformer.tag).toBe('TM');
+    expect(POWER_SYMBOL_PRESETS.cable.tag).toBe('W');
+    expect(POWER_SYMBOL_PRESETS.cubicle.tag).toBe('GIS');
+  });
+});

@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
   (page as any).__errors = errors;
 });
 
-test('符号表：15 种符号齐备，文字符号对齐 JB/T 5872', async ({ page }) => {
+test('符号表：23 种符号齐备，文字符号对齐 JB/T 5872 与 GB/T 4728', async ({ page }) => {
   const info = await page.evaluate(() => {
     const ice = (window as any).__ice;
     const symbols: Array<{ kind: string; tag: string; parts: number }> = [];
@@ -54,6 +54,14 @@ test('符号表：15 种符号齐备，文字符号对齐 JB/T 5872', async ({ p
     'generator',
     'motor',
     'load',
+    'capacitor',
+    'arcSuppressionCoil',
+    'threeWindingTransformer',
+    'groundingTransformer',
+    'groundingResistor',
+    'cable',
+    'cableTermination',
+    'cubicle',
   ]);
   const tags = new Map(info.map((item) => [item.kind, item.tag]));
   expect(tags.get('breaker')).toBe('QF');
@@ -64,6 +72,11 @@ test('符号表：15 种符号齐备，文字符号对齐 JB/T 5872', async ({ p
   expect(tags.get('voltageTransformer')).toBe('TV');
   expect(tags.get('transformer')).toBe('TM');
   expect(tags.get('fuse')).toBe('FU');
+  // 第一批补齐的符号
+  expect(tags.get('capacitor')).toBe('C');
+  expect(tags.get('threeWindingTransformer')).toBe('TM');
+  expect(tags.get('cable')).toBe('W');
+  expect(tags.get('cubicle')).toBe('GIS');
   // 每个符号都要有派生部件（不是空壳）
   info.forEach((item) => expect(item.parts).toBeGreaterThan(0));
   expect((page as any).__errors).toEqual([]);
