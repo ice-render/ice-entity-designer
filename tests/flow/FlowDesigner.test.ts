@@ -190,6 +190,45 @@ describe('FlowDesigner 快照', () => {
     expect(report).toMatchObject({ loaded: true, nodes: 1, edges: 0 });
     expect(report.skipped).toEqual(['Entity', 'Relation']);
   });
+
+  it('节点文字颜色 / 字号可改，并随快照往返（回归：此前是写死的）', () => {
+    const { designer } = makeDesigner();
+    const node = designer.createNode('process', { title: 'A', textColor: '#b91c1c', fontSize: 18 });
+    expect(node.childNodes[1].state.style.fillStyle).toBe('#b91c1c');
+    expect(node.childNodes[1].state.style.fontSize).toBe(18);
+
+    const first = designer.serialize();
+    expect(JSON.parse(first).nodes[0]).toMatchObject({ textColor: '#b91c1c', fontSize: 18 });
+
+    designer.load(first);
+    const loaded = designer.nodes[0];
+    expect(loaded.state.textColor).toBe('#b91c1c');
+    expect(loaded.state.fontSize).toBe(18);
+    expect(loaded.childNodes[1].state.style.fillStyle).toBe('#b91c1c');
+    expect(designer.serialize()).toBe(first);
+  });
+
+  it('连线线色 / 线宽 / 标签颜色随快照往返（回归：style / labelStyle 此前未进快照）', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createNode('process', { left: 0, top: 0 });
+    const b = designer.createNode('process', { left: 0, top: 300 });
+    designer.createEdge({ sourceId: a.state.id, targetId: b.state.id, label: '是' });
+    designer.updateEdge(designer.edges[0].state.id, {
+      style: { strokeStyle: '#0284c7', lineWidth: 3 },
+      labelStyle: { fillStyle: '#b91c1c' },
+    });
+
+    const first = designer.serialize();
+    const firstEdge = JSON.parse(first).edges[0];
+    expect(firstEdge.style.strokeStyle).toBe('#0284c7');
+    expect(firstEdge.labelStyle.fillStyle).toBe('#b91c1c');
+
+    designer.load(first);
+    expect(designer.edges[0].state.style.strokeStyle).toBe('#0284c7');
+    expect(designer.edges[0].state.style.lineWidth).toBe(3);
+    expect(designer.edges[0].state.labelStyle.fillStyle).toBe('#b91c1c');
+    expect(designer.serialize()).toBe(first);
+  });
 });
 
 describe('FlowDesigner 历史与视图', () => {

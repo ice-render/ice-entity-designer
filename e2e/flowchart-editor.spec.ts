@@ -384,6 +384,70 @@ test('联动：画布拖动节点后，右侧 JSON 与属性面板同步（回�
   expect(restored.top).not.toBeCloseTo(node.top, 1);
 });
 
+test('属性面板：文字颜色/字号/连线颜色/线宽/标签颜色可改，且能随快照往返（回归）', async ({ page }) => {
+  const nodeState = () =>
+    page.evaluate(() => {
+      const node = (window as any).__designer.nodes[0];
+      return {
+        textColor: node.state.textColor,
+        fontSize: node.state.fontSize,
+        labelFill: node.childNodes[1].state.style.fillStyle,
+        labelFontSize: node.childNodes[1].state.style.fontSize,
+      };
+    });
+
+  await clickCanvasAt(page, await nodeCanvasPoint(page, 0));
+  await page.waitForTimeout(300);
+
+  // 文字颜色 / 字号（此前面板里根本没有这两个字段）
+  await page.locator('[data-field="textColor"]').fill('#b91c1c');
+  await page.waitForTimeout(250);
+  await page.locator('[data-field="fontSize"]').fill('20');
+  await page.locator('[data-field="fontSize"]').dispatchEvent('change');
+  await page.waitForTimeout(250);
+  expect(await nodeState()).toMatchObject({
+    textColor: '#b91c1c',
+    fontSize: 20,
+    labelFill: '#b91c1c',
+    labelFontSize: 20,
+  });
+
+  // 连线：线色 / 线宽 / 标签颜色
+  const edgeId = await page.evaluate(() => (window as any).__designer.edges[0].state.id);
+  await page.evaluate((id) => (window as any).__designer.select(id), edgeId);
+  await page.waitForTimeout(300);
+  await page.locator('[data-field="lineColor"]').fill('#0284c7');
+  await page.waitForTimeout(200);
+  await page.locator('[data-field="lineWidth"]').fill('3');
+  await page.locator('[data-field="lineWidth"]').dispatchEvent('change');
+  await page.waitForTimeout(200);
+  await page.locator('[data-field="labelColor"]').fill('#b91c1c');
+  await page.waitForTimeout(250);
+
+  const edgeState = () =>
+    page.evaluate(() => {
+      const edge = (window as any).__designer.edges[0];
+      return {
+        stroke: edge.state.style.strokeStyle,
+        width: edge.state.style.lineWidth,
+        label: edge.state.labelStyle.fillStyle,
+      };
+    });
+  expect(await edgeState()).toEqual({ stroke: '#0284c7', width: 3, label: '#b91c1c' });
+
+  // 往返：保存 → 清空 → 加载后样式仍在（回归：连线 style/labelStyle 此前根本不进快照）
+  await page.click('#btn-save');
+  await page.waitForTimeout(250);
+  await page.click('#btn-clear');
+  await page.waitForTimeout(300);
+  await page.click('#btn-load');
+  await page.waitForTimeout(500);
+
+  expect(await nodeState()).toMatchObject({ textColor: '#b91c1c', fontSize: 20, labelFill: '#b91c1c' });
+  expect(await edgeState()).toEqual({ stroke: '#0284c7', width: 3, label: '#b91c1c' });
+  expect((page as any).__errors).toEqual([]);
+});
+
 test('保存 / 清空 / 加载：localStorage round-trip 能恢复整个流程', async ({ page }) => {
   const saved = await counts(page);
   await page.click('#btn-save');

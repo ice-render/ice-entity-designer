@@ -385,11 +385,16 @@
           syncValue(panelControls.kind, selected.state.kind);
           syncValue(panelControls.fill, selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill);
           syncValue(panelControls.stroke, selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke);
+          syncValue(panelControls.textColor, selected.state.textColor || '#0f172a');
+          syncValue(panelControls.fontSize, selected.state.fontSize || 14);
           syncValue(panelControls.width, selected.state.width);
           syncValue(panelControls.height, selected.state.height);
           return;
         }
         syncValue(panelControls.label, selected.state.label || '');
+        syncValue(panelControls.lineColor, (selected.state.style && selected.state.style.strokeStyle) || '#475569');
+        syncValue(panelControls.lineWidth, (selected.state.style && selected.state.style.lineWidth) || 1.6);
+        syncValue(panelControls.labelColor, (selected.state.labelStyle && selected.state.labelStyle.fillStyle) || '#334155');
         syncValue(panelControls.shape, selected.state.linkShape || 'visio');
       }
 
@@ -432,6 +437,7 @@
         if (selected.constructor.typeId === FlowNode.typeId) {
           const titleInput = document.createElement('input');
           titleInput.type = 'text';
+          titleInput.dataset.field = 'title';
           titleInput.value = selected.state.title || '';
           titleInput.addEventListener('change', () => {
             designer.updateNode(selected.state.id, { title: titleInput.value });
@@ -439,6 +445,7 @@
           panelControls = { title: row('标题', titleInput) };
 
           const kindSelect = document.createElement('select');
+          kindSelect.dataset.field = 'kind';
           Object.keys(FLOW_NODE_KINDS).forEach((kind) => {
             const option = document.createElement('option');
             option.value = kind;
@@ -460,6 +467,7 @@
 
           const fillInput = document.createElement('input');
           fillInput.type = 'color';
+          fillInput.dataset.field = 'fill';
           fillInput.value = selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill;
           fillInput.addEventListener('input', () => {
             // 取色器拖动过程中实时反馈：首次 input 记一次历史（记的是改之前的状态），
@@ -484,6 +492,7 @@
 
           const strokeInput = document.createElement('input');
           strokeInput.type = 'color';
+          strokeInput.dataset.field = 'stroke';
           strokeInput.value = selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke;
           strokeInput.addEventListener('input', () => {
             if (!colorSession) {
@@ -504,12 +513,46 @@
           });
           panelControls.stroke = row('边框', strokeInput);
 
+          const textColorInput = document.createElement('input');
+          textColorInput.type = 'color';
+          textColorInput.dataset.field = 'textColor';
+          textColorInput.value = selected.state.textColor || '#0f172a';
+          textColorInput.addEventListener('input', () => {
+            if (!colorSession) {
+              designer.captureHistory();
+              colorSession = true;
+            }
+            selected.applyPatch({ textColor: textColorInput.value });
+            renderPanel();
+          });
+          textColorInput.addEventListener('change', () => {
+            if (colorSession) {
+              colorSession = false;
+              selected.applyPatch({ textColor: textColorInput.value });
+              renderPanel();
+              return;
+            }
+            designer.updateNode(selected.state.id, { textColor: textColorInput.value });
+          });
+          panelControls.textColor = row('文字颜色', textColorInput);
+
+          const fontSizeInput = document.createElement('input');
+          fontSizeInput.type = 'number';
+          fontSizeInput.dataset.field = 'fontSize';
+          fontSizeInput.min = '8';
+          fontSizeInput.value = selected.state.fontSize || 14;
+          fontSizeInput.addEventListener('change', () => {
+            designer.updateNode(selected.state.id, { fontSize: Number(fontSizeInput.value) || selected.state.fontSize });
+          });
+          panelControls.fontSize = row('文字字号', fontSizeInput);
+
           [
             ['宽度', 'width'],
             ['高度', 'height'],
           ].forEach(([labelText, key]) => {
             const input = document.createElement('input');
             input.type = 'number';
+            input.dataset.field = key;
             input.min = '40';
             input.value = selected.state[key];
             input.addEventListener('change', () => {
@@ -528,6 +571,7 @@
         // 连线
         const labelInput = document.createElement('input');
         labelInput.type = 'text';
+        labelInput.dataset.field = 'label';
         labelInput.placeholder = '例如：是 / 否';
         labelInput.value = selected.state.label || '';
         labelInput.addEventListener('change', () => {
@@ -535,7 +579,37 @@
         });
         panelControls = { label: row('标签', labelInput) };
 
+        const lineColorInput = document.createElement('input');
+        lineColorInput.type = 'color';
+        lineColorInput.dataset.field = 'lineColor';
+        lineColorInput.value = (selected.state.style && selected.state.style.strokeStyle) || '#475569';
+        lineColorInput.addEventListener('change', () => {
+          designer.updateEdge(selected.state.id, { style: { strokeStyle: lineColorInput.value, fillStyle: lineColorInput.value } });
+        });
+        panelControls.lineColor = row('连线颜色', lineColorInput);
+
+        const lineWidthInput = document.createElement('input');
+        lineWidthInput.type = 'number';
+        lineWidthInput.dataset.field = 'lineWidth';
+        lineWidthInput.min = '0.5';
+        lineWidthInput.step = '0.5';
+        lineWidthInput.value = (selected.state.style && selected.state.style.lineWidth) || 1.6;
+        lineWidthInput.addEventListener('change', () => {
+          designer.updateEdge(selected.state.id, { style: { lineWidth: Number(lineWidthInput.value) || 1.6 } });
+        });
+        panelControls.lineWidth = row('连线粗细', lineWidthInput);
+
+        const labelColorInput = document.createElement('input');
+        labelColorInput.type = 'color';
+        labelColorInput.dataset.field = 'labelColor';
+        labelColorInput.value = (selected.state.labelStyle && selected.state.labelStyle.fillStyle) || '#334155';
+        labelColorInput.addEventListener('change', () => {
+          designer.updateEdge(selected.state.id, { labelStyle: { fillStyle: labelColorInput.value } });
+        });
+        panelControls.labelColor = row('标签颜色', labelColorInput);
+
         const shapeSelect = document.createElement('select');
+        shapeSelect.dataset.field = 'shape';
         [
           ['visio', 'Visio 折线'],
           ['bezier', '贝塞尔曲线'],

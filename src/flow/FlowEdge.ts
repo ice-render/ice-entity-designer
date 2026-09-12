@@ -22,6 +22,10 @@ export type FlowEdgeSnapshot = {
   linkShape: string;
   startPoint: number[];
   endPoint: number[];
+  /** 线色 / 线宽等（引擎 ICEPolyLine 的 style）；缺省时引擎用内置默认 */
+  style?: Record<string, any>;
+  /** 标签的字号 / 颜色 / 背景（引擎的 labelStyle） */
+  labelStyle?: Record<string, any>;
 };
 
 /**
@@ -75,6 +79,8 @@ export default class FlowEdge extends ICEVisioLink {
       linkShape: this.state.linkShape,
       startPoint: this.state.startPoint,
       endPoint: this.state.endPoint,
+      style: { ...(this.state.style || {}) },
+      labelStyle: { ...(this.state.labelStyle || {}) },
     };
   }
 }

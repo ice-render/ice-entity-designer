@@ -43,6 +43,10 @@ const SHAPE_BY_KIND: Record<FlowNodePreset['shape'], any> = {
   parallelogram: FlowParallelogram,
 };
 
+/** 节点标题的默认颜色 / 字号（可被 state.textColor / state.fontSize 覆盖） */
+const DEFAULT_TEXT_COLOR = '#0f172a';
+const DEFAULT_FONT_SIZE = 14;
+
 /** 流程图节点在快照里的纯数据（不含引擎内部状态） */
 export type FlowNodeSnapshot = {
   id: string;
@@ -55,6 +59,8 @@ export type FlowNodeSnapshot = {
   height: number;
   fillColor: string;
   strokeColor: string;
+  textColor: string;
+  fontSize: number;
 };
 
 /**
@@ -79,6 +85,8 @@ export default class FlowNode extends ICEGroup {
       title: preset.label,
       fillColor: preset.fill,
       strokeColor: preset.stroke,
+      textColor: DEFAULT_TEXT_COLOR,
+      fontSize: DEFAULT_FONT_SIZE,
       width: preset.width,
       height: preset.height,
       // 容器只做定位与拖拽：背景交给子形状，避免「方形底 + 菱形轮廓」
@@ -130,8 +138,8 @@ export default class FlowNode extends ICEGroup {
       showMinBoundingBox: false,
       showMaxBoundingBox: false,
       style: {
-        fontSize: 14,
-        fillStyle: '#0f172a',
+        fontSize: this.state.fontSize || DEFAULT_FONT_SIZE,
+        fillStyle: this.state.textColor || DEFAULT_TEXT_COLOR,
         textAlign: 'center',
         textBaseline: 'middle',
         paddingLeft: 12,
@@ -148,6 +156,8 @@ export default class FlowNode extends ICEGroup {
       patch.kind !== undefined ||
       patch.fillColor !== undefined ||
       patch.strokeColor !== undefined ||
+      patch.textColor !== undefined ||
+      patch.fontSize !== undefined ||
       patch.width !== undefined ||
       patch.height !== undefined;
     this.setState(patch);
@@ -173,6 +183,8 @@ export default class FlowNode extends ICEGroup {
       height: this.state.height,
       fillColor: this.state.fillColor,
       strokeColor: this.state.strokeColor,
+      textColor: this.state.textColor || DEFAULT_TEXT_COLOR,
+      fontSize: this.state.fontSize || DEFAULT_FONT_SIZE,
     };
   }
 }

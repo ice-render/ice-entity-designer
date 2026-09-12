@@ -178,6 +178,7 @@ flow.undo(); // 100 步历史
 |---|---|
 | 节点类型 | `createNode('terminator' \| 'process' \| 'decision' \| 'io', props)`；预设尺寸 / 配色见 `FLOW_NODE_KINDS` |
 | 连线 | `createEdge({ sourceId, targetId, sourcePort, targetPort, label, linkShape })`；插槽位置 `T/R/B/L/C`，节点拖动时连线自动跟随 |
+| 样式 | 节点：`fillColor` / `strokeColor` / `textColor` / `fontSize`（`updateNode` 即时生效）；连线：`style.strokeStyle`（线色，同时作为箭头填充）/ `style.lineWidth`、`labelStyle.fillStyle`（标签颜色），全部随快照存取 |
 | 增删改查 | `nodes` / `edges` / `selected` / `select()` / `updateNode()` / `updateEdge()` / `remove()`（删节点级联删连线）/ `clear()` |
 | 历史与快照 | `undo()` / `redo()` / `canUndo()` / `canRedo()`、`serialize()` / `toSnapshot()` / `load()`（返回 `{ loaded, nodes, edges, skipped }`） |
 | 视图与订阅 | `fitViewport(padding)`、`subscribe()`、`dispose()` |
