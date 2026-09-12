@@ -53,6 +53,21 @@ export const UML_RELATION_STYLE: Record<UmlRelationKind, UmlRelationStyle> = {
 };
 
 /**
+ * 每种关系的语义色（同一张图里「线是什么关系」要能一眼分辨）。
+ *
+ * 取色原则：继承/实现是**类型关系**（靛蓝系），聚合/组合是**结构关系**（墨绿系），
+ * 关联/依赖是**弱关系**（石板灰，越弱越淡）。
+ */
+export const UML_RELATION_COLOR: Record<UmlRelationKind, string> = {
+  inheritance: '#6366f1',
+  realization: '#8b5cf6',
+  association: '#64748b',
+  aggregation: '#0d9488',
+  composition: '#0f766e',
+  dependency: '#94a3b8',
+};
+
+/**
  * @class UmlRelation UML 类图的关系线
  *
  * 复用引擎的折线（`ICEPolyLine`）：插槽吸附、正交/贝塞尔路由、标签、跟随宿主都是现成的。
@@ -80,7 +95,7 @@ export default class UmlRelation extends ICEPolyLine {
       {
         relationKind: 'association',
         label: '',
-        arrowLength: 14,
+        arrowLength: 12,
         fill: false,
       },
       props
@@ -107,6 +122,7 @@ export default class UmlRelation extends ICEPolyLine {
   private __applyNotation(): void {
     const kind: UmlRelationKind = (this.state.relationKind || 'association') as UmlRelationKind;
     const notation = UML_RELATION_STYLE[kind] || UML_RELATION_STYLE.association;
+    const color = UML_RELATION_COLOR[kind] || UML_RELATION_COLOR.association;
     this.state.umlMarker = notation.marker;
     this.state.arrowStyle = notation.marker === 'none' ? 'none' : notation.filled ? 'filled' : 'hollow';
     this.state.lineDash = notation.dashed
@@ -115,6 +131,13 @@ export default class UmlRelation extends ICEPolyLine {
         : [8, 5]
       : [];
     this.state.arrow = notation.marker === 'none' ? 'none' : notation.markerEnd;
+    // 线色跟着关系种类走（描边与标记填充同色，空心标记才不会被自己的填充盖住）
+    this.state.style = {
+      ...(this.state.style || {}),
+      strokeStyle: color,
+      fillStyle: color,
+      lineWidth: 1.4,
+    };
   }
 
   /**

@@ -26,7 +26,8 @@ export default class GanttDependency extends ICEPolyLine {
           fill: false,
           routeType: 'orthogonal',
           routeOffset: 14,
-          style: { strokeStyle: '#64748b', lineWidth: 1.5 },
+          arrowLength: 12,
+          style: { strokeStyle: '#94a3b8', fillStyle: '#94a3b8', lineWidth: 1.3 },
         },
         props
       )

@@ -38,7 +38,7 @@ export default class FlowEdge extends ICEVisioLink {
       endPoint: [10, 10],
       label: '',
       ...props,
-      style: { strokeStyle: '#475569', fillStyle: '#475569', lineWidth: 1.6, ...(props.style || {}) },
+      style: { strokeStyle: '#64748b', fillStyle: '#64748b', lineWidth: 1.4, ...(props.style || {}) },
       labelStyle: {
         fontSize: 12,
         fillStyle: '#334155',
@@ -72,7 +72,7 @@ export default class FlowEdge extends ICEVisioLink {
         ? { lineDash: [7, 4], arrowStyle: 'hollow', lineWidth: next.lineWidth || 1.4 }
         : flowType === 'association'
         ? { lineDash: [2, 3], arrow: 'none', arrowStyle: 'hollow', lineWidth: next.lineWidth || 1.2 }
-        : { arrow: next.arrow || 'end', arrowStyle: 'filled', lineDash: [], lineWidth: next.lineWidth || 1.6 };
+        : { arrow: next.arrow || 'end', arrowStyle: 'filled', lineDash: [], lineWidth: next.lineWidth || 1.4 };
     this.setState({ ...patch, ...derived });
     this.dirty = true;
     return this;

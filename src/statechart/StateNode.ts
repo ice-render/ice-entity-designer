@@ -53,10 +53,10 @@ export default class StateNode extends ICEGroup {
         // 框/圆一律由派生形状绘制。
         fill: false,
         stroke: false,
-        style: { strokeStyle: '#334155', fillStyle: '#ffffff', lineWidth: 1.5 },
+        style: { strokeStyle: '#94a3b8', fillStyle: '#ffffff', lineWidth: 1.25, shadow: 'sm' },
         labelStyle: {
-          textColor: '#0f172a',
-          fontSize: 14,
+          textColor: '#1e293b',
+          fontSize: 13.5,
           fontWeight: 'normal',
           paddingLeft: 12,
           paddingTop: 10,
@@ -109,7 +109,8 @@ export default class StateNode extends ICEGroup {
         radius: Math.min(width, height) / 2,
         stroke: false,
         interactive: false,
-        style: { fillStyle: this.state.style.strokeStyle || '#334155' },
+        // 伪状态用固定的深色：UML 里初始态是**实心黑点**，跟着状态的边框色（浅石板）变淡就不成记法了
+        style: { fillStyle: this.state.style.pseudoColor || '#334155' },
       });
       this.addChild(this.shapeComponent);
       return;
@@ -127,7 +128,7 @@ export default class StateNode extends ICEGroup {
         interactive: false,
         style: {
           fillStyle: this.state.style.fillStyle || '#ffffff',
-          strokeStyle: this.state.style.strokeStyle || '#334155',
+          strokeStyle: this.state.style.pseudoColor || '#334155',
           lineWidth,
         },
       });
@@ -139,7 +140,7 @@ export default class StateNode extends ICEGroup {
         radius: radius * 0.6,
         stroke: false,
         interactive: false,
-        style: { fillStyle: this.state.style.strokeStyle || '#334155' },
+        style: { fillStyle: this.state.style.pseudoColor || '#334155' },
       });
       this.addChild(this.shapeComponent);
       this.addChild(this.innerRingComponent);
@@ -160,6 +161,8 @@ export default class StateNode extends ICEGroup {
         fillStyle: this.state.style.fillStyle || '#ffffff',
         strokeStyle: this.state.style.strokeStyle || '#334155',
         lineWidth: this.state.style.lineWidth || 1.5,
+        shadow: this.state.style.shadow,
+        lineDash: kind === 'composite' ? [6, 5] : [],
       },
     });
     this.addChild(this.shapeComponent);

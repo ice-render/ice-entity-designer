@@ -25,7 +25,20 @@ export default class StateTransition extends ICEPolyLine {
   }
 
   protected static arrangeParam(props: any = {}) {
-    const param = merge({ event: '', guard: '', action: '', arrow: 'end', arrowStyle: 'filled', fill: false }, props);
+    const param = merge(
+      {
+        event: '',
+        guard: '',
+        action: '',
+        arrow: 'end',
+        arrowStyle: 'filled',
+        fill: false,
+        arrowLength: 12,
+        style: { strokeStyle: '#64748b', fillStyle: '#64748b', lineWidth: 1.4 },
+        labelStyle: { fontSize: 12.5, fillStyle: '#334155', backgroundColor: '#ffffff' },
+      },
+      props
+    );
     // label 缺省时由 event/guard/action 拼；显式给了 label 就尊重显式值
     if (props.label === undefined) {
       param.label = StateTransition.composeLabel(param);

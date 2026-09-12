@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { expectCanvasInteractions } from './canvas-helpers';
 
 /**
  * tests/uml-editor.html 端到端回归：UML 类图域包（电商支付类模型）。
@@ -104,5 +105,10 @@ test('文本互操作：导出 PlantUML → 改文本 → 导入，模型随之�
   expect(info.classes).toContain('Coupon');
   expect(info.classes).not.toContain('User');
   expect(info.status).toContain('已导入');
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('画布：滚轮缩放、中键/空白拖拽平移、复位回到单位视口', async ({ page }) => {
+  await expectCanvasInteractions(page);
   expect((page as any).__errors).toEqual([]);
 });

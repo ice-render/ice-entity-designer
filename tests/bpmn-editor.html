@@ -165,6 +165,7 @@
           <button id="btn-link">连接</button>
           <span class="divider"></span>
           <button id="btn-fit">适应视图</button>
+          <button id="btn-reset">复位视图</button>
           <button id="btn-validate">校验</button>
           <button id="btn-simulate">仿真</button>
           <button id="btn-simulate-stop">停止</button>
@@ -187,16 +188,18 @@
     </div>
 
     <script src="../dist/index.umd.js"></script>
+    <script src="./canvas-interactions.js"></script>
     <script type="text/javascript">
       const { ICE, BpmnDesigner, FLOW_NODE_KINDS } = IED;
       const ice = new ICE().init('canvas-1');
       const designer = new BpmnDesigner(ice);
+      const canvasEl = document.getElementById('canvas-1');
+      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
       // 引擎自带的对齐标尺（拖拽时显示对齐提示线），ER/流程图示例同样开启
       ice.alignmentGuide.enable({ threshold: 6 });
       window.__ice = ice;
       window.__designer = designer;
 
-      const canvasEl = document.getElementById('canvas-1');
       const panel = document.getElementById('panel');
       const validateOutput = document.getElementById('validate-output');
       const xmlOutput = document.getElementById('xml-output');
@@ -442,7 +445,8 @@
       document.getElementById('btn-delete').addEventListener('click', () => designer.selectedId && designer.remove(designer.selectedId));
       document.getElementById('btn-undo').addEventListener('click', () => designer.undo());
       document.getElementById('btn-redo').addEventListener('click', () => designer.redo());
-      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
+      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
 
       document.getElementById('btn-validate').addEventListener('click', () => {
         const issues = designer.validateBpmn();
@@ -518,7 +522,8 @@
         }
       });
 
-      /* ---------------- 画布交互：连线模式 / 滚轮缩放 / 拖拽平移 ---------------- */
+      /* ---------------- 画布交互：连线模式 ---------------- */
+      /* 滚轮缩放 / 拖拽平移 / 复位由 canvas-interactions.js 统一提供（四个域包示例同一套口径） */
       document.getElementById('btn-link').addEventListener('click', () => {
         linking = !linking;
         linkSource = null;
@@ -534,17 +539,6 @@
         return node;
       }
 
-      let panning = false;
-      let lastX = 0;
-      let lastY = 0;
-      canvasEl.addEventListener(
-        'wheel',
-        (evt) => {
-          evt.preventDefault();
-          ice.zoomAt(evt.offsetX, evt.offsetY, evt.deltaY > 0 ? 1 / 1.1 : 1.1, 0.2, 3);
-        },
-        { passive: false }
-      );
       canvasEl.addEventListener('mousedown', (evt) => {
         if (linking) {
           const node = rootNodeAt(evt.offsetX, evt.offsetY);
@@ -574,31 +568,6 @@
           canvasEl.style.cursor = 'grab';
           return;
         }
-        const blank = evt.button === 0 && !ice.hitTest(evt.offsetX, evt.offsetY);
-        if (evt.button !== 1 && !blank) {
-          return;
-        }
-        evt.preventDefault();
-        evt.stopPropagation();
-        panning = true;
-        lastX = evt.offsetX;
-        lastY = evt.offsetY;
-        canvasEl.style.cursor = 'grabbing';
-      });
-      canvasEl.addEventListener('mousemove', (evt) => {
-        if (!panning) {
-          return;
-        }
-        ice.setViewport(ice.viewport.scale, ice.viewport.tx + (evt.offsetX - lastX), ice.viewport.ty + (evt.offsetY - lastY));
-        lastX = evt.offsetX;
-        lastY = evt.offsetY;
-      });
-      canvasEl.addEventListener('mouseup', () => {
-        panning = false;
-        canvasEl.style.cursor = linking ? 'crosshair' : 'grab';
-      });
-      canvasEl.addEventListener('mouseleave', () => {
-        panning = false;
       });
 
       buildCase();

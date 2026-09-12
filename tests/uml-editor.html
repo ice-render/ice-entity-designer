@@ -116,6 +116,7 @@
       <button id="btn-link">连接</button>
       <span class="hint">|</span>
       <button id="btn-fit">适应视图</button>
+      <button id="btn-reset">复位视图</button>
       <button id="btn-validate">校验</button>
       <button id="btn-export-svg">导出 SVG</button>
       <button id="btn-export-text">导出 PlantUML</button>
@@ -136,10 +137,13 @@
     </div>
 
     <script src="../dist/index.umd.js"></script>
+    <script src="./canvas-interactions.js"></script>
     <script type="text/javascript">
       const { ICE, UmlDesigner, UML_RELATION_KINDS } = IED;
       const ice = new ICE().init('canvas-1');
       const designer = new UmlDesigner(ice);
+      const canvasEl = document.getElementById('canvas-1');
+      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
       ice.alignmentGuide.enable({ threshold: 6 });
       window.__ice = ice;
       window.__designer = designer;
@@ -203,11 +207,36 @@
         });
 
         // 继承：User / Order / OrderItem 都继承抽象类 Entity
-        designer.createRelation({ sourceId: user.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
-        designer.createRelation({ sourceId: order.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
-        designer.createRelation({ sourceId: item.state.id, targetId: entity.state.id, relationKind: 'inheritance' });
+        // 插槽：子类从顶边上来，父类从底边下去 —— 三条继承线不再挤在 Entity 的同一个角上
+        designer.createRelation({
+          sourceId: user.state.id,
+          targetId: entity.state.id,
+          relationKind: 'inheritance',
+          sourcePort: 'T',
+          targetPort: 'B',
+        });
+        designer.createRelation({
+          sourceId: order.state.id,
+          targetId: entity.state.id,
+          relationKind: 'inheritance',
+          sourcePort: 'T',
+          targetPort: 'B',
+        });
+        designer.createRelation({
+          sourceId: item.state.id,
+          targetId: entity.state.id,
+          relationKind: 'inheritance',
+          sourcePort: 'T',
+          targetPort: 'B',
+        });
         // 实现：Order 实现 Payable 接口
-        designer.createRelation({ sourceId: order.state.id, targetId: payable.state.id, relationKind: 'realization' });
+        designer.createRelation({
+          sourceId: order.state.id,
+          targetId: payable.state.id,
+          relationKind: 'realization',
+          sourcePort: 'B',
+          targetPort: 'T',
+        });
         // 组合：Order 由 OrderItem 组成（实心菱形在整体一侧）
         designer.createRelation({
           sourceId: order.state.id,
@@ -250,7 +279,8 @@
         designer.redo();
         renderPanel();
       });
-      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
+      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
       document.getElementById('btn-link').addEventListener('click', () => {
         linking = !linking;
         linkSource = null;

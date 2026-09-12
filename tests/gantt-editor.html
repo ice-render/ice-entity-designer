@@ -28,6 +28,7 @@
       <button id="btn-schedule">自动排程</button>
       <button id="btn-critical">关键路径</button>
       <button id="btn-fit">适应视图</button>
+      <button id="btn-reset">复位视图</button>
       <button id="btn-validate">校验</button>
       <button id="btn-export-svg">导出 SVG</button>
       <span class="hint">拖动任务条会按天吸附（排期语义）</span>
@@ -43,10 +44,13 @@
     </div>
 
     <script src="../dist/index.umd.js"></script>
+    <script src="./canvas-interactions.js"></script>
     <script type="text/javascript">
       const { ICE, GanttDesigner } = IED;
       const ice = new ICE().init('canvas-1');
       const designer = new GanttDesigner(ice);
+      const canvasEl = document.getElementById('canvas-1');
+      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
       ice.alignmentGuide.enable({ threshold: 6 });
       window.__ice = ice;
       window.__designer = designer;
@@ -92,7 +96,8 @@
       });
       document.getElementById('btn-undo').addEventListener('click', () => { designer.undo(); renderPanel(); });
       document.getElementById('btn-redo').addEventListener('click', () => { designer.redo(); renderPanel(); });
-      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
+      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
 
       // 自动排程：按依赖把任务推到「前置结束之后」（只推后、不提前）
       document.getElementById('btn-schedule').addEventListener('click', () => {

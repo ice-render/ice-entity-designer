@@ -54,6 +54,9 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 ### 编辑器内核能力（继承自 ice-render）
 
 - 画布滚轮缩放、空白处拖拽平移。
+- 每个域包示例页统一接入上面这套视口交互（`tests/canvas-interactions.js`）：canvas 铺满可视区，
+  滚轮以光标为锚点缩放，空白处左键 / 任意位置中键拖拽平移，工具栏带「适应视图 / 复位视图」。
+  老示例把 canvas 写死成 1800×1100 而可视区更小，`fitViewport()` 是按 canvas 尺寸算的 —— 图会被切在屏幕外。
 - 拖拽对齐辅助线与磁吸效果。
 - Undo / Redo（基于项目快照，最多 100 步）。
 - 项目级保存 / 加载（`serializeProject()` / `loadProject()`）。

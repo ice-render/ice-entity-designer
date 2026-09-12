@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { expectCanvasInteractions } from './canvas-helpers';
 
 /**
  * tests/gantt-editor.html 端到端回归：甘特域包（移动端 2.0 发布排期）。
@@ -86,5 +87,10 @@ test('改每日像素与导出 SVG：时间轴缩放后重排，矢量产物含�
   expect(svg).toContain('35%');
   expect(svg).toContain('任务');
   expect(svg).toContain('<path');
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('画布：滚轮缩放、中键/空白拖拽平移、复位回到单位视口', async ({ page }) => {
+  await expectCanvasInteractions(page);
   expect((page as any).__errors).toEqual([]);
 });

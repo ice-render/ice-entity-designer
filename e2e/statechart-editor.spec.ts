@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { expectCanvasInteractions } from './canvas-helpers';
 
 /**
  * tests/statechart-editor.html 端到端回归：状态机域包（订单状态机，含复合状态）。
@@ -75,5 +76,10 @@ test('语义校验与矢量导出：注入违规后能报出，导出的 SVG 含
   expect(svg).toContain('支付成功 [金额 &gt; 0] / 生成订单');
   expect(svg).toContain('订单处理');
   expect(svg).toContain('<path');
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('画布：滚轮缩放、中键/空白拖拽平移、复位回到单位视口', async ({ page }) => {
+  await expectCanvasInteractions(page);
   expect((page as any).__errors).toEqual([]);
 });

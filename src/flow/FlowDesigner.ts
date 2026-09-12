@@ -530,9 +530,27 @@ export default class FlowDesigner {
     return report;
   }
 
+  /**
+   * 「适应视图」要框住的内容。
+   *
+   * 默认就是业务图元；带**派生装饰**的域包（甘特的图表框架：左列任务名 + 表头 + 行线）
+   * 要把它一起算进来，否则只框任务条会把左列和表头切在视口外。
+   */
+  protected contentComponents(): any[] {
+    return this.nodes;
+  }
+
+  /**
+   * 适应视图时的对齐方式。
+   *
+   * 流程图/类图这类「图」居中最好看；甘特这种「表」是从上往下读的，居中会在上方留一大片空白，
+   * 所以甘特把它改成 `start`（贴顶留白）。
+   */
+  protected fitViewportAlign: 'center' | 'start' = 'center';
+
   /** 把整个流程缩放到画布可视区内 */
   public fitViewport(padding = 80): void {
-    const nodes = this.nodes;
+    const nodes = this.contentComponents();
     const canvasWidth = (this.ice as any).canvasWidth || 0;
     const canvasHeight = (this.ice as any).canvasHeight || 0;
     if (!nodes.length || !canvasWidth || !canvasHeight) {
@@ -557,7 +575,10 @@ export default class FlowDesigner {
       1.25
     );
     const tx = (canvasWidth - contentWidth * scale) / 2 - minX * scale;
-    const ty = (canvasHeight - contentHeight * scale) / 2 - minY * scale;
+    const ty =
+      this.fitViewportAlign === 'start'
+        ? padding - minY * scale
+        : (canvasHeight - contentHeight * scale) / 2 - minY * scale;
     this.ice.setViewport(scale, tx, ty);
   }
 

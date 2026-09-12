@@ -95,6 +95,25 @@ export default class GanttRuler extends ICEGroup {
     if (!originDate) {
       return;
     }
+    // 周末底色：排期是要按天读的，休息日必须一眼看出来（放在网格线之下、日期刻度之上）
+    for (let i = 0; i < dayCount; i++) {
+      const weekday = new Date(Date.parse(`${this.__addDays(originDate, i)}T00:00:00Z`)).getUTCDay();
+      if (weekday !== 0 && weekday !== 6) {
+        continue;
+      }
+      this.addChild(
+        new ICERect({
+          zIndex: baseZ + 1,
+          left: labelColumnWidth + i * dayWidth,
+          top: headerHeight,
+          width: dayWidth,
+          height: Math.max(this.state.height - headerHeight, 0),
+          stroke: false,
+          interactive: false,
+          style: { fillStyle: '#f1f5f9' },
+        })
+      );
+    }
     const dayList: string[] = [];
     for (let i = 0; i < dayCount; i++) {
       dayList.push(tickLabel(this.__addDays(originDate, i)));
@@ -130,7 +149,7 @@ export default class GanttRuler extends ICEGroup {
     // 左列任务名 + 行分隔线
     tasks.forEach((task, row) => {
       const top = headerHeight + row * rowHeight;
-      this.addChild(this.__text(task.title, 0, top, labelColumnWidth, rowHeight, '#0f172a', 13, 'left', baseZ + 3, 12));
+      this.addChild(this.__text(task.title, 0, top, labelColumnWidth, rowHeight, '#334155', 13, 'left', baseZ + 3, 12));
       this.addChild(
         new ICEPolyLine({
           zIndex: baseZ + 2,
@@ -139,10 +158,23 @@ export default class GanttRuler extends ICEGroup {
             [chartWidth, top + rowHeight],
           ],
           interactive: false,
-          style: { strokeStyle: '#f1f5f9', fillStyle: '#f1f5f9', lineWidth: 1 },
+          style: { strokeStyle: '#e2e8f0', fillStyle: '#e2e8f0', lineWidth: 1 },
         })
       );
     });
+
+    // 表头与内容区的分隔线（横向）
+    this.addChild(
+      new ICEPolyLine({
+        zIndex: baseZ + 3,
+        points: [
+          [0, headerHeight],
+          [chartWidth, headerHeight],
+        ],
+        interactive: false,
+        style: { strokeStyle: '#cbd5e1', fillStyle: '#cbd5e1', lineWidth: 1 },
+      })
+    );
 
     // 左列与时间轴的分隔线（竖）
     this.addChild(

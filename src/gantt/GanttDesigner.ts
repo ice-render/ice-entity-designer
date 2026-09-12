@@ -511,4 +511,17 @@ export default class GanttDesigner extends FlowDesigner {
         return [...box.center];
     }
   }
+
+  /**
+   * 适应视图：把图表框架（左列任务名 + 表头 + 行线）也算成内容。
+   *
+   * 框架不在 `nodes` 里（它是派生装饰），只按任务条框会把左列和表头切到视口外 ——
+   * 用户看到的就是「任务名只剩半个字」。
+   */
+  protected contentComponents(): any[] {
+    return this.ruler ? this.nodes.concat([this.ruler]) : this.nodes;
+  }
+
+  /** 甘特是排期表（从上往下读），适应视图贴顶对齐，不居中 */
+  protected fitViewportAlign: 'center' | 'start' = 'start';
 }
