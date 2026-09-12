@@ -154,15 +154,31 @@ export default class FlowDesigner {
   }
 
   public get nodes(): any[] {
-    return this.ice.childNodes.filter(
-      (item: any) => item && item.constructor && item.constructor.typeId === FlowNode.typeId
-    );
+    return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === FlowNode.typeId);
   }
 
   public get edges(): any[] {
-    return this.ice.childNodes.filter(
-      (item: any) => item && item.constructor && item.constructor.typeId === FlowEdge.typeId
-    );
+    return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === FlowEdge.typeId);
+  }
+
+  /**
+   * 递归展开场景树（容器型节点 —— 如 BPMN 的池/泳道 —— 里面的子节点同样算流程的一部分）。
+   *
+   * 扁平场景（纯流程图/ER）与旧行为完全一致；嵌套场景下 nodes/edges 才看得到后代节点，
+   * 校验、统计、快照、连线端点查找都因此无需特判。
+   */
+  protected __flatten(): any[] {
+    const result: any[] = [];
+    const walk = (list: any[]) => {
+      list.forEach((item: any) => {
+        result.push(item);
+        if (item.childNodes && item.childNodes.length) {
+          walk(item.childNodes);
+        }
+      });
+    };
+    walk(this.ice.childNodes || []);
+    return result;
   }
 
   public get selected(): any {
@@ -368,7 +384,12 @@ export default class FlowDesigner {
         })
         .forEach((edge: any) => this.ice.removeChild(edge));
     }
-    this.ice.removeChild(component);
+    // 嵌套在容器里的节点要从它自己的父容器上摘掉（池/泳道里的 BPMN 元素就是这种情况）
+    if (component.parentNode && typeof component.parentNode.removeChild === 'function') {
+      component.parentNode.removeChild(component);
+    } else {
+      this.ice.removeChild(component);
+    }
     if (this.selectedId === id) {
       this.selectedId = null;
     }
@@ -630,13 +651,16 @@ export default class FlowDesigner {
     if (!component) {
       return;
     }
-    let root = component;
-    while (root.parentNode) {
-      root = root.parentNode;
-    }
-    const typeId = root.constructor && root.constructor.typeId;
-    if (typeId === FlowNode.typeId || typeId === FlowEdge.typeId) {
-      this.select(root.state.id);
+    // 取「最近的领域图元祖先」：嵌套在池/泳道里的节点被点中时，选中的应该是它自己，
+    // 而不是最外层容器（容器的拖动仍然通过点它的空白区域触发）。
+    let current = component;
+    while (current) {
+      const typeId = current.constructor && current.constructor.typeId;
+      if (typeId === FlowNode.typeId || typeId === FlowEdge.typeId) {
+        this.select(current.state.id);
+        return;
+      }
+      current = current.parentNode;
     }
   }
 

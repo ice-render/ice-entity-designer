@@ -359,11 +359,9 @@ export function fromBpmnXml(xml: string, designer: FlowDesigner): BpmnImportResu
   const idMap = new Map<string, string>();
   let nodeCount = 0;
 
+  // 先扫一遍容器（池 / 泳道），流元素创建时才能按几何嵌进去
   all.forEach((element) => {
     const name = localName(element);
-    if (name === 'participant' || name === 'laneSet' || name === 'process' || name === 'collaboration') {
-      return;
-    }
     // 泳道：不是流元素，但有自己的 DI 形状 → 用同样的方式还原
     if (name === 'lane') {
       const laneId = element.getAttribute('id');
@@ -382,6 +380,35 @@ export function fromBpmnXml(xml: string, designer: FlowDesigner): BpmnImportResu
         nodeCount += 1;
       }
       return;
+    }
+    if (name !== 'participant') {
+      return;
+    }
+    const id = element.getAttribute('id');
+    const bounds = id ? boundsById.get(id) : null;
+    if (!bounds) {
+      return;
+    }
+    const pool = (designer as any).createNode('bpmnPool', {
+      title: element.getAttribute('name') || 'Pool',
+      left: bounds.x,
+      top: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    });
+    idMap.set(id, pool.state.id);
+    nodeCount += 1;
+    // 池需要垫在所有元素之下
+    pool.setState({ zIndex: 0 });
+  });
+
+  all.forEach((element) => {
+    const name = localName(element);
+    if (name === 'participant' || name === 'laneSet' || name === 'process' || name === 'collaboration') {
+      return;
+    }
+    if (name === 'lane' || name === 'participant') {
+      return; // 容器由预扫描先建，保证流元素能嵌进去
     }
     const mapped = nodeFromElement(name);
     if (!mapped) {
@@ -415,30 +442,6 @@ export function fromBpmnXml(xml: string, designer: FlowDesigner): BpmnImportResu
     });
     idMap.set(id, node.state.id);
     nodeCount += 1;
-  });
-
-  // 池：participant 的 processRef 决定 process 里的节点归谁；这里按几何把它们放进池矩形
-  all.forEach((element) => {
-    const name = localName(element);
-    if (name !== 'participant') {
-      return;
-    }
-    const id = element.getAttribute('id');
-    const bounds = id ? boundsById.get(id) : null;
-    if (!bounds) {
-      return;
-    }
-    const pool = (designer as any).createNode('bpmnPool', {
-      title: element.getAttribute('name') || 'Pool',
-      left: bounds.x,
-      top: bounds.y,
-      width: bounds.width,
-      height: bounds.height,
-    });
-    idMap.set(id, pool.state.id);
-    nodeCount += 1;
-    // 池需要垫在所有元素之下
-    pool.setState({ zIndex: 0 });
   });
 
   let edgeCount = 0;

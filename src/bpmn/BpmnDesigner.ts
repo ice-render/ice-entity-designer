@@ -24,6 +24,7 @@ import type { BpmnIssue } from './bpmn_validate';
 export default class BpmnDesigner extends FlowDesigner {
   private __markers = new Map<string, any>();
   private __markerSyncing = false;
+  private __nesting = false;
 
   constructor(ice: any) {
     super(ice);
@@ -35,6 +36,58 @@ export default class BpmnDesigner extends FlowDesigner {
   /** BPMN 语义校验（事件/网关/池/连通性等，见 bpmn_validate.ts） */
   public validateBpmn(): BpmnIssue[] {
     return validateBpmn(this);
+  }
+
+  /**
+   * 建节点：除常规流程元素外，**自动按几何把节点嵌进池/泳道**（用引擎的容器能力）。
+   *
+   * 为什么要真嵌套：外层容器（池）被拖动时，引擎的矩阵组合会让内部泳道与泳道里的节点
+   * 一起移动 —— 这正是「拖动池子，里面的东西跟着走」的正确实现；扁平结构做不到。
+   *
+   * 归属规则：取「面积最小的、包住节点中心的容器」（泳道比池小 → 优先落在泳道里）。
+   * 子组件坐标是**父容器左上角**为原点，因此嵌套时要做一次坐标换算。
+   */
+  public createNode(kind: any, props: any = {}): any {
+    const node = super.createNode(kind, props);
+    this.__nestByGeometry(node);
+    return node;
+  }
+
+  /** 把（已经在 ice 根上的）节点嵌进最内层容器 */
+  private __nestByGeometry(node: any): void {
+    if (this.__nesting) {
+      return;
+    }
+    if (node.state.kind === 'bpmnPool') {
+      return; // 池是最外层容器
+    }
+    const box = node.getMinBoundingBox(true);
+    const cx = (box.tl[0] + box.br[0]) / 2;
+    const cy = (box.tl[1] + box.br[1]) / 2;
+    const containers = this.nodes
+      .filter((item: any) => item !== node && (item.state.kind === 'bpmnPool' || item.state.kind === 'bpmnLane'))
+      .filter((item: any) => {
+        const containerBox = item.getMinBoundingBox(true);
+        return (
+          cx >= containerBox.tl[0] && cx <= containerBox.br[0] && cy >= containerBox.tl[1] && cy <= containerBox.br[1]
+        );
+      })
+      .sort((a: any, b: any) => a.state.width * a.state.height - b.state.width * b.state.height);
+    const container = containers[0];
+    if (!container) {
+      return;
+    }
+    this.__nesting = true;
+    try {
+      // 用引擎的 adoptChild 迁移（**不能用 removeChild**：它会 destory 组件，把内部形状/标题一起毁掉），
+      // 再以「父容器左上角为原点」换算坐标，保持世界位置不变。
+      const dx = container.getMinBoundingBox(true).tl[0];
+      const dy = container.getMinBoundingBox(true).tl[1];
+      node.setState({ left: node.state.left - dx, top: node.state.top - dy });
+      container.adoptChild(node);
+    } finally {
+      this.__nesting = false;
+    }
   }
 
   /** 顺序流的条件/默认标记：按需创建、原位更新（放在工具层，不污染文档） */

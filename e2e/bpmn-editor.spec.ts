@@ -55,7 +55,38 @@ test('加载：BPMN 案例渲染、元素类型齐全、零控制台报错', asy
     return ink;
   });
   expect(painted).toBeGreaterThan(10000);
+
+  // 引擎自带的对齐标尺没有被禁用（拖拽时会显示对齐提示线）
+  expect(await page.evaluate(() => (window as any).__ice.alignmentGuide.isEnabled())).toBe(true);
   expect((page as any).__errors).toEqual([]);
+});
+
+test('容器：拖动池会带着泳道与里面的节点一起走（引擎容器能力）', async ({ page }) => {
+  const before = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const pool = designer.nodes.find((node: any) => node.state.kind === 'bpmnPool');
+    const lane = designer.nodes.find((node: any) => node.state.kind === 'bpmnLane');
+    const task = designer.nodes.find((node: any) => node.state.kind === 'bpmnTask');
+    return {
+      poolId: pool.state.id,
+      laneBox: lane.getMinBoundingBox(true).tl.slice(),
+      taskBox: task.getMinBoundingBox(true).tl.slice(),
+      nested: !!task.parentNode && task.parentNode.state.kind === 'bpmnLane',
+    };
+  });
+  expect(before.nested).toBe(true);
+
+  const after = await page.evaluate((poolId) => {
+    const designer = (window as any).__designer;
+    const pool = designer.ice.findComponent(poolId);
+    pool.setPosition(pool.state.left + 50, pool.state.top + 30);
+    const lane = designer.nodes.find((node: any) => node.state.kind === 'bpmnLane');
+    const task = designer.nodes.find((node: any) => node.state.kind === 'bpmnTask');
+    return { laneBox: lane.getMinBoundingBox(true).tl.slice(), taskBox: task.getMinBoundingBox(true).tl.slice() };
+  }, before.poolId);
+
+  expect(after.laneBox[0] - before.laneBox[0]).toBeCloseTo(50, 1);
+  expect(after.taskBox[1] - before.taskBox[1]).toBeCloseTo(30, 1);
 });
 
 test('BPMN 校验：案例本身合法，注入违规后能报出具体问题', async ({ page }) => {

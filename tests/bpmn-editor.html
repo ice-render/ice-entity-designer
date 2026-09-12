@@ -188,6 +188,8 @@
       const { ICE, BpmnDesigner, FLOW_NODE_KINDS } = IED;
       const ice = new ICE().init('canvas-1');
       const designer = new BpmnDesigner(ice);
+      // 引擎自带的对齐标尺（拖拽时显示对齐提示线），ER/流程图示例同样开启
+      ice.alignmentGuide.enable({ threshold: 6 });
       window.__ice = ice;
       window.__designer = designer;
 

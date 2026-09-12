@@ -194,3 +194,58 @@ describe('BPMN XML 互操作', () => {
     expect(target.edges.some((edge: any) => edge.state.isDefault)).toBe(true);
   });
 });
+
+describe('BPMN 容器：真嵌套（引擎容器能力）', () => {
+  it('池 → 泳道 → 节点 形成真实父子关系（不是几何假象）', () => {
+    const { designer } = makeDesigner();
+    const pool = designer.createNode('bpmnPool', { title: '银行', left: 100, top: 100, width: 800, height: 300 });
+    const lane = designer.createNode('bpmnLane', { title: '受理岗', left: 100, top: 100, width: 800, height: 150 });
+    const task = designer.createNode('bpmnTask', { title: '受理', left: 200, top: 140 });
+
+    expect(lane.parentNode).toBe(pool);
+    expect(task.parentNode).toBe(lane);
+    // 子组件坐标变成父容器左上角为原点
+    expect([Math.round(lane.state.left), Math.round(lane.state.top)]).toEqual([0, 0]);
+    expect([Math.round(task.state.left), Math.round(task.state.top)]).toEqual([100, 40]);
+    // 但世界坐标不变
+    expect(task.getMinBoundingBox(true).tl[0]).toBe(200);
+    expect(task.getMinBoundingBox(true).tl[1]).toBe(140);
+    // 嵌套节点同样被 designer 统计到
+    expect(designer.nodes.length).toBe(3);
+  });
+
+  it('拖动外层池，内部泳道与节点整体跟随（引擎矩阵组合）', () => {
+    const { designer } = makeDesigner();
+    const pool = designer.createNode('bpmnPool', { title: '银行', left: 100, top: 100, width: 800, height: 300 });
+    const lane = designer.createNode('bpmnLane', { title: '受理岗', left: 100, top: 100, width: 800, height: 150 });
+    const task = designer.createNode('bpmnTask', { title: '受理', left: 200, top: 140 });
+
+    const before = {
+      lane: lane.getMinBoundingBox(true).tl.slice(),
+      task: task.getMinBoundingBox(true).tl.slice(),
+    };
+    // 引擎的拖动最终就是 setPosition（池在根层级）
+    pool.setPosition(pool.state.left + 60, pool.state.top + 40);
+    const after = {
+      lane: lane.getMinBoundingBox(true).tl.slice(),
+      task: task.getMinBoundingBox(true).tl.slice(),
+    };
+    expect(after.lane[0] - before.lane[0]).toBeCloseTo(60, 3);
+    expect(after.lane[1] - before.lane[1]).toBeCloseTo(40, 3);
+    expect(after.task[0] - before.task[0]).toBeCloseTo(60, 3);
+    expect(after.task[1] - before.task[1]).toBeCloseTo(40, 3);
+  });
+
+  it('点中嵌套节点时选中它自己（不是最外层容器）', () => {
+    const { ice, designer } = makeDesigner();
+    designer.createNode('bpmnPool', { title: '银行', left: 100, top: 100, width: 800, height: 300 });
+    designer.createNode('bpmnLane', { title: '受理岗', left: 100, top: 100, width: 800, height: 150 });
+    const task = designer.createNode('bpmnTask', { title: '受理', left: 200, top: 140 });
+
+    const [sx, sy] = ice.worldToScreen(250, 180);
+    const hit = ice.hitTest(sx, sy);
+    expect(hit).toBeTruthy();
+    ice.evtBus.trigger('mousedown', null, { component: hit });
+    expect(designer.selectedId).toBe(task.state.id);
+  });
+});
