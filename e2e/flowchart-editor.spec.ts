@@ -31,6 +31,10 @@ async function counts(page: Page): Promise<Counts> {
   });
 }
 
+async function viewport(page: Page) {
+  return page.evaluate(() => ({ ...(window as any).__ice.viewport }));
+}
+
 /** 在节点内部找一个「hitTest 回环命中该节点自身」的点（连线常压在节点中心上） */
 async function nodeCanvasPoint(page: Page, index = 0) {
   const point = await page.evaluate((idx) => {
@@ -177,6 +181,42 @@ test('拖拽节点：位置随真实鼠标位移改变，连线跟随', async ({
   expect(after.top).toBeGreaterThan(before.top);
   // 连线端点跟着宿主节点走（插槽吸附）
   expect(after.edgeStart[1]).toBeGreaterThan(0);
+});
+
+test('画布：滚轮缩放、空白处拖拽平移、复位按钮回到单位视口', async ({ page }) => {
+  const before = await viewport(page);
+
+  // 滚轮缩放：先把鼠标移到画布内，滚轮事件才会落到 canvas 上
+  await moveToCanvasPoint(page, { x: 800, y: 700 });
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(400);
+  const zoomed = await viewport(page);
+  expect(zoomed.scale).toBeGreaterThan(before.scale);
+  // 缩放以光标为锚点：光标处的世界坐标不应漂移
+  expect(Math.abs(zoomed.tx - before.tx) + Math.abs(zoomed.ty - before.ty)).toBeGreaterThan(0);
+
+  // 中键拖拽平移（任意位置都可，不依赖命中空白）
+  const from = await moveToCanvasPoint(page, { x: 800, y: 700 });
+  await page.mouse.down({ button: 'middle' });
+  await page.mouse.move(from.x + 90, from.y + 60, { steps: 8 });
+  await page.mouse.up({ button: 'middle' });
+  await page.waitForTimeout(400);
+  const pannedMiddle = await viewport(page);
+  expect(pannedMiddle.scale).toBe(zoomed.scale);
+  expect(pannedMiddle.tx).not.toBe(zoomed.tx);
+
+  // 空白处左键拖拽同样平移（节点上左键仍然只做选择/拖拽节点）
+  const blank = await moveToCanvasPoint(page, { x: 60, y: 60 });
+  await page.mouse.down();
+  await page.mouse.move(blank.x + 70, blank.y + 40, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  const pannedBlank = await viewport(page);
+  expect(pannedBlank.tx).not.toBe(pannedMiddle.tx);
+
+  await page.click('#btn-reset');
+  await page.waitForTimeout(300);
+  expect(await viewport(page)).toMatchObject({ scale: 1, tx: 0, ty: 0 });
 });
 
 test('属性面板：选中节点可改标题/类型/配色，选中连线可改标签与形态', async ({ page }) => {

@@ -236,7 +236,7 @@
       </div>
       <aside class="side">
         <h3>节点 / 连线属性</h3>
-        <div id="shape-panel" class="hint">点击画布中的节点或连线进行编辑；打开「连接节点」后依次点击两个节点即可连线。</div>
+        <div id="shape-panel" class="hint">点击画布中的节点或连线进行编辑；滚轮缩放、空白处拖拽平移；打开「连接节点」后依次点击两个节点即可连线。</div>
         <h3>连线提示</h3>
         <div id="relation-hint" class="hint">选择连线形态后点击“连接节点”</div>
         <h3>流程 JSON</h3>
@@ -276,6 +276,27 @@
       document.querySelectorAll('.icon-btn[title]').forEach((button) => {
         button.dataset.tooltip = button.getAttribute('title');
       });
+
+      /* 画布默认支持滚轮缩放（以光标为锚点，0.3~3 倍）+ 空白处/中键拖拽平移，与 ER 示例一致 */
+      function zoomAtClientPoint(clientX, clientY, factor) {
+        const oldScale = ice.viewport.scale;
+        const nextScale = Math.max(0.3, Math.min(3, oldScale * factor));
+        const rect = canvasEl.getBoundingClientRect();
+        const cx = clientX - rect.left;
+        const cy = clientY - rect.top;
+        const tx = cx - ((cx - ice.viewport.tx) * nextScale) / oldScale;
+        const ty = cy - ((cy - ice.viewport.ty) * nextScale) / oldScale;
+        ice.setViewport(nextScale, tx, ty);
+      }
+
+      canvasEl.addEventListener('wheel', (evt) => {
+        evt.preventDefault();
+        zoomAtClientPoint(evt.clientX, evt.clientY, evt.deltaY > 0 ? 0.9 : 1.1);
+      });
+
+      let panning = false;
+      let panLastX = 0;
+      let panLastY = 0;
 
       /* 内置示例：一个下单流程，坐标写死（不跑随机布局，保证 e2e/截图可复现） */
       const SEED_FLOW = {
@@ -345,7 +366,7 @@
         refreshHistoryButtons();
         if (!selected) {
           shapePanel.className = 'hint';
-          shapePanel.textContent = '点击画布中的节点或连线进行编辑；打开「连接节点」后依次点击两个节点即可连线。';
+          shapePanel.textContent = '点击画布中的节点或连线进行编辑；滚轮缩放、空白处拖拽平移；打开「连接节点」后依次点击两个节点即可连线。';
           return;
         }
         shapePanel.className = '';
@@ -555,12 +576,33 @@
       }
 
       canvasEl.addEventListener('mousemove', (evt) => {
-        if (!linkingMode || !linkSource) {
+        if (linkingMode && linkSource) {
+          const box = linkSource.getMinBoundingBox(true);
+          const from = ice.worldToScreen(box.bc[0], box.bc[1]);
+          linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${evt.offsetX} ${evt.offsetY}`);
+        }
+        if (!panning) {
           return;
         }
-        const box = linkSource.getMinBoundingBox(true);
-        const from = ice.worldToScreen(box.bc[0], box.bc[1]);
-        linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${evt.offsetX} ${evt.offsetY}`);
+        const dx = evt.offsetX - panLastX;
+        const dy = evt.offsetY - panLastY;
+        panLastX = evt.offsetX;
+        panLastY = evt.offsetY;
+        ice.setViewport(ice.viewport.scale, ice.viewport.tx + dx, ice.viewport.ty + dy);
+      });
+
+      function stopPanning() {
+        panning = false;
+        canvasEl.style.cursor = linkingMode ? 'crosshair' : 'grab';
+      }
+
+      canvasEl.addEventListener('mouseup', stopPanning);
+      canvasEl.addEventListener('mouseleave', stopPanning);
+      canvasEl.addEventListener('auxclick', (evt) => {
+        // 中键：禁止浏览器默认的自动滚动
+        if (evt.button === 1) {
+          evt.preventDefault();
+        }
       });
 
       function canvasNodeAt(px, py) {
@@ -572,39 +614,51 @@
       }
 
       canvasEl.addEventListener('mousedown', (evt) => {
-        if (!linkingMode) {
+        if (linkingMode) {
+          const node = canvasNodeAt(evt.offsetX, evt.offsetY);
+          if (!node) {
+            return;
+          }
+          evt.preventDefault();
+          evt.stopPropagation();
+          if (!linkSource) {
+            linkSource = node;
+            showLinkPreview(node);
+            relationHint.textContent = `已选择源节点：${node.state.title}，请点击目标节点`;
+            relationHint.style.color = '#0f766e';
+            return;
+          }
+          if (linkSource.state.id === node.state.id) {
+            relationHint.textContent = '源节点和目标节点不能相同，请重新选择';
+            relationHint.style.color = '#b45309';
+            linkSource = null;
+            hideLinkPreview();
+            return;
+          }
+          designer.createEdge({
+            sourceId: linkSource.state.id,
+            targetId: node.state.id,
+            sourcePort: 'B',
+            targetPort: 'T',
+            linkShape: edgeShapeSelect.value,
+          });
+          linkSource = null;
+          hideLinkPreview();
+          setLinkingMode(false);
           return;
         }
-        const node = canvasNodeAt(evt.offsetX, evt.offsetY);
-        if (!node) {
+
+        // 非连线模式：空白处左键 / 任意位置中键 → 拖拽平移画布
+        const blank = evt.button === 0 && !ice.hitTest(evt.offsetX, evt.offsetY);
+        if (evt.button !== 1 && !blank) {
           return;
         }
         evt.preventDefault();
         evt.stopPropagation();
-        if (!linkSource) {
-          linkSource = node;
-          showLinkPreview(node);
-          relationHint.textContent = `已选择源节点：${node.state.title}，请点击目标节点`;
-          relationHint.style.color = '#0f766e';
-          return;
-        }
-        if (linkSource.state.id === node.state.id) {
-          relationHint.textContent = '源节点和目标节点不能相同，请重新选择';
-          relationHint.style.color = '#b45309';
-          linkSource = null;
-          hideLinkPreview();
-          return;
-        }
-        designer.createEdge({
-          sourceId: linkSource.state.id,
-          targetId: node.state.id,
-          sourcePort: 'B',
-          targetPort: 'T',
-          linkShape: edgeShapeSelect.value,
-        });
-        linkSource = null;
-        hideLinkPreview();
-        setLinkingMode(false);
+        panning = true;
+        panLastX = evt.offsetX;
+        panLastY = evt.offsetY;
+        canvasEl.style.cursor = 'grabbing';
       });
 
       // 点击空白处清除选中
