@@ -277,7 +277,37 @@ const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
 字形栅格化是两套实现，文字位置**对齐口径一致、逐像素允许微差**；导出的是**静态瞬间**（蚂蚁线动画
 只保留当前相位）。
 
-#### 5.5 UML 类图（域包示例）
+#### 5.5 甘特图（`GanttDesigner`）
++
++排期场景：横轴是**时间**（`start` 日期 × 持续天数 × 每日像素）、纵轴是行，任务条**按天吸附**拖动，
++依赖线从「前置任务的结束」指向「后置任务的开始」。
++
++```js
++import { ICE, GanttDesigner } from 'ice-entity-designer';
++
++const ice = new ICE().init('canvas-1');
++const gantt = new GanttDesigner(ice);
++
++const review = gantt.createTask({ title: '需求评审', start: '2026-03-02', days: 4, progress: 1 });
++const design = gantt.createTask({ title: '交互设计', start: '2026-03-05', days: 6, progress: 0.8 });
++gantt.createDependency({ sourceId: review.state.id, targetId: design.state.id });
++
++gantt.setDayWidth(36);        // 时间轴缩放：所有任务与依赖一起重排
++gantt.validateGantt();        // 依赖成环 / 进度越界 / 持续天数非法
++const svg = gantt.toSvg({ background: '#ffffff' });
++```
++
++与其它域包同一套机制：任务条是复合组件（条 + 进度覆盖 + 文字由 state 派生）、依赖复用引擎折线
++（插槽吸附 / 正交路由 / 跟随宿主）、快照与矢量导出全部继承。两条甘特特有的能力：
++
++| 能力 | 说明 |
++|---|---|
++| 时间轴 | `dayWidth` / `originDate` / `labelColumnWidth` 统一换算；框架（左列任务名 + 日期刻度 + 行线）由派生的 `GanttRuler` 渲染，模型一变就重建 |
++| 按天吸附 | `GanttTask.setPosition()` 把 x 吸附到整天的格子并反推 `start`（排期不会出现「13:47 开工」） |
++
++可运行示例：`tests/gantt-editor.html`（移动端 2.0 发布排期，含依赖与进度）。
++
++#### 5.6 UML 类图（域包示例）
 
 UML 是**域包（domain pack）**的第一个完整示例：形状 + 应用层 + 语义校验，其余（选择/增删改/连线/
 撤销重做/快照/适应视图/矢量导出）全部沿用引擎与 `FlowDesigner`。
@@ -463,7 +493,7 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 
 | 组成 | 复用什么 | 以 UML 为例 |
 |---|---|---|
-| 形状 | 引擎的复合组件（`hasDerivedChildren`）：内部子组件按 state 派生、不进文档 | `UmlClass`：三段式类框 |
+| 形状 | 引擎的复合组件（`hasDerivedChildren`）：内部子组件按 state 派生、不进文档 | `UmlClass`：三段式类框；`GanttTask`：任务条 + 进度覆盖 |
 | 连线 | 引擎折线（插槽吸附 / 正交·贝塞尔路由 / 标签 / 跟随宿主）；**端点标记进路径点集**，因此描边、填充、导出都自动带上 | `UmlRelation`：六种关系 = 线型 + 三角/菱形/开放箭头 |
 | 应用层 | `FlowDesigner`（选择 / 增删改 / 连线 / 撤销重做 / 快照 / 适应视图 / 订阅 / `toSvg`） | `UmlDesigner` 只重写「建什么图元 + 类型过滤」 |
 | 语义校验 | 结构校验之外的部分自写，规则直白 | `validateUml()`：重名类 / 悬空关系 / 继承成环 |
@@ -487,6 +517,12 @@ src/
 │   ├── UmlClass.ts                # 复合组件：类名 / 属性 / 方法三段，构造型，框高随成员增长
 │   ├── UmlRelation.ts             # 六种关系 = 线型 + 端点标记（三角/菱形/开放箭头，标记进路径点集）
 │   └── UmlDesigner.ts             # FlowDesigner 薄扩展：建 UML 图元 + 类型过滤 + validateUml()
++├── gantt/                         # 甘特图（第三个 domain pack：时间轴 + 按天吸附 + 依赖）
++│   ├── gantt_date.ts              # 日期工具（UTC 口径，YYYY-MM-DD ↔ 天数）
++│   ├── GanttTask.ts               # 任务条（复合组件）+ setPosition 按天吸附
++│   ├── GanttRuler.ts              # 图表框架：左列任务名 + 日期刻度 + 行线（派生重建）
++│   ├── GanttDependency.ts         # 依赖线（完成 → 开始）
++│   └── GanttDesigner.ts           # 时间轴换算 + syncChrome + validateGantt
 ├── bpmn/                          # BPMN 2.0（FlowDesigner 之上的业务记法）
 │   ├── bpmn_shapes.ts             # 形状：事件圆 / 网关菱形 / 任务角标 / 子流程标记 / 数据对象 / 注释 / 池泳道
 │   ├── BpmnDesigner.ts            # 应用层：容器真嵌套（池→泳道→节点）、条件与默认流标记、语义校验

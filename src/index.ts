@@ -43,6 +43,15 @@ export { default as StateTransition } from './statechart/StateTransition';
 export { default as StatechartDesigner } from './statechart/StatechartDesigner';
 export type { StatechartIssue } from './statechart/StatechartDesigner';
 
+// 甘特图（domain pack：时间轴刻度 + 拖拽按天吸附 + 依赖）
+export { default as GanttTask } from './gantt/GanttTask';
+export { default as GanttDependency } from './gantt/GanttDependency';
+export { default as GanttRuler } from './gantt/GanttRuler';
+export type { GanttRulerOptions } from './gantt/GanttRuler';
+export { default as GanttDesigner } from './gantt/GanttDesigner';
+export type { GanttIssue, GanttTaskInput } from './gantt/GanttDesigner';
+export { parseDate, formatDate, addDays, diffDays, eachDay, tickLabel } from './gantt/gantt_date';
+
 // 文本互操作：PlantUML / Mermaid 类图语法子集（导入导出）
 export { toPlantUml, fromPlantUml, arrowOf, detectUmlDialect } from './uml/uml_text';
 export type { UmlTextImportResult } from './uml/uml_text';
