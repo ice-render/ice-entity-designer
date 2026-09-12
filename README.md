@@ -155,6 +155,36 @@ import { EntitySchema } from 'typeorm';
 const schemas = designer.toSchemaObject().map((obj) => new EntitySchema(obj));
 ```
 
+#### 5.2 流程图（FlowDesigner）
+
+包内除 ER 之外还内置了一套**流程图**领域图元与应用层（同一个 `ice` 实例即可承载）：
+
+```js
+import { ICE, FlowDesigner } from 'ice-entity-designer';
+
+const ice = new ICE().init('canvas-1');
+const flow = new FlowDesigner(ice);
+
+const start = flow.createNode('terminator', { title: '开始' });
+const check = flow.createNode('decision', { title: '库存充足？' });
+flow.createEdge({ sourceId: start.state.id, targetId: check.state.id, sourcePort: 'B', targetPort: 'T' });
+
+flow.fitViewport(); // 适应视图
+flow.serialize(); // 流程图快照（version / kind / nodes / edges）
+flow.undo(); // 100 步历史
+```
+
+| 能力 | API |
+|---|---|
+| 节点类型 | `createNode('terminator' \| 'process' \| 'decision' \| 'io', props)`；预设尺寸 / 配色见 `FLOW_NODE_KINDS` |
+| 连线 | `createEdge({ sourceId, targetId, sourcePort, targetPort, label, linkShape })`；插槽位置 `T/R/B/L/C`，节点拖动时连线自动跟随 |
+| 增删改查 | `nodes` / `edges` / `selected` / `select()` / `updateNode()` / `updateEdge()` / `remove()`（删节点级联删连线）/ `clear()` |
+| 历史与快照 | `undo()` / `redo()` / `canUndo()` / `canRedo()`、`serialize()` / `toSnapshot()` / `load()`（返回 `{ loaded, nodes, edges, skipped }`） |
+| 视图与订阅 | `fitViewport(padding)`、`subscribe()`、`dispose()` |
+
+自定义形状（判定菱形 / 输入输出平行四边形）在 `src/flow/flow_shapes.ts`，走的是引擎的 `ICEPath` 子类机制。
+可运行的完整示例见 `tests/flowchart-editor.html`；AI Agent 生成流程图的 JSON DSL 见 `ice-entity-designer-dsl`。
+
 ## 6. 在 React 中使用
 
 包内置 React 绑定（子路径导出 `ice-entity-designer/react`），不需要自己写 ref / effect 胶水代码。
@@ -253,6 +283,11 @@ const session = createDesignerSession(canvasEl);
 ```
 src/
 ├── designer/EntityDesigner.ts     # 应用层：选择 / 增删改 / 连接 / 校验 / 历史 / 项目存取 / 变更订阅
+├── flow/                          # 流程图（与 ER 并列的第二类领域图元）
+│   ├── flow_shapes.ts             # 自定义形状：判定菱形 / 输入输出平行四边形
+│   ├── FlowNode.ts                # 节点：四类预设（起止 / 处理 / 判定 / 输入输出）+ 居中标题
+│   ├── FlowEdge.ts                # 连线：正交 / 贝塞尔 + 箭头 + 分支标签，插槽吸附
+│   └── FlowDesigner.ts            # 应用层：建节点/连线、选择、增删改、历史、快照存取、适应视图
 ├── er-component/
 │   ├── Entity.ts                  # 实体：表头 + 字段列表 + 约束标记 + TypeORM 序列化
 │   └── Relation.ts                # 关系：基数 / 箭头 / 标签语义 / 连接槽位

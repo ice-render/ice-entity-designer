@@ -13,6 +13,15 @@ export { toSchemaObject, toSchemaString } from './utils/serialization_util';
 export { validateSchema } from './utils/schema_validator';
 export { PROJECT_SCHEMA_VERSION, validateProjectSnapshot } from './utils/project_schema';
 
+// 流程图（与 ER 并列的第二类领域图元与应用层）
+export { default as FlowNode, FLOW_NODE_KINDS } from './flow/FlowNode';
+export type { FlowNodeKind, FlowNodePreset, FlowNodeSnapshot } from './flow/FlowNode';
+export { default as FlowEdge } from './flow/FlowEdge';
+export type { FlowPort, FlowEdgeSnapshot } from './flow/FlowEdge';
+export { default as FlowDesigner, validateFlowSnapshot } from './flow/FlowDesigner';
+export type { FlowSnapshot, FlowLoadReport, FlowSnapshotValidationResult } from './flow/FlowDesigner';
+export { FlowDiamond, FlowParallelogram } from './flow/flow_shapes';
+
 /**
  * 引擎内核（ice-render）在构建时已被打包进本包，这里一并导出。
  *

@@ -3,7 +3,8 @@
 <html lang="en">
   <meta charset="utf-8" />
   <title>IED-flowchart-editor</title>
-  <!-- 依赖只走本地 ../dist（IED 已把 ice-render 内核打包进产物），离线可跑、e2e 可复现。 -->
+  <!-- 依赖只走本地 ../dist（IED 已把 ice-render 内核打包进产物），离线可跑、e2e 可复现。
+       流程图图元（FlowNode / FlowEdge / FlowDesigner）由 IED 库提供，本页只做 UI 编排。 -->
   <style>
     html,
     body {
@@ -189,14 +190,6 @@
       min-height: 20px;
       margin-top: 8px;
     }
-    .badge {
-      display: inline-block;
-      padding: 1px 8px;
-      border-radius: 999px;
-      background: #e2e8f0;
-      color: #334155;
-      font-size: 12px;
-    }
   </style>
   <body>
     <div class="app">
@@ -255,488 +248,10 @@
 
     <script src="../dist/index.umd.js"></script>
     <script type="text/javascript">
-      /* =========================================================================
-       * 流程图图元层
-       *
-       * 说明：IED 产物里已经内联了 ice-render 内核，所以这里能直接拿到 ICERect /
-       * ICEText / ICEGroup / ICEVisioLink / ICEPath 等图元，无需再单独引入引擎。
-       * 判类型一律走 `static typeId`（下游打包会 mangle 类名，禁止用 constructor.name）。
-       * ======================================================================= */
-      const {
-        ICE,
-        ICEGroup,
-        ICEPath,
-        ICERect,
-        ICEText,
-        ICEVisioLink,
-      } = IED;
+      /* 流程图相关的类全部来自 IED 库（FlowNode / FlowEdge / FlowDesigner / FLOW_NODE_KINDS），
+         本页只负责 UI：工具条、属性面板、连线模式与画布事件。 */
+      const { ICE, FlowDesigner, FlowNode, FlowEdge, FLOW_NODE_KINDS } = IED;
 
-      /* 各节点类型的默认尺寸与配色（也作为属性面板的预设） */
-      const NODE_KINDS = {
-        terminator: { label: '开始 / 结束', width: 180, height: 60, fill: '#dcfce7', stroke: '#16a34a', radius: 30, shape: 'rect' },
-        process: { label: '处理', width: 220, height: 80, fill: '#e0e7ff', stroke: '#4f46e5', radius: 10, shape: 'rect' },
-        decision: { label: '判定', width: 200, height: 120, fill: '#fef3c7', stroke: '#d97706', shape: 'diamond' },
-        io: { label: '输入 / 输出', width: 220, height: 80, fill: '#e0f2fe', stroke: '#0284c7', shape: 'parallelogram' },
-      };
-
-      /* 菱形：决定分支的判定节点 */
-      class FlowDiamond extends ICEPath {
-        static typeId = 'FlowDiamond';
-        createPathObject() {
-          const w = this.state.width;
-          const h = this.state.height;
-          // 与 ICERect 一致：路径要扣掉 localOrigin（默认原点在组件中心）
-          const x = 0 - this.state.localOrigin[0];
-          const y = 0 - this.state.localOrigin[1];
-          const path = new Path2D();
-          path.moveTo(x + w / 2, y);
-          path.lineTo(x + w, y + h / 2);
-          path.lineTo(x + w / 2, y + h);
-          path.lineTo(x, y + h / 2);
-          path.closePath();
-          // 基类渲染用的是 this.path2D（不是返回值），必须赋回字段
-          this.path2D = path;
-          return this.path2D;
-        }
-      }
-
-      /* 平行四边形：输入 / 输出 */
-      class FlowParallelogram extends ICEPath {
-        static typeId = 'FlowParallelogram';
-        createPathObject() {
-          const w = this.state.width;
-          const h = this.state.height;
-          const slant = Math.min(28, w * 0.18);
-          const x = 0 - this.state.localOrigin[0];
-          const y = 0 - this.state.localOrigin[1];
-          const path = new Path2D();
-          path.moveTo(x + slant, y);
-          path.lineTo(x + w, y);
-          path.lineTo(x + w - slant, y + h);
-          path.lineTo(x, y + h);
-          path.closePath();
-          this.path2D = path;
-          return this.path2D;
-        }
-      }
-
-      const SHAPE_BY_KIND = {
-        diamond: FlowDiamond,
-        parallelogram: FlowParallelogram,
-        rect: ICERect,
-      };
-
-      /**
-       * 流程图节点：一个不可见的容器（ICEGroup）里放「形状 + 居中标题」。
-       *
-       * 容器本身 fill/stroke 全关，只负责定位、拖拽与命中；形状由子组件绘制，
-       * 因此菱形/平行四边形这类非矩形轮廓也能正确渲染。
-       */
-      class FlowNode extends ICEGroup {
-        static typeId = 'FlowNode';
-
-        constructor(props = {}) {
-          const kind = NODE_KINDS[props.kind] ? props.kind : 'process';
-          const preset = NODE_KINDS[kind];
-          super({
-            kind,
-            title: preset.label,
-            fillColor: preset.fill,
-            strokeColor: preset.stroke,
-            width: preset.width,
-            height: preset.height,
-            // 容器只做定位与拖拽：背景交给子形状，避免出现"方形底 + 菱形轮廓"
-            fill: false,
-            stroke: false,
-            draggable: true,
-            interactive: true,
-            transformable: false,
-            ...props,
-          });
-          this.__buildShape();
-        }
-
-        /** 按当前 kind / 尺寸 / 配色重建形状与标题（切换类型或改样式时调用） */
-        __buildShape() {
-          if (this.shapeComponent) {
-            this.removeChild(this.shapeComponent);
-          }
-          if (this.labelComponent) {
-            this.removeChild(this.labelComponent);
-          }
-          const preset = NODE_KINDS[this.state.kind] || NODE_KINDS.process;
-          const ShapeCtor = SHAPE_BY_KIND[preset.shape] || ICERect;
-          this.shapeComponent = new ShapeCtor({
-            left: 0,
-            top: 0,
-            width: this.state.width,
-            height: this.state.height,
-            radius: preset.radius || 0,
-            interactive: false,
-            showMinBoundingBox: false,
-            showMaxBoundingBox: false,
-            style: {
-              fillStyle: this.state.fillColor || preset.fill,
-              strokeStyle: this.state.strokeColor || preset.stroke,
-              lineWidth: 1.5,
-            },
-          });
-          this.labelComponent = new ICEText({
-            left: 0,
-            top: 0,
-            width: this.state.width,
-            height: this.state.height,
-            text: String(this.state.title || ''),
-            wrap: true,
-            maxLines: 2,
-            interactive: false,
-            stroke: false,
-            showMinBoundingBox: false,
-            showMaxBoundingBox: false,
-            style: {
-              fontSize: 14,
-              fillStyle: '#0f172a',
-              textAlign: 'center',
-              textBaseline: 'middle',
-              paddingLeft: 12,
-              paddingRight: 12,
-            },
-          });
-          this.addChild(this.shapeComponent);
-          this.addChild(this.labelComponent);
-        }
-
-        /** 改节点属性（标题 / 类型 / 配色 / 尺寸），必要时重建形状 */
-        applyPatch(patch = {}) {
-          const needsRebuild =
-            patch.kind !== undefined ||
-            patch.fillColor !== undefined ||
-            patch.strokeColor !== undefined ||
-            patch.width !== undefined ||
-            patch.height !== undefined;
-          this.setState(patch);
-          if (needsRebuild) {
-            this.__buildShape();
-          } else if (this.labelComponent) {
-            this.labelComponent.setState({ text: String(this.state.title || '') });
-          }
-          this.dirty = true;
-          return this;
-        }
-
-        /** 流程快照用的纯数据（不含引擎内部状态） */
-        toFlowObject() {
-          return {
-            id: this.state.id,
-            kind: this.state.kind,
-            title: this.state.title,
-            left: this.state.left,
-            top: this.state.top,
-            width: this.state.width,
-            height: this.state.height,
-            fillColor: this.state.fillColor,
-            strokeColor: this.state.strokeColor,
-            typeId: FlowNode.typeId,
-          };
-        }
-      }
-
-      /**
-       * 流程图连线：复用引擎的 Visio 连线（正交折线 / 贝塞尔），带标签与箭头，
-       * 通过 links 挂在两端的插槽上，节点拖动时连线自动跟随。
-       */
-      class FlowEdge extends ICEVisioLink {
-        static typeId = 'FlowEdge';
-
-        constructor(props = {}) {
-          super({
-            title: 'Edge',
-            arrow: 'end',
-            linkShape: 'visio',
-            lineType: 'solid',
-            linkable: false,
-            draggable: false,
-            interactive: true,
-            transformable: false,
-            startPoint: [0, 0],
-            endPoint: [10, 10],
-            label: '',
-            ...props,
-            style: { strokeStyle: '#475569', fillStyle: '#475569', lineWidth: 1.6, ...(props.style || {}) },
-            labelStyle: { fontSize: 12, fillStyle: '#334155', backgroundColor: '#ffffff', paddingLeft: 4, paddingRight: 4, ...(props.labelStyle || {}) },
-          });
-        }
-
-        toFlowObject() {
-          return {
-            id: this.state.id,
-            typeId: FlowEdge.typeId,
-            sourceId: this.state.links && this.state.links.start ? this.state.links.start.id : null,
-            targetId: this.state.links && this.state.links.end ? this.state.links.end.id : null,
-            sourcePort: this.state.links && this.state.links.start ? this.state.links.start.position : null,
-            targetPort: this.state.links && this.state.links.end ? this.state.links.end.position : null,
-            label: this.state.label,
-            linkShape: this.state.linkShape,
-            startPoint: this.state.startPoint,
-            endPoint: this.state.endPoint,
-          };
-        }
-      }
-
-      /* =========================================================================
-       * 应用层：FlowDesigner
-       *
-       * 与 EntityDesigner 同构的轻量应用层：创建 / 更新 / 删除 / 连线 / 选中 /
-       * 撤销重做 / 快照存取。只依赖公开图元 API，不改引擎。
-       * ======================================================================= */
-      class FlowDesigner {
-        constructor(ice) {
-          this.ice = ice;
-          this.selectedId = null;
-          this.__undoStack = [];
-          this.__redoStack = [];
-          this.__historyEnabled = true;
-          this.__maxHistory = 100;
-          this.__listeners = [];
-          this.ice.registerType(FlowNode.typeId, FlowNode);
-          this.ice.registerType(FlowEdge.typeId, FlowEdge);
-          this.ice.evtBus.on('mousedown', this.__handleMouseDown, this);
-        }
-
-        get nodes() {
-          return this.ice.childNodes.filter((item) => item && item.constructor && item.constructor.typeId === FlowNode.typeId);
-        }
-
-        get edges() {
-          return this.ice.childNodes.filter((item) => item && item.constructor && item.constructor.typeId === FlowEdge.typeId);
-        }
-
-        get selected() {
-          return this.selectedId ? this.ice.findComponent(this.selectedId) : null;
-        }
-
-        subscribe(listener) {
-          if (typeof listener === 'function') {
-            this.__listeners.push(listener);
-          }
-        }
-
-        __emitChange() {
-          const snapshot = this.serialize();
-          this.__listeners.slice().forEach((listener) => listener(snapshot, this));
-        }
-
-        __handleMouseDown(evt) {
-          const component = evt && evt.param && evt.param.component;
-          if (!component) {
-            return;
-          }
-          let root = component;
-          while (root.parentNode) {
-            root = root.parentNode;
-          }
-          const typeId = root.constructor && root.constructor.typeId;
-          if (typeId === FlowNode.typeId || typeId === FlowEdge.typeId) {
-            this.select(root.state.id);
-          }
-        }
-
-        select(id) {
-          this.selectedId = id;
-          this.__emitChange();
-          return this;
-        }
-
-        createNode(kind, props = {}) {
-          this.__captureHistory();
-          const preset = NODE_KINDS[kind] || NODE_KINDS.process;
-          const node = new FlowNode({ kind, ...props });
-          this.ice.addChild(node);
-          this.select(node.state.id);
-          this.__emitChange();
-          return node;
-        }
-
-        /** 由两端的插槽位置算出连线端点（引擎按插槽吸附，端点需要给出初始坐标） */
-        __slotPoint(component, position) {
-          const box = component.getMinBoundingBox(true);
-          switch (position) {
-            case 'T':
-              return [...box.tc];
-            case 'R':
-              return [...box.rc];
-            case 'B':
-              return [...box.bc];
-            case 'L':
-              return [...box.lc];
-            case 'C':
-            default:
-              return [...box.center];
-          }
-        }
-
-        createEdge(props = {}) {
-          const source = props.sourceId ? this.ice.findComponent(props.sourceId) : null;
-          const target = props.targetId ? this.ice.findComponent(props.targetId) : null;
-          if (!source || !target) {
-            throw new Error('连接两端必须是已存在的节点');
-          }
-          this.__captureHistory();
-          const sourcePort = props.sourcePort || 'B';
-          const targetPort = props.targetPort || 'T';
-          const edge = new FlowEdge({
-            links: { start: { id: props.sourceId, position: sourcePort }, end: { id: props.targetId, position: targetPort } },
-            startPoint: this.__slotPoint(source, sourcePort),
-            endPoint: this.__slotPoint(target, targetPort),
-            label: props.label || '',
-            linkShape: props.linkShape || 'visio',
-            style: props.style,
-          });
-          this.ice.addChild(edge);
-          this.select(edge.state.id);
-          this.__emitChange();
-          return edge;
-        }
-
-        updateNode(id, patch) {
-          const node = this.ice.findComponent(id);
-          if (node && node.constructor.typeId === FlowNode.typeId) {
-            this.__captureHistory();
-            node.applyPatch(patch);
-            this.__emitChange();
-          }
-          return node;
-        }
-
-        updateEdge(id, patch) {
-          const edge = this.ice.findComponent(id);
-          if (edge && edge.constructor.typeId === FlowEdge.typeId) {
-            this.__captureHistory();
-            edge.setState(patch);
-            edge.dirty = true;
-            this.__emitChange();
-          }
-          return edge;
-        }
-
-        remove(id) {
-          const component = this.ice.findComponent(id);
-          if (!component) {
-            return;
-          }
-          this.__captureHistory();
-          // 删节点要连带删掉挂在它上面的连线，避免留下悬空连线
-          if (component.constructor.typeId === FlowNode.typeId) {
-            this.edges
-              .filter((edge) => {
-                const links = edge.state.links || {};
-                return (links.start && links.start.id === id) || (links.end && links.end.id === id);
-              })
-              .forEach((edge) => this.ice.removeChild(edge));
-          }
-          this.ice.removeChild(component);
-          if (this.selectedId === id) {
-            this.selectedId = null;
-          }
-          this.__emitChange();
-        }
-
-        clear() {
-          this.__captureHistory();
-          this.ice.clearAll();
-          this.selectedId = null;
-          this.__emitChange();
-        }
-
-        /** 流程快照：只含流程图自身的语义数据，跨版本可读 */
-        serialize() {
-          return JSON.stringify(
-            {
-              version: 1,
-              kind: 'flowchart',
-              nodes: this.nodes.map((node) => node.toFlowObject()),
-              edges: this.edges.map((edge) => edge.toFlowObject()),
-            },
-            null,
-            2
-          );
-        }
-
-        load(json) {
-          if (!json) {
-            return;
-          }
-          const data = JSON.parse(json);
-          if (!data || !Array.isArray(data.nodes)) {
-            throw new Error('不是有效的流程图快照');
-          }
-          // 先校验再动历史栈：非法输入不该污染撤销/重做（与 IED 的 loadProject 同一约定）
-          this.__captureHistory();
-          this.ice.clearAll();
-          this.selectedId = null;
-          data.nodes.forEach((item) => {
-            const node = new FlowNode(item);
-            delete node.state.typeId;
-            this.ice.addChild(node);
-          });
-          (data.edges || []).forEach((item) => {
-            const edge = new FlowEdge(item);
-            this.ice.addChild(edge);
-          });
-          this.__emitChange();
-        }
-
-        __captureHistory() {
-          if (!this.__historyEnabled) {
-            return;
-          }
-          this.__undoStack.push(this.serialize());
-          if (this.__undoStack.length > this.__maxHistory) {
-            this.__undoStack.shift();
-          }
-          this.__redoStack.length = 0;
-        }
-
-        canUndo() {
-          return this.__undoStack.length > 0;
-        }
-
-        canRedo() {
-          return this.__redoStack.length > 0;
-        }
-
-        undo() {
-          if (!this.canUndo()) {
-            return;
-          }
-          const current = this.serialize();
-          this.__historyEnabled = false;
-          try {
-            this.load(this.__undoStack.pop());
-          } finally {
-            this.__historyEnabled = true;
-          }
-          this.__redoStack.push(current);
-        }
-
-        redo() {
-          if (!this.canRedo()) {
-            return;
-          }
-          const current = this.serialize();
-          this.__historyEnabled = false;
-          try {
-            this.load(this.__redoStack.pop());
-          } finally {
-            this.__historyEnabled = true;
-          }
-          this.__undoStack.push(current);
-        }
-      }
-
-      /* =========================================================================
-       * 页面：初始化 + 工具栏 / 面板 / 画布交互
-       * ======================================================================= */
       const ice = new ICE().init('canvas-1');
       const designer = new FlowDesigner(ice);
       window.__ice = ice;
@@ -810,33 +325,7 @@
         });
         designer.select(null);
         // 建示例的这批操作不该占用撤销栈
-        designer.__undoStack.length = 0;
-        designer.__redoStack.length = 0;
-      }
-
-      function fitViewportToContent(padding = 80) {
-        const nodes = designer.nodes;
-        if (!nodes.length) {
-          ice.setViewport(1, 0, 0);
-          return;
-        }
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        nodes.forEach((node) => {
-          const box = node.getMinBoundingBox(true);
-          minX = Math.min(minX, box.tl[0]);
-          minY = Math.min(minY, box.tl[1]);
-          maxX = Math.max(maxX, box.br[0]);
-          maxY = Math.max(maxY, box.br[1]);
-        });
-        const contentWidth = Math.max(maxX - minX, 1);
-        const contentHeight = Math.max(maxY - minY, 1);
-        const scale = Math.min((canvasEl.width - padding * 2) / contentWidth, (canvasEl.height - padding * 2) / contentHeight, 1.1);
-        const tx = (canvasEl.width - contentWidth * scale) / 2 - minX * scale;
-        const ty = (canvasEl.height - contentHeight * scale) / 2 - minY * scale;
-        ice.setViewport(scale, tx, ty);
+        designer.resetHistory();
       }
 
       function refreshHistoryButtons() {
@@ -851,7 +340,7 @@
 
       function renderPanel() {
         const selected = designer.selected;
-        jsonOutput.textContent = designer.serialize();
+        jsonOutput.textContent = JSON.stringify(designer.toSnapshot(), null, 2);
         document.getElementById('flow-stats').textContent = `当前流程：${designer.nodes.length} 个节点 / ${designer.edges.length} 条连线`;
         refreshHistoryButtons();
         if (!selected) {
@@ -861,7 +350,6 @@
         }
         shapePanel.className = '';
         shapePanel.innerHTML = '';
-        const typeId = selected.constructor.typeId;
 
         const row = (labelText, control) => {
           const div = document.createElement('div');
@@ -874,26 +362,25 @@
           return control;
         };
 
-        if (typeId === FlowNode.typeId) {
+        if (selected.constructor.typeId === FlowNode.typeId) {
           const titleInput = document.createElement('input');
           titleInput.type = 'text';
           titleInput.value = selected.state.title || '';
           titleInput.addEventListener('change', () => {
             designer.updateNode(selected.state.id, { title: titleInput.value });
-            renderPanel();
           });
           row('标题', titleInput);
 
           const kindSelect = document.createElement('select');
-          Object.keys(NODE_KINDS).forEach((kind) => {
+          Object.keys(FLOW_NODE_KINDS).forEach((kind) => {
             const option = document.createElement('option');
             option.value = kind;
-            option.textContent = NODE_KINDS[kind].label;
+            option.textContent = FLOW_NODE_KINDS[kind].label;
             kindSelect.appendChild(option);
           });
           kindSelect.value = selected.state.kind;
           kindSelect.addEventListener('change', () => {
-            const preset = NODE_KINDS[kindSelect.value];
+            const preset = FLOW_NODE_KINDS[kindSelect.value];
             designer.updateNode(selected.state.id, {
               kind: kindSelect.value,
               width: preset.width,
@@ -901,13 +388,12 @@
               fillColor: preset.fill,
               strokeColor: preset.stroke,
             });
-            renderPanel();
           });
           row('类型', kindSelect);
 
           const fillInput = document.createElement('input');
           fillInput.type = 'color';
-          fillInput.value = selected.state.fillColor || NODE_KINDS[selected.state.kind].fill;
+          fillInput.value = selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill;
           fillInput.addEventListener('change', () => {
             designer.updateNode(selected.state.id, { fillColor: fillInput.value });
           });
@@ -915,7 +401,7 @@
 
           const strokeInput = document.createElement('input');
           strokeInput.type = 'color';
-          strokeInput.value = selected.state.strokeColor || NODE_KINDS[selected.state.kind].stroke;
+          strokeInput.value = selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke;
           strokeInput.addEventListener('change', () => {
             designer.updateNode(selected.state.id, { strokeColor: strokeInput.value });
           });
@@ -931,7 +417,6 @@
             input.value = selected.state[key];
             input.addEventListener('change', () => {
               designer.updateNode(selected.state.id, { [key]: Number(input.value) || selected.state[key] });
-              renderPanel();
             });
             row(labelText, input);
           });
@@ -950,7 +435,6 @@
         labelInput.value = selected.state.label || '';
         labelInput.addEventListener('change', () => {
           designer.updateEdge(selected.state.id, { label: labelInput.value });
-          renderPanel();
         });
         row('标签', labelInput);
 
@@ -967,7 +451,6 @@
         shapeSelect.value = selected.state.linkShape || 'visio';
         shapeSelect.addEventListener('change', () => {
           designer.updateEdge(selected.state.id, { linkShape: shapeSelect.value });
-          renderPanel();
         });
         row('形态', shapeSelect);
 
@@ -981,53 +464,29 @@
       /* ---------------- 工具栏 ---------------- */
       ['terminator', 'process', 'decision', 'io'].forEach((kind) => {
         document.getElementById(`btn-add-${kind}`).addEventListener('click', () => {
-          // 新节点放在当前视口中心，随节点数错开，避免叠加在一起
-          const centerX = (canvasEl.width / 2 - ice.viewport.tx) / ice.viewport.scale;
-          const centerY = (canvasEl.height / 2 - ice.viewport.ty) / ice.viewport.scale;
-          // 按 4 列网格错开（间距大于节点尺寸），连续新增多个节点不会互相压住
-          const index = designer.nodes.length;
-          const col = index % 4;
-          const row = Math.floor(index / 4) % 4;
-          designer.createNode(kind, { left: centerX - 110 + col * 280, top: centerY - 60 + row * 170 });
-          renderPanel();
+          designer.createNode(kind);
         });
       });
 
       document.getElementById('btn-delete-selected').addEventListener('click', () => {
         if (designer.selectedId) {
           designer.remove(designer.selectedId);
-          renderPanel();
         }
       });
 
-      document.getElementById('btn-undo').addEventListener('click', () => {
-        designer.undo();
-        renderPanel();
-      });
-
-      document.getElementById('btn-redo').addEventListener('click', () => {
-        designer.redo();
-        renderPanel();
-      });
-
-      document.getElementById('btn-fit').addEventListener('click', () => {
-        fitViewportToContent();
-      });
-
-      document.getElementById('btn-reset').addEventListener('click', () => {
-        ice.setViewport(1, 0, 0);
-      });
+      document.getElementById('btn-undo').addEventListener('click', () => designer.undo());
+      document.getElementById('btn-redo').addEventListener('click', () => designer.redo());
+      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => ice.setViewport(1, 0, 0));
 
       document.getElementById('btn-seed').addEventListener('click', () => {
         buildSeed();
-        fitViewportToContent();
-        renderPanel();
+        designer.fitViewport();
         setStatus('已恢复内置示例流程', '#059669');
       });
 
       document.getElementById('btn-clear').addEventListener('click', () => {
         designer.clear();
-        renderPanel();
         setStatus('已清空画布', '#b45309');
       });
 
@@ -1042,18 +501,22 @@
           setStatus('⚠️ 没有可加载的流程', '#b45309');
           return;
         }
+        let report;
         try {
-          designer.load(json);
+          report = designer.load(json);
         } catch (error) {
           setStatus(`❌ 加载失败：${error.message}`, '#b91c1c');
           return;
         }
-        renderPanel();
+        if (report.skipped.length) {
+          setStatus(`⚠️ 流程已加载，但跳过了 ${report.skipped.join('、')}`, '#b45309');
+          return;
+        }
         setStatus('✅ 流程已加载', '#059669');
       });
 
       document.getElementById('btn-export').addEventListener('click', () => {
-        jsonOutput.textContent = designer.serialize();
+        jsonOutput.textContent = JSON.stringify(designer.toSnapshot(), null, 2);
         jsonOutput.scrollIntoView({ block: 'nearest' });
         setStatus('已导出 JSON（见右侧面板）', '#0f766e');
       });
@@ -1062,11 +525,15 @@
         const selected = designer.selected;
         if (selected && selected.constructor.typeId === FlowEdge.typeId) {
           designer.updateEdge(selected.state.id, { linkShape: edgeShapeSelect.value });
-          renderPanel();
         }
       });
 
       /* ---------------- 连线模式与画布交互 ---------------- */
+      function hideLinkPreview() {
+        linkPreview.style.display = 'none';
+        linkPreviewPath.setAttribute('d', '');
+      }
+
       function setLinkingMode(enabled) {
         linkingMode = enabled;
         linkSource = null;
@@ -1080,11 +547,6 @@
 
       document.getElementById('btn-toggle-link').addEventListener('click', () => setLinkingMode(!linkingMode));
 
-      function hideLinkPreview() {
-        linkPreview.style.display = 'none';
-        linkPreviewPath.setAttribute('d', '');
-      }
-
       function showLinkPreview(node) {
         const box = node.getMinBoundingBox(true);
         const from = ice.worldToScreen(box.bc[0], box.bc[1]);
@@ -1096,22 +558,25 @@
         if (!linkingMode || !linkSource) {
           return;
         }
-        const [px, py] = [evt.offsetX, evt.offsetY];
         const box = linkSource.getMinBoundingBox(true);
         const from = ice.worldToScreen(box.bc[0], box.bc[1]);
-        linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${px} ${py}`);
+        linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${evt.offsetX} ${evt.offsetY}`);
       });
+
+      function canvasNodeAt(px, py) {
+        let node = ice.hitTest(px, py);
+        while (node && node.parentNode) {
+          node = node.parentNode;
+        }
+        return node && node.constructor.typeId === FlowNode.typeId ? node : null;
+      }
 
       canvasEl.addEventListener('mousedown', (evt) => {
         if (!linkingMode) {
           return;
         }
-        const hit = ice.hitTest(evt.offsetX, evt.offsetY);
-        let node = hit;
-        while (node && node.parentNode) {
-          node = node.parentNode;
-        }
-        if (!node || node.constructor.typeId !== FlowNode.typeId) {
+        const node = canvasNodeAt(evt.offsetX, evt.offsetY);
+        if (!node) {
           return;
         }
         evt.preventDefault();
@@ -1140,7 +605,6 @@
         linkSource = null;
         hideLinkPreview();
         setLinkingMode(false);
-        renderPanel();
       });
 
       // 点击空白处清除选中
@@ -1148,30 +612,26 @@
         const component = evt && evt.param && evt.param.component;
         if (!component && designer.selectedId) {
           designer.select(null);
-          renderPanel();
         }
       });
 
       // 键盘快捷键：Cmd/Ctrl + Z 撤销、Shift 组合重做
       window.addEventListener('keydown', (evt) => {
         const meta = evt.metaKey || evt.ctrlKey;
-        if (!meta) {
+        if (!meta || (evt.key !== 'z' && evt.key !== 'Z')) {
           return;
         }
-        if (evt.key === 'z' || evt.key === 'Z') {
-          evt.preventDefault();
-          if (evt.shiftKey) {
-            designer.redo();
-          } else {
-            designer.undo();
-          }
-          renderPanel();
+        evt.preventDefault();
+        if (evt.shiftKey) {
+          designer.redo();
+        } else {
+          designer.undo();
         }
       });
 
       /* ---------------- 启动 ---------------- */
       buildSeed();
-      fitViewportToContent();
+      designer.fitViewport();
       renderPanel();
       setStatus('示例流程已就绪：可拖拽节点、连线、改属性，或点「清空」从零开始', '#64748b');
     </script>
