@@ -9,7 +9,7 @@
 <p align="center">
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-047857.svg" /></a>
   <img alt="engine bundled" src="https://img.shields.io/badge/engine-bundled-047857.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/jest-15%20passed-047857.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/jest-168%20passed-047857.svg" />
   <img alt="typescript" src="https://img.shields.io/badge/TypeScript-4.6-3178c6.svg" />
 </p>
 
@@ -58,6 +58,21 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 - Undo / Redo（基于项目快照，最多 100 步）。
 - 项目级保存 / 加载（`serializeProject()` / `loadProject()`）。
 
+### BPMN 2.0 记法（`BpmnDesigner`）
+
+在**同一套节点 / 连线 / 历史 / 快照机制**上装载 BPMN 2.0 的业务记法，不另起一套模型：
+
+- 八类图元：事件圆（开始 / 中间 / 结束 × 无 / 消息 / 定时 / 错误 / 终止触发）、网关菱形（排他 / 并行 /
+  包容 / 事件）、任务与子流程（用户 / 服务 / 脚本 / 发送 / 接收 / 手动角标）、数据对象、文本注释、池、泳道。
+- **池 → 泳道 → 节点是真嵌套**（引擎的容器能力），拖动池或泳道时内部图元与挂在它们上面的连线一起走；
+  池的标题带与泳道的标题带不参与内容区，不会被内部图元压住。
+- 三种流：`sequence` 顺序流、`message` 消息流（跨参与者，虚线 + 实心箭头）、`association` 关联
+  （数据对象 / 注释）；顺序流可带条件表达式与「默认流」斜杠标记，标记是派生装饰，放在工具层、不污染文档。
+- **BPMN 语义校验**：每个池至少一个开始事件、顺序流不得跨池、消息流应连接不同参与者、网关分支是否齐全、
+  从开始事件的可达性等。
+- **BPMN 2.0 XML 互操作**：`toBpmnXml()` 导出（含 `BPMNDI` 布局信息）、`fromBpmnXml()` 导入；
+  这是**保布局的交换格式**，不是执行模型（条件只作为文本往返，无令牌仿真 / 边界事件订阅 / 多实例元数据）。
+
 ## 3. 界面预览
 
 完整的 ER 模型（电商交易 + 用户权限）：
@@ -82,6 +97,12 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 <img src="./tests/assets/flowchart-editor.png" alt="流程图编辑器示例" />
 
+再加一层业务记法就是 **BPMN 2.0**（`tests/bpmn-editor.html`）：池 / 泳道真嵌套（拖动银行池，内部泳道、
+任务和连线一起平移）、事件 / 网关 / 任务角标 / 数据对象 / 注释、顺序流 + 条件与默认流标记、
+跨池的消息流，右侧面板按图元类型给出网关类型、事件种类、任务类型等属性，并内置语义校验与 BPMN 2.0 XML 导出：
+
+<img src="./tests/assets/bpmn-editor.png" alt="BPMN 2.0 编辑器示例（信用卡申请审批）" />
+
 ## 4. 快速开始
 
 ```bash
@@ -95,6 +116,7 @@ npm run build
 |---|---|
 | `tests/entity-editor.html` | 交互式编辑器：实时编辑字段、创建/删除实体与关系、校验与保存加载；右侧面板含「TypeORM Schema」标签页 |
 | `tests/flowchart-editor.html` | 流程图编辑器：四类节点形状、拖拽、连线（含分支标签）、撤销重做、localStorage 存取与 JSON 导出；纯 DOM 面板，只依赖 `dist` 产物 |
+| `tests/bpmn-editor.html` | BPMN 2.0 编辑器：信用卡申请审批案例（两个池 / 三条泳道）、八类图元、条件与默认流标记、语义校验、BPMN 2.0 XML 导入导出 |
 | [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
 
 ```bash
@@ -190,6 +212,45 @@ flow.undo(); // 100 步历史
 内部子组件不写进文档、载入时由构造函数按 state 重建——避免重复挂载，也让同一份数据的两次序列化结果保持一致。
 可运行的完整示例见 `tests/flowchart-editor.html`；React 用法见 [6.6](#66-流程图的-react-绑定)；
 AI Agent 生成流程图的 JSON DSL 见 `ice-entity-designer-dsl`。
+
+#### 5.3 BPMN 2.0（`BpmnDesigner`）
+
+`BpmnDesigner` 继承 `FlowDesigner`，只补 BPMN 特有的事：顺序流上的条件 / 默认流标记（派生装饰，
+放在工具层、不进文档）与语义校验。其余能力（建节点 / 连线、选择、增删改、撤销重做、快照、适应视图、订阅）全部沿用：
+
+```js
+import { ICE, BpmnDesigner, toBpmnXml, fromBpmnXml } from 'ice-entity-designer';
+
+const ice = new ICE().init('canvas-1');
+const bpmn = new BpmnDesigner(ice);
+ice.alignmentGuide.enable({ threshold: 6 }); // 引擎自带的对齐标尺，BPMN 场景同样开启
+
+// 池 / 泳道也是节点；节点按几何**自动嵌进最内层容器**（泳道优先于池）
+const bank = bpmn.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 1180, height: 340 });
+bpmn.createNode('bpmnLane', { title: '受理岗', left: 60, top: 92, width: 1180, height: 150 });
+const submit = bpmn.createNode('bpmnEvent', { title: '申请提交', eventKind: 'start', left: 240, top: 120 });
+const verify = bpmn.createNode('bpmnTask', { title: '身份核验', taskType: 'service', left: 400, top: 100 });
+const gateway = bpmn.createNode('bpmnGateway', { title: '是否通过', gatewayType: 'exclusive', left: 880, top: 255 });
+
+bpmn.createEdge({ sourceId: submit.state.id, targetId: verify.state.id, label: '受理' });
+bpmn.createEdge({ sourceId: verify.state.id, targetId: gateway.state.id, condition: '评分 >= 600', isDefault: true });
+
+bpmn.validateBpmn();                  // BPMN 语义问题列表（每个池一个开始事件、顺序流不跨池…）
+const xml = toBpmnXml(bpmn);          // BPMN 2.0 XML + BPMNDI 布局
+const report = fromBpmnXml(xml, bpmn); // 导入并重建（含池 / 泳道容器）
+```
+
+| 能力 | API |
+|---|---|
+| 节点类型 | `createNode('bpmnEvent' \| 'bpmnTask' \| 'bpmnGateway' \| 'bpmnSubprocess' \| 'bpmnDataObject' \| 'bpmnAnnotation' \| 'bpmnPool' \| 'bpmnLane', props)`；预设见 `FLOW_NODE_KINDS` |
+| 语义属性 | 事件 `eventKind`（start / intermediate / end）+ `trigger`；网关 `gatewayType`；任务 / 子流程 `taskType` —— `updateNode()` 改完立即重建形状与角标 |
+| 连线 | `createEdge({ sourceId, targetId, flowType: 'sequence' \| 'message' \| 'association', label, condition, isDefault, linkShape })`；线型与箭头由 `flowType` 派生 |
+| 容器 | 池 `bpmnPool`（顶部 32px 标题带）、泳道 `bpmnLane`（左侧 32px 标题带）；建节点时按几何自动嵌套，拖动容器时内部图元与连线一起走 |
+| 校验与互操作 | `validateBpmn()`、`toBpmnXml(designer)`、`fromBpmnXml(xml, designer)` |
+| 其余 | 与 `FlowDesigner` 完全相同：`nodes` / `edges` / `select()` / `updateNode()` / `updateEdge()` / `remove()` / `undo()` / `redo()` / `serialize()` / `load()` / `fitViewport()` / `subscribe()` |
+
+BPMN 节点同样是**复合组件**（形状 + 角标 + 标记由 state 派生），内部子组件不写进文档、载入时重建。
+AI Agent 生成 BPMN 的 JSON DSL（`kind: 'bpmn'`）见 `ice-entity-designer-dsl`。
 
 ## 6. 在 React 中使用
 
@@ -327,6 +388,10 @@ export default function FlowEditor() {
 
 `onChange` 的语义与 ER 一致：任何改变模型的入口都会触发；额外多了一条——**画布上拖动节点也会触发**（`FlowDesigner` 订阅了引擎的 `BEFORE_MOVE` / `AFTER_MOVE`，并按帧合并），所以用 `onChange` 做自动保存能拿到拖拽后的最新坐标。
 
+BPMN 目前走**命令式** `BpmnDesigner`（见 [5.3](#53-bpmn-20bpmndesigner)）：它继承 `FlowDesigner`，
+需要的容器嵌套 / 语义校验 / XML 互操作都在命令式实例上，暂未额外提供 React 组件；
+React 里可沿用 `createFlowSession` 的模式自建一层封装。
+
 ## 7. 项目结构
 
 ```
@@ -337,6 +402,11 @@ src/
 │   ├── FlowNode.ts                # 节点：四类预设（起止 / 处理 / 判定 / 输入输出）+ 居中标题
 │   ├── FlowEdge.ts                # 连线：正交 / 贝塞尔 + 箭头 + 分支标签，插槽吸附
 │   └── FlowDesigner.ts            # 应用层：建节点/连线、选择、增删改、历史、快照存取、适应视图
+├── bpmn/                          # BPMN 2.0（FlowDesigner 之上的业务记法）
+│   ├── bpmn_shapes.ts             # 形状：事件圆 / 网关菱形 / 任务角标 / 子流程标记 / 数据对象 / 注释 / 池泳道
+│   ├── BpmnDesigner.ts            # 应用层：容器真嵌套（池→泳道→节点）、条件与默认流标记、语义校验
+│   ├── bpmn_validate.ts           # BPMN 语义校验（开始事件 / 跨池顺序流 / 网关分支 / 可达性）
+│   └── bpmn_xml.ts                # BPMN 2.0 XML 导入导出（含 BPMNDI 布局）
 ├── er-component/
 │   ├── Entity.ts                  # 实体：表头 + 字段列表 + 约束标记 + TypeORM 序列化
 │   └── Relation.ts                # 关系：基数 / 箭头 / 标签语义 / 连接槽位
