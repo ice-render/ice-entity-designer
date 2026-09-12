@@ -1,9 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ice-entity-designer project snapshot",
+  "$comment": "结构契约，与 src/utils/project_schema.ts 的 validateProjectSnapshot() 保持同步。契约：serializeProject() 的产物必须永远满足本 schema；可选值（连线端点 id/position、字段 name、fields/relations 整体）允许缺省，仅在出现时校验类型。",
   "type": "object",
-  "required": ["entities", "relations"],
+  "required": ["entities"],
   "properties": {
+    "version": {
+      "type": "number"
+    },
     "schemaVersion": {
       "type": "number"
     },
@@ -11,15 +15,15 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "entityName", "fields"],
+        "required": ["id", "entityName"],
         "properties": {
           "id": { "type": "string" },
+          "typeId": { "type": "string" },
           "entityName": { "type": "string" },
           "fields": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["name"],
               "properties": {
                 "name": { "type": "string" },
                 "type": { "type": "string" },
@@ -34,9 +38,10 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "links"],
+        "required": ["id"],
         "properties": {
           "id": { "type": "string" },
+          "typeId": { "type": "string" },
           "relationType": { "type": "string" },
           "links": {
             "type": "object",

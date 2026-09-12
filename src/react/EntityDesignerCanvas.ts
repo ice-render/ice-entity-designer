@@ -2,7 +2,29 @@ import { createElement, forwardRef, Fragment, useEffect, useImperativeHandle, us
 import { EntityDesignerProvider } from './context';
 import { createDesignerSession, shouldApplyControlledValue } from './session';
 import type { DesignerSession } from './session';
-import type { EntityDesignerCanvasProps, EntityDesignerHandle } from './types';
+import type { EntityDesignerCanvasProps, EntityDesignerErrorPayload, EntityDesignerHandle } from './types';
+
+/**
+ * 载入快照失败时上报给 onError（默认 console.error）。
+ *
+ * 组件内的两处 loadProject 都走这里兜底：非法 / 版本不兼容的快照只会被上报，
+ * 不会把异常抛进 React 渲染树（挂载期抛错会直接崩掉整棵子树）。
+ */
+function reportLoadError(
+  handler: ((payload: EntityDesignerErrorPayload) => void) | undefined,
+  phase: EntityDesignerErrorPayload['phase'],
+  snapshot: string,
+  error: unknown
+): void {
+  const normalized = error instanceof Error ? error : new Error(String(error));
+  if (handler) {
+    handler({ phase, snapshot, error: normalized });
+    return;
+  }
+  if (typeof console !== 'undefined' && console.error) {
+    console.error(`[ice-entity-designer] ${phase} 快照载入失败：`, normalized);
+  }
+}
 
 /** 把会话包装成对外的命令式句柄；会话为空时各方法安全空转 */
 function createHandle(session: DesignerSession | null): EntityDesignerHandle {
@@ -60,6 +82,8 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
   onChangeRef.current = props.onChange;
   const onReadyRef = useRef(props.onReady);
   onReadyRef.current = props.onReady;
+  const onErrorRef = useRef(props.onError);
+  onErrorRef.current = props.onError;
 
   /** 最近一次「已同步进画布」的快照，用于受控模式的循环保护 */
   const lastAppliedRef = useRef<string | null>(null);
@@ -93,7 +117,13 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
     // 会话就绪后再载入初始快照，保证上面回调里拿得到实例
     if (initialProject !== undefined) {
       lastAppliedRef.current = initialProject;
-      session.designer.loadProject(initialProject);
+      try {
+        session.designer.loadProject(initialProject);
+      } catch (error) {
+        // 初始快照非法时保留空白项目继续可用，只上报错误。
+        // 仍然记下 lastApplied，避免受控 effect 立刻用同一个 value 再报一次。
+        reportLoadError(onErrorRef.current, 'load-initial', initialProject, error);
+      }
     } else {
       lastAppliedRef.current = null;
     }
@@ -121,8 +151,13 @@ const EntityDesignerCanvas = forwardRef<any, EntityDesignerCanvasProps>(function
     if (!shouldApplyControlledValue(props.value, lastAppliedRef.current)) {
       return;
     }
-    lastAppliedRef.current = props.value as string;
-    designer.loadProject(props.value as string);
+    const value = props.value as string;
+    lastAppliedRef.current = value;
+    try {
+      designer.loadProject(value);
+    } catch (error) {
+      reportLoadError(onErrorRef.current, 'load-controlled', value, error);
+    }
   }, [props.value, designer]);
 
   // designer 是刻意的依赖：句柄从 ref 里取实例，只有 designer 变化时才需要重建，

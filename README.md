@@ -122,7 +122,7 @@ const issues = designer.validate(); // 校验问题列表
 
 // 项目存取与历史
 const snapshot = designer.serializeProject();
-designer.loadProject(snapshot);
+designer.loadProject(snapshot); // 非法 / 版本不兼容的快照会抛错，且不会改动当前项目与历史栈
 designer.undo();
 ```
 
@@ -194,6 +194,7 @@ export default function App() {
 | `value` | `string` | **受控**：项目快照，变化时同步进画布（内部变更经 `onChange` 上报，带循环保护） |
 | `defaultValue` | `string` | **非受控**：初始项目快照 |
 | `onChange` | `(payload: { snapshot, schema }) => void` | 模型变更（增删改 / 载入 / undo / redo）后触发，`snapshot` 可直接用于自动保存 |
+| `onError` | `(payload: { phase, snapshot, error }) => void` | 快照载入失败（非法 / 版本不兼容）时触发，默认 `console.error`；组件内部已捕获，不会把异常抛进渲染树 |
 | `onReady` | `(handle) => void` | 实例就绪，回调里拿到命令式句柄 |
 | `width` / `height` | `number` | 画布尺寸，默认 `1200 × 800` |
 | `renderMode` | `'dirty-rect' \| 'full'` | 渲染模式，默认 `dirty-rect` |

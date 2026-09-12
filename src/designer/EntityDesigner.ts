@@ -169,8 +169,14 @@ export default class EntityDesigner {
     if (!json) {
       return;
     }
+    // 先解析 + 校验，确认是合法快照之后再动历史栈和画布：
+    // 载入失败既不该污染 undo/redo，也不该丢弃当前项目。
+    const data = this.__parseProject(json);
+    if (!data) {
+      return;
+    }
     this.captureHistory();
-    this.__applyProject(json);
+    this.__applySnapshot(data);
     this.__emitChange();
   }
 
@@ -286,10 +292,16 @@ export default class EntityDesigner {
     };
   }
 
-  private __applyProject(json: string): void {
+  /**
+   * 解析并校验快照。
+   *
+   * @returns 合法快照对象；对于「压根不是项目快照」的输入（例如 `{"nope":true}`）返回 null，
+   *          保持历史行为：静默忽略而不是抛错。结构非法时抛错，由调用方决定如何呈现。
+   */
+  private __parseProject(json: string): any {
     const data = JSON.parse(json);
     if (!data || !Array.isArray(data.entities)) {
-      return;
+      return null;
     }
     if (data.schemaVersion !== undefined && data.schemaVersion !== PROJECT_SCHEMA_VERSION) {
       throw new Error(`Unsupported project schemaVersion: ${data.schemaVersion}`);
@@ -298,7 +310,18 @@ export default class EntityDesigner {
     if (!validation.valid) {
       throw new Error(`Invalid project snapshot:\n${validation.errors.join('\n')}`);
     }
+    return data;
+  }
 
+  private __applyProject(json: string): void {
+    const data = this.__parseProject(json);
+    if (!data) {
+      return;
+    }
+    this.__applySnapshot(data);
+  }
+
+  private __applySnapshot(data: any): void {
     const renderer = this.ice.renderer;
     if (renderer) {
       renderer.stop();
@@ -344,9 +367,13 @@ export default class EntityDesigner {
 
   private __applyHistorySnapshot(json: string): void {
     this.__historyEnabled = false;
-    this.__applyProject(json);
-    this.selectedId = null;
-    this.__historyEnabled = true;
+    try {
+      this.__applyProject(json);
+      this.selectedId = null;
+    } finally {
+      // 回放失败也必须恢复历史开关，否则之后所有操作都不再入栈，undo/redo 会静默失效。
+      this.__historyEnabled = true;
+    }
   }
 
   public canUndo(): boolean {
@@ -373,8 +400,15 @@ export default class EntityDesigner {
       return;
     }
     const current = this.serializeProject();
+    const previous = this.__undoStack.pop();
+    try {
+      this.__applyHistorySnapshot(previous);
+    } catch (error) {
+      // 回放失败：把栈恢复原状，避免 undo/redo 栈错位
+      this.__undoStack.push(previous);
+      throw error;
+    }
     this.__redoStack.push(current);
-    this.__applyHistorySnapshot(this.__undoStack.pop());
     this.__emitChange();
   }
 
@@ -383,8 +417,14 @@ export default class EntityDesigner {
       return;
     }
     const current = this.serializeProject();
+    const next = this.__redoStack.pop();
+    try {
+      this.__applyHistorySnapshot(next);
+    } catch (error) {
+      this.__redoStack.push(next);
+      throw error;
+    }
     this.__undoStack.push(current);
-    this.__applyHistorySnapshot(this.__redoStack.pop());
     this.__emitChange();
   }
 

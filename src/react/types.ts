@@ -10,6 +10,15 @@ export type EntityDesignerChangePayload = {
   schema: object;
 };
 
+export type EntityDesignerErrorPayload = {
+  /** 出错阶段：挂载时载入初始快照 / 受控模式同步外部 value */
+  phase: 'load-initial' | 'load-controlled';
+  /** 触发失败的快照（value 或 defaultValue） */
+  snapshot: string;
+  /** 原始错误（loadProject 对非法 / 版本不兼容的快照会抛错） */
+  error: Error;
+};
+
 export type EntityDesignerHandle = {
   /** 底层 ICE 实例（卸载后为 null） */
   ice: any;
@@ -41,6 +50,11 @@ export type EntityDesignerCanvasProps = {
   renderMode?: 'dirty-rect' | 'full';
   /** 模型变更回调（增删改 / 载入 / undo / redo 之后触发） */
   onChange?: (payload: EntityDesignerChangePayload) => void;
+  /**
+   * 快照载入失败回调。不传时默认 console.error。
+   * 组件内部已捕获异常，非法 / 过期的快照不会把错误抛进 React 渲染树。
+   */
+  onError?: (payload: EntityDesignerErrorPayload) => void;
   /** 实例就绪回调 */
   onReady?: (handle: EntityDesignerHandle) => void;
   className?: string;

@@ -1434,7 +1434,14 @@
           validationOutput.style.color = '#b45309';
           return;
         }
-        designer.loadProject(json);
+        try {
+          designer.loadProject(json);
+        } catch (error) {
+          validationOutput.innerHTML = '';
+          validationOutput.textContent = `❌ 项目加载失败：${error.message}`;
+          validationOutput.style.color = '#b91c1c';
+          return;
+        }
         renderPanel();
         setLinkingMode(false);
         refreshHistoryButtons();

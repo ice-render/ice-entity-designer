@@ -26,6 +26,10 @@ jest.mock('../../src/index', () => {
       dispose = jest.fn();
       // 模拟真实引擎：loadProject 会触发一次变更广播（正是它在初始化期暴露了 TDZ 问题）
       loadProject = jest.fn((json: string) => {
+        // 哨兵值：模拟真实 loadProject 对非法快照抛错
+        if (json === '__invalid__') {
+          throw new Error('Invalid project snapshot');
+        }
         const listener = (this.constructor as any).lastListener;
         if (listener) {
           listener(json);
@@ -165,5 +169,35 @@ describe('<EntityDesignerCanvas> 生命周期与受控', () => {
     expect(handle.designer).toBe(MockEntityDesigner.instances[0]);
     expect(typeof handle.addEntity).toBe('function');
     expect(handle.toSchemaObject()).toEqual({ mock: 'schema' });
+  });
+
+  it('非法 defaultValue：挂载不崩，走 onError 上报', () => {
+    const onError = jest.fn();
+    expect(() => {
+      act(() => {
+        root.render(createElement(EntityDesignerCanvas, { defaultValue: '__invalid__', onError }));
+      });
+    }).not.toThrow();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toMatchObject({ phase: 'load-initial', snapshot: '__invalid__' });
+    expect(onError.mock.calls[0][0].error.message).toBe('Invalid project snapshot');
+  });
+
+  it('非法受控 value：不抛进渲染树，走 onError 上报', () => {
+    const onError = jest.fn();
+    act(() => {
+      root.render(createElement(EntityDesignerCanvas, { value: '{"v":1}', onError }));
+    });
+    expect(onError).not.toHaveBeenCalled();
+
+    expect(() => {
+      act(() => {
+        root.render(createElement(EntityDesignerCanvas, { value: '__invalid__', onError }));
+      });
+    }).not.toThrow();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toMatchObject({ phase: 'load-controlled', snapshot: '__invalid__' });
   });
 });

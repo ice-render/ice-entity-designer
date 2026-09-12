@@ -491,6 +491,144 @@ describe('EntityDesigner 连线形态（linkShape）', () => {
   });
 });
 
+describe('EntityDesigner 快照 round-trip 自洽（回归：库自己产出的快照必须能自己加载）', () => {
+  it('无端点连线（createRelation 不指定两端）的产物可以再次加载', () => {
+    const { designer } = makeDesigner();
+    designer.createEntity({ entityName: 'A' });
+    designer.createRelation({ relationType: 'one-to-many' });
+
+    const json = designer.serializeProject();
+    expect(JSON.parse(json).relations[0].links.start.id).toBeUndefined();
+
+    expect(() => designer.loadProject(json)).not.toThrow();
+    expect(designer.entities.length).toBe(1);
+    expect(designer.relations.length).toBe(1);
+  });
+
+  it('无端点连线：undo 之后的 redo 不抛错，且内容正确', () => {
+    const { designer } = makeDesigner();
+    designer.createEntity({ entityName: 'A' });
+    designer.createRelation({ relationType: 'one-to-many' });
+
+    designer.undo();
+    expect(designer.relations.length).toBe(0);
+
+    expect(() => designer.redo()).not.toThrow();
+    expect(designer.entities.length).toBe(1);
+    expect(designer.relations.length).toBe(1);
+  });
+
+  it('字段缺少 name 的快照可以加载', () => {
+    const { designer } = makeDesigner();
+    designer.createEntity({ entityName: 'A', fields: [{ type: 'number' }] });
+
+    const json = designer.serializeProject();
+    expect(() => designer.loadProject(json)).not.toThrow();
+    expect(designer.entities[0].state.fields).toEqual([{ type: 'number' }]);
+  });
+
+  it('id / entityName / fields 缺省时由 Entity 归一化，序列化产物仍可加载', () => {
+    const { designer } = makeDesigner();
+    const entity = designer.createEntity({ id: undefined, entityName: undefined, fields: undefined });
+    expect(typeof entity.state.id).toBe('string');
+
+    const payload = JSON.parse(designer.serializeProject());
+    expect(typeof payload.entities[0].id).toBe('string');
+    expect(typeof payload.entities[0].entityName).toBe('string');
+    expect(payload.entities[0].fields).toEqual([]);
+    expect(() => designer.loadProject(JSON.stringify(payload))).not.toThrow();
+  });
+
+  it('relations / fields 缺省等价于空数组，可被加载', () => {
+    const { designer } = makeDesigner();
+    const minimal = JSON.stringify({
+      version: 1,
+      schemaVersion: 1,
+      entities: [{ id: 'e1', entityName: 'A' }],
+    });
+    expect(() => designer.loadProject(minimal)).not.toThrow();
+    expect(designer.entities.length).toBe(1);
+    expect(designer.relations.length).toBe(0);
+    expect(designer.entities[0].state.fields).toEqual([]);
+  });
+
+  it('loadProject 失败不污染历史栈、不清空当前项目', () => {
+    const { designer } = makeDesigner();
+    designer.createEntity({ entityName: 'Keep' });
+    const undoBefore = designer.__undoStack.length;
+    const redoBefore = designer.__redoStack.length;
+
+    const broken = JSON.stringify({ version: 1, entities: [{ id: 1, entityName: 'A' }], relations: [] });
+    expect(() => designer.loadProject(broken)).toThrow(/Invalid project snapshot/);
+
+    expect(names(designer.entities)).toEqual(['Keep']);
+    expect(designer.__undoStack.length).toBe(undoBefore);
+    expect(designer.__redoStack.length).toBe(redoBefore);
+  });
+
+  it('回放失败不会永久关闭历史记录，且 undo/redo 栈保持原状', () => {
+    const { designer } = makeDesigner();
+    designer.createEntity({ entityName: 'A' });
+    const undoBefore = designer.__undoStack.length;
+
+    const original = designer.__applyProject.bind(designer);
+    designer.__applyProject = () => {
+      throw new Error('boom');
+    };
+    expect(() => designer.undo()).toThrow('boom');
+    designer.__applyProject = original;
+
+    // 失败后历史开关必须恢复，栈不能错位
+    expect(designer.__historyEnabled).toBe(true);
+    expect(designer.__undoStack.length).toBe(undoBefore);
+    expect(designer.canRedo()).toBe(false);
+
+    // 后续操作仍然可撤销
+    designer.createEntity({ entityName: 'B' });
+    expect(names(designer.entities)).toEqual(['A', 'B']);
+    designer.undo();
+    expect(names(designer.entities)).toEqual(['A']);
+  });
+});
+
+describe('validateProjectSnapshot 的宽严边界', () => {
+  it('接受库可能产出的可选值缺省（连线端点无 id、字段无 name、relations 缺省）', () => {
+    const snapshot = {
+      version: 1,
+      schemaVersion: 1,
+      entities: [{ id: 'e1', entityName: 'A', fields: [{ type: 'number' }] }],
+      relations: [{ id: 'r1', links: { start: { position: 'R' }, end: { position: 'L' } } }],
+    };
+    expect(validateProjectSnapshot(snapshot)).toEqual({ valid: true, errors: [] });
+    expect(validateProjectSnapshot({ entities: [{ id: 'e1', entityName: 'A' }] }).valid).toBe(true);
+    expect(validateProjectSnapshot({ entities: [], relations: [] }).valid).toBe(true);
+  });
+
+  it('仍然拒绝结构性错误', () => {
+    const cases = [
+      null,
+      [],
+      'not-an-object',
+      { relations: [] },
+      { entities: 'nope' },
+      { entities: ['nope'] },
+      { entities: [{ id: 1, entityName: 'A' }] },
+      { entities: [{ id: 'e1' }] },
+      { entities: [{ id: 'e1', entityName: 'A', fields: {} }] },
+      { entities: [{ id: 'e1', entityName: 'A', fields: [{ name: 1 }] }] },
+      { entities: [], relations: 'nope' },
+      { entities: [], relations: [{ id: 'r1', links: 'nope' }] },
+      { entities: [], relations: [{ id: 'r1', links: { start: { id: 1 } } }] },
+      { entities: [], relations: [{ id: 'r1', links: { end: { position: 1 } } }] },
+      { entities: [], relations: [{ links: {} }] },
+      { entities: [], schemaVersion: '1' },
+    ];
+    cases.forEach((item) => {
+      expect(validateProjectSnapshot(item).valid).toBe(false);
+    });
+  });
+});
+
 describe('EntityDesigner 快照完整性（通用 ICE 字段与箭头字段）', () => {
   it('保存/加载保留通用组件属性与关系箭头参数', () => {
     const { designer } = makeDesigner();
