@@ -67,6 +67,8 @@ export default class StatechartDesigner extends FlowDesigner {
     const sourcePort = props.sourcePort || 'R';
     const targetPort = props.targetPort || 'L';
     const edge = new StateTransition({
+      // id 由调用方决定（DSL 往返要用它引用这条转移）
+      id: props.id,
       links: { start: { id: props.sourceId, position: sourcePort }, end: { id: props.targetId, position: targetPort } },
       startPoint: this.__portPoint(source, sourcePort),
       endPoint: this.__portPoint(target, targetPort),

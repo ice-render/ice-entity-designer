@@ -105,6 +105,8 @@ export default class GanttDesigner extends FlowDesigner {
     const startPoint = this.__anchor(source, 'R');
     const endPoint = this.__anchor(target, 'L');
     const link = new GanttDependency({
+      // id 由调用方决定（DSL 往返要用它引用这条依赖）
+      id: props.id,
       links: { start: { id: props.sourceId, position: 'R' }, end: { id: props.targetId, position: 'L' } },
       // 折线的构造期不会把 startPoint/endPoint 落到 points（那是 setState 的行为），
       // 所以这里直接给 points，保证首次渲染就接在两条任务条上。

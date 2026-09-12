@@ -325,6 +325,8 @@ export default class FlowDesigner {
     const sourcePort: FlowPort = props.sourcePort || 'B';
     const targetPort: FlowPort = props.targetPort || 'T';
     const edge = new FlowEdge({
+      // id 由调用方决定（DSL / 快照要用它引用这条线）；不传时引擎照旧自动生成
+      id: props.id,
       links: { start: { id: props.sourceId, position: sourcePort }, end: { id: props.targetId, position: targetPort } },
       startPoint: this.__slotPoint(source, sourcePort),
       endPoint: this.__slotPoint(target, targetPort),

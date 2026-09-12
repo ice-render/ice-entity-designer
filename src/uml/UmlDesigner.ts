@@ -71,6 +71,8 @@ export default class UmlDesigner extends FlowDesigner {
     const sourcePort = props.sourcePort || 'R';
     const targetPort = props.targetPort || 'L';
     const relation = new UmlRelation({
+      // id 由调用方决定（DSL 往返要用它引用这条关系）
+      id: props.id,
       links: { start: { id: props.sourceId, position: sourcePort }, end: { id: props.targetId, position: targetPort } },
       startPoint: this.__portPoint(source, sourcePort),
       endPoint: this.__portPoint(target, targetPort),

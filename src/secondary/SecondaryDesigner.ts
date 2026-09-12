@@ -98,6 +98,8 @@ export default class SecondaryDesigner extends FlowDesigner {
     const sourcePort = props.sourcePort || 'B';
     const targetPort = props.targetPort || 'T';
     const edge = new SecondaryWire({
+      // id 由调用方决定（DSL 往返要用它引用这条导线）
+      id: props.id,
       links: {
         start: { id: props.sourceId, position: sourcePort },
         end: { id: props.targetId, position: targetPort },

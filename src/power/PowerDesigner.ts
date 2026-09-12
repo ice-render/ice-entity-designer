@@ -127,6 +127,8 @@ export default class PowerDesigner extends FlowDesigner {
     const sourcePort = props.sourcePort || 'B';
     const targetPort = props.targetPort || 'T';
     const edge = new PowerLine({
+      // id 由调用方决定（DSL 往返要用它引用这条导体）
+      id: props.id,
       links: { start: { id: props.sourceId, position: sourcePort }, end: { id: props.targetId, position: targetPort } },
       startPoint: this.__slotPoint(source, sourcePort),
       endPoint: this.__slotPoint(target, targetPort),
