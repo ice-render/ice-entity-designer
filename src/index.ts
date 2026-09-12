@@ -60,6 +60,9 @@ export type { GanttTextImportResult } from './gantt/gantt_text';
 // 电力一次系统图（单线图）符号库 —— 记法对齐 JB/T 5872-1991
 export { default as PowerSymbol, POWER_SYMBOL_KINDS, POWER_SYMBOL_PRESETS, POWER_STYLE } from './power/power_shapes';
 export type { PowerSymbolKind } from './power/power_shapes';
+export { default as PowerDesigner, PowerLine } from './power/PowerDesigner';
+export type { PowerIssue, PowerTopology } from './power/PowerDesigner';
+export { POWER_VOLTAGE_LEVELS, voltageColorOf, defaultVoltageColors } from './power/power_voltage';
 export { parseDate, formatDate, addDays, diffDays, eachDay, tickLabel } from './gantt/gantt_date';
 
 // 文本互操作：PlantUML / Mermaid 类图语法子集（导入导出）

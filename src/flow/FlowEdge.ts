@@ -17,7 +17,8 @@ export type FlowPort = 'T' | 'R' | 'B' | 'L' | 'C';
  * 两端节点的插槽上 —— 节点被拖动时连线自动跟随重新布线。
  */
 export default class FlowEdge extends ICEVisioLink {
-  public static readonly typeId = 'FlowEdge';
+  /** 稳定类型标识。声明为 `string`（而不是字面量类型）：域包可以派生自己的导体类型（如 PowerLine） */
+  public static readonly typeId: string = 'FlowEdge';
 
   /** 连线没有子组件；声明派生可保证将来即使加了内部装饰也不会被重复序列化 */
   public hasDerivedChildren(): boolean {

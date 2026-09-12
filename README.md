@@ -122,6 +122,8 @@ npm run build
 | `examples/uml-editor.html` | UML 类图编辑器：三段式类框、六种关系、语义校验、矢量导出、PlantUML / Mermaid 文本互操作 |
 | `examples/statechart-editor.html` | 状态机编辑器：伪状态 / 普通状态 / 复合状态容器、转移标签 `事件 [守卫] / 动作` |
 | `examples/gantt-editor.html` | 甘特编辑器：时间轴与按天吸附、依赖线、自动排程、关键路径、资源冲突校验、矢量导出 |
+| `examples/power-editor.html` | 电力一次系统图（单线图）编辑器：110kV 变电站案例（双母线 + 母联 + 两回进线 + 两台主变），开关分合、带电分析与色标、五防相关校验 |
+| `examples/power-symbols.html` | 电力符号表：15 种一次设备符号（记法对齐 JB/T 5872-1991），可缩放平移、导出 SVG |
 | [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
 
 ```bash
@@ -412,6 +414,44 @@ const svg = statechart.toSvg({ background: '#ffffff' });
 转移标签导入时拆回事件 / 守卫 / 动作三段（`IED.splitTransitionLabel(label)` 是这一步的公开口径）。
 
 可运行示例：`examples/statechart-editor.html`（订单状态机，含复合状态与 PlantUML 导入导出）。
+
+#### 5.9 电力一次系统图（单线图）
+
+面向电力行业的第一块垂直切片：**一次设备符号库 + 应用层 + 拓扑 + 语义校验**。
+记法对齐 **JB/T 5872-1991《高压开关设备电气图形及文字符号》**（QF 断路器 / QS 隔离开关 /
+QL 负荷开关 / QE 接地开关 / TA 电流互感器 / TV 电压互感器 / TM 变压器 / FU 熔断器 / F 避雷器 /
+L 电抗器 / E 接地），通用规则遵循 GB/T 4728（等同 IEC 60617）。符号依据与默认口径见
+`docs/power-symbol-spec.md`。
+
+```js
+import { ICE, PowerDesigner } from 'ice-entity-designer';
+
+const ice = new ICE().init('canvas-1');
+const power = new PowerDesigner(ice);
+
+const line = power.createSymbol('generator', { name: '线路1', voltageLevel: '110kV' });
+const qf = power.createSymbol('breaker', { name: '1101', voltageLevel: '110kV' });
+const bus = power.createSymbol('busbar', { name: '#1M', voltageLevel: '110kV', width: 720 });
+power.createLine({ sourceId: line.state.id, targetId: qf.state.id });
+power.createLine({ sourceId: qf.state.id, targetId: bus.state.id });
+
+power.setEnergizedSource(line.state.id, true);   // 标电源点
+power.setSwitchState(qf.state.id, 'closed');     // 运行态：合闸
+power.applyTopology();                           // 带电分析 → 写回各设备，供色标使用
+power.validatePower();                           // 编号唯一 / 电压等级一致 / 母线进线 / 断路器两侧隔离开关 / 五防
+const svg = power.toSvg({ background: '#ffffff' });
+```
+
+| 能力 | 说明 |
+|---|---|
+| 符号库 | 15 种一次设备；每个派生部件带稳定 `role`（blade / arcMark / contactBar / winding / coil…），测试按 role 认记法 |
+| 电压等级色标 | `setVoltageColors({ '110kV': '#xxxxxx' })` 覆盖；默认值见规格文档 |
+| 运行态 | `setSwitchState(id, 'open' / 'closed')`：刀臂形状 + 分合标签 + 带电范围一起更新 |
+| 拓扑 | `topology()` 返回带电设备与电气连通域；`applyTopology()` 把带电状态写回节点（不带电自动变灰） |
+| 语义校验 | 设备编号唯一、直接相连的电压等级一致（变压器两侧例外）、母线要有进线、断路器两侧应有隔离开关，以及**带电合接地刀闸 / 带接地线合闸送电**这两条五防相关规则 |
+
+可运行示例：`examples/power-editor.html`（110kV 变电站：双母线 + 母联 + 两回进线 + 两台主变）；
+符号表页：`examples/power-symbols.html`。
 
 ## 6. 在 React 中使用
 

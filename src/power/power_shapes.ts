@@ -22,6 +22,7 @@
  */
 import { ICECircle, ICEGroup, ICEPolyLine, ICERect, ICEText } from 'ice-render';
 import merge from 'lodash/merge';
+import { POWER_NEUTRAL_COLOR, voltageColorOf } from './power_voltage';
 
 export const POWER_SYMBOL_KINDS = [
   'busbar',
@@ -86,7 +87,19 @@ export const POWER_STYLE = {
   tagColor: '#475569',
   /** 圆内字母（G / M）的字号 */
   letterFontSize: 15,
+  /** 明确不带电时的颜色（只有算过拓扑 `energized: false` 才会用到） */
+  deEnergizedColor: '#94a3b8',
+  /** 设备名 / 编号标注的字号与颜色 */
+  nameFontSize: 11,
+  nameColor: '#334155',
+  /** 开关状态标签（合 / 分）的字号 */
+  stateFontSize: 10,
 };
+
+/** 有分 / 合状态的开关电器（其余是静止设备） */
+export const POWER_SWITCH_KINDS: PowerSymbolKind[] = ['breaker', 'disconnector', 'loadSwitch', 'earthingSwitch'];
+
+export type PowerSwitchState = 'open' | 'closed';
 
 /** 采样半圆弧，返回折线点（不依赖 Path2D.arc，Node / 小程序一致） */
 function arcPoints(cx: number, cy: number, radius: number, startDeg: number, endDeg: number, steps = 16): number[][] {
@@ -134,12 +147,36 @@ export default class PowerSymbol extends ICEGroup {
         height: preset.height,
         style: { strokeStyle: POWER_STYLE.strokeStyle, lineWidth: POWER_STYLE.lineWidth },
         tagStyle: { fontSize: POWER_STYLE.tagFontSize, textColor: POWER_STYLE.tagColor },
+        /** 设备名 / 调度编号（画在符号上方） */
+        name: '',
+        /** 电压等级（'110kV' 之类）—— 决定色标 */
+        voltageLevel: '',
+        /** 色标表覆盖（公司规范不同） */
+        voltageColors: null,
+        /** 开关状态：默认按标准的「无激励」正常状态（分位） */
+        switchState: 'open' as PowerSwitchState,
+        /** 带电状态：undefined = 未计算（静态图纸）；false = 明确不带电 */
+        energized: undefined as boolean | undefined,
+        /** 电源点（发电机 / 进线 / 主变电源侧）—— 拓扑从这里开始推 */
+        energizedSource: false,
       },
       props
     );
   }
 
-  private static readonly __shapeKeys = ['kind', 'tag', 'width', 'height', 'style', 'tagStyle'];
+  private static readonly __shapeKeys = [
+    'kind',
+    'tag',
+    'width',
+    'height',
+    'style',
+    'tagStyle',
+    'name',
+    'voltageLevel',
+    'voltageColors',
+    'switchState',
+    'energized',
+  ];
 
   public setState(patch: any): void {
     const needsSync =
@@ -168,9 +205,21 @@ export default class PowerSymbol extends ICEGroup {
     const w = this.state.width || preset.width;
     const h = this.state.height || preset.height;
     const lw = (this.state.style && this.state.style.lineWidth) || POWER_STYLE.lineWidth;
-    const strokeStyle = (this.state.style && this.state.style.strokeStyle) || POWER_STYLE.strokeStyle;
+    /**
+     * 颜色优先级：**明确不带电 → 灰**；否则按电压等级色标；没标等级用中性描边色。
+     * 静态图纸（没算拓扑）与 SCADA 画面（算过拓扑）因此共用一套代码，差别只在 `energized` 有没有被赋值。
+     */
+    const baseStroke = (this.state.style && this.state.style.strokeStyle) || POWER_STYLE.strokeStyle;
+    const strokeStyle =
+      this.state.energized === false
+        ? POWER_STYLE.deEnergizedColor
+        : this.state.voltageLevel
+        ? voltageColorOf(this.state.voltageLevel, this.state.voltageColors || undefined)
+        : baseStroke || POWER_NEUTRAL_COLOR;
     const cx = w / 2;
     const baseZ = this.state.zIndex || 0;
+    const isSwitch = POWER_SWITCH_KINDS.indexOf(kind) !== -1;
+    const closed = this.state.switchState === 'closed';
 
     const line = (role: string, points: number[][], width = lw): any =>
       this.__add(
@@ -469,8 +518,8 @@ export default class PowerSymbol extends ICEGroup {
         'tag',
         new ICEText({
           zIndex: baseZ + 4,
-          left: w - 4,
-          top: h + 2,
+          left: w + 4,
+          top: h / 2 - 8,
           width: 44,
           height: 16,
           text: String(tag),
@@ -480,6 +529,51 @@ export default class PowerSymbol extends ICEGroup {
             fontSize: (this.state.tagStyle && this.state.tagStyle.fontSize) || POWER_STYLE.tagFontSize,
             fillStyle: (this.state.tagStyle && this.state.tagStyle.textColor) || POWER_STYLE.tagColor,
             textAlign: 'left',
+            textBaseline: 'middle',
+          },
+        })
+      );
+    }
+    // 设备名 / 调度编号：统一放在符号上方（居中于符号）
+    if (this.state.name) {
+      this.__add(
+        'nameLabel',
+        new ICEText({
+          zIndex: baseZ + 4,
+          left: 0,
+          top: -20,
+          width: Math.max(w, 64),
+          height: 16,
+          text: String(this.state.name),
+          stroke: false,
+          interactive: false,
+          style: {
+            fontSize: POWER_STYLE.nameFontSize,
+            fillStyle: POWER_STYLE.nameColor,
+            textAlign: 'center',
+            textBaseline: 'middle',
+          },
+        })
+      );
+    }
+
+    // 开关状态标签（合 / 分）：放在符号左侧，颜色跟符号走
+    if (isSwitch) {
+      this.__add(
+        'stateBadge',
+        new ICEText({
+          zIndex: baseZ + 4,
+          left: -24,
+          top: h / 2 - 8,
+          width: 20,
+          height: 16,
+          text: closed ? '合' : '分',
+          stroke: false,
+          interactive: false,
+          style: {
+            fontSize: POWER_STYLE.stateFontSize,
+            fillStyle: strokeStyle,
+            textAlign: 'center',
             textBaseline: 'middle',
           },
         })

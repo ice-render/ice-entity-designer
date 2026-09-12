@@ -297,7 +297,8 @@ export default class FlowDesigner {
   }
 
   /** 由节点的插槽位置算出连线端点（引擎按插槽吸附，端点需要给出初始坐标） */
-  private __slotPoint(component: any, position: FlowPort): number[] {
+  /** 取插槽点：`protected` 供域包（如电力一次图）建自己的连线类型时复用 */
+  protected __slotPoint(component: any, position: FlowPort): number[] {
     const box = component.getMinBoundingBox(true);
     switch (position) {
       case 'T':
