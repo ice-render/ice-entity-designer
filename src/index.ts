@@ -36,6 +36,13 @@ export { default as UmlRelation, UML_RELATION_KINDS, UML_RELATION_STYLE } from '
 export type { UmlRelationKind, UmlMarker } from './uml/UmlRelation';
 export { default as UmlDesigner } from './uml/UmlDesigner';
 export type { UmlIssue } from './uml/UmlDesigner';
+// 状态机（domain pack：伪状态/状态/复合状态 + 转移 + 语义校验；复合状态复用容器能力）
+export { default as StateNode, STATECHART_NODE_KINDS } from './statechart/StateNode';
+export type { StatechartNodeKind } from './statechart/StateNode';
+export { default as StateTransition } from './statechart/StateTransition';
+export { default as StatechartDesigner } from './statechart/StatechartDesigner';
+export type { StatechartIssue } from './statechart/StatechartDesigner';
+
 // 文本互操作：PlantUML / Mermaid 类图语法子集（导入导出）
 export { toPlantUml, fromPlantUml, arrowOf, detectUmlDialect } from './uml/uml_text';
 export type { UmlTextImportResult } from './uml/uml_text';

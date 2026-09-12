@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <meta charset="utf-8" />
+  <title>IED-Statechart-editor</title>
+  <style>
+    body { margin: 0; font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; color: #0f172a; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+    button, select { padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font: inherit; }
+    .layout { display: grid; grid-template-columns: 1fr 300px; height: calc(100vh - 53px); }
+    .canvas-wrap { overflow: hidden; background: #fff; }
+    canvas { display: block; }
+    aside { padding: 12px 14px; border-left: 1px solid #e2e8f0; background: #fff; overflow: auto; }
+    aside h3 { margin: 14px 0 6px; font-size: 13px; color: #64748b; }
+    .hint { color: #64748b; font-size: 12px; }
+    .issue.error { color: #b91c1c; }
+    .issue.warning { color: #b45309; }
+  </style>
+  <body>
+    <div class="toolbar">
+      <button data-add="initial">初始</button>
+      <button data-add="state">状态</button>
+      <button data-add="composite">复合状态</button>
+      <button data-add="final">终止</button>
+      <span class="hint">|</span>
+      <button id="btn-delete">删除选中</button>
+      <button id="btn-undo">撤销</button>
+      <button id="btn-redo">重做</button>
+      <span class="hint">|</span>
+      <button id="btn-link">连接</button>
+      <button id="btn-fit">适应视图</button>
+      <button id="btn-validate">校验</button>
+      <button id="btn-export-svg">导出 SVG</button>
+    </div>
+    <div class="layout">
+      <div class="canvas-wrap"><canvas id="canvas-1" width="1600" height="1100"></canvas></div>
+      <aside>
+        <h3>属性</h3>
+        <div id="panel" class="hint">点击画布中的状态 / 转移进行编辑</div>
+        <h3>状态机校验</h3>
+        <div id="validate-output" class="hint">点击「校验」运行语义检查</div>
+      </aside>
+    </div>
+
+    <script src="../dist/index.umd.js"></script>
+    <script type="text/javascript">
+      const { ICE, StatechartDesigner } = IED;
+      const ice = new ICE().init('canvas-1');
+      const designer = new StatechartDesigner(ice);
+      ice.alignmentGuide.enable({ threshold: 6 });
+      window.__ice = ice;
+      window.__designer = designer;
+
+      const panel = document.getElementById('panel');
+      const validateOutput = document.getElementById('validate-output');
+      let linking = false;
+      let linkSource = null;
+
+      /* ---------------- 案例：订单状态机（含复合状态） ---------------- */
+      function buildCase() {
+        designer.clear();
+        const initial = designer.createState({ kind: 'initial', left: 120, top: 120 });
+        const pending = designer.createState({ title: '待支付', left: 240, top: 100, width: 180, height: 64 });
+        const paid = designer.createState({ title: '已支付', left: 620, top: 100, width: 180, height: 64 });
+        const done = designer.createState({ kind: 'final', left: 1010, top: 120 });
+        const composite = designer.createState({ kind: 'composite', title: '订单处理', left: 560, top: 300, width: 520, height: 280 });
+        const checking = designer.createState({ title: '库存校验', left: 620, top: 380, width: 160, height: 60 });
+        const shipping = designer.createState({ title: '安排发货', left: 850, top: 380, width: 160, height: 60 });
+        const canceled = designer.createState({ title: '已取消', left: 220, top: 400, width: 180, height: 64 });
+
+        designer.createTransition({ sourceId: initial.state.id, targetId: pending.state.id });
+        designer.createTransition({ sourceId: pending.state.id, targetId: paid.state.id, event: '支付成功', guard: '金额 > 0', action: '生成订单' });
+        designer.createTransition({ sourceId: pending.state.id, targetId: canceled.state.id, event: '超时未支付' });
+        designer.createTransition({ sourceId: paid.state.id, targetId: checking.state.id, event: '进入处理' });
+        designer.createTransition({ sourceId: checking.state.id, targetId: shipping.state.id, event: '库存充足' });
+        designer.createTransition({ sourceId: checking.state.id, targetId: canceled.state.id, event: '缺货' });
+        designer.createTransition({ sourceId: shipping.state.id, targetId: done.state.id, event: '已发货' });
+
+        designer.select(null);
+        designer.fitViewport();
+      }
+
+      /* ---------------- 工具栏 ---------------- */
+      document.querySelectorAll('[data-add]').forEach((button) => {
+        button.addEventListener('click', () => {
+          designer.createState({ kind: button.dataset.add });
+          renderPanel();
+        });
+      });
+      document.getElementById('btn-delete').addEventListener('click', () => {
+        if (designer.selectedId) { designer.remove(designer.selectedId); renderPanel(); }
+      });
+      document.getElementById('btn-undo').addEventListener('click', () => { designer.undo(); renderPanel(); });
+      document.getElementById('btn-redo').addEventListener('click', () => { designer.redo(); renderPanel(); });
+      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
+      document.getElementById('btn-link').addEventListener('click', () => {
+        linking = !linking;
+        linkSource = null;
+        document.getElementById('btn-link').classList.toggle('active', linking);
+      });
+      document.getElementById('btn-validate').addEventListener('click', () => {
+        const issues = designer.validateStatechart();
+        validateOutput.innerHTML = '';
+        validateOutput.className = issues.length ? '' : 'hint';
+        if (!issues.length) { validateOutput.textContent = '✅ 未发现问题'; return; }
+        issues.forEach((issue) => {
+          const div = document.createElement('div');
+          div.className = `issue ${issue.level}`;
+          div.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
+          validateOutput.appendChild(div);
+        });
+      });
+      document.getElementById('btn-export-svg').addEventListener('click', () => {
+        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
+        window.__exportedSvg = svg;
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'order-statechart.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+        validateOutput.className = 'hint';
+        validateOutput.textContent = `✅ 已导出 SVG（${svg.length} 字节）`;
+      });
+
+      /* ---------------- 画布交互：命中 / 连线 ---------------- */
+      ice.evtBus.on('mousedown', (evt) => {
+        const target = evt.target;
+        if (!target) { return; }
+        const domain = designer.nodes.concat(designer.edges).filter((item) => {
+          let node = target;
+          while (node) { if (node === item) { return true; } node = node.parentNode; }
+          return false;
+        })[0];
+        if (!domain) { return; }
+        if (linking) {
+          if (!linkSource) { linkSource = domain; }
+          else if (linkSource !== domain) {
+            designer.createTransition({ sourceId: linkSource.state.id, targetId: domain.state.id, event: '事件' });
+            linkSource = null;
+          }
+          designer.select(domain.state.id);
+          renderPanel();
+          return;
+        }
+        designer.select(domain.state.id);
+        renderPanel();
+      });
+      ice.evtBus.on('mouseup', () => renderPanel());
+
+      /* ---------------- 属性面板 ---------------- */
+      function row(label, control) {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+        const span = document.createElement('label');
+        span.textContent = label;
+        span.style.cssText = 'width:64px;color:#475569;font-size:13px';
+        div.appendChild(span);
+        div.appendChild(control);
+        return div;
+      }
+      function input(value, onChange) {
+        const el = document.createElement('input');
+        el.value = value;
+        el.style.cssText = 'flex:1;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font:inherit';
+        el.addEventListener('change', () => onChange(el.value));
+        return el;
+      }
+      function applyAndRender(action) { action(); designer.captureHistory(); renderPanel(); }
+      function renderPanel() {
+        panel.innerHTML = '';
+        const selected = designer.selected;
+        if (!selected) { panel.className = 'hint'; panel.textContent = '点击画布中的状态 / 转移进行编辑'; return; }
+        panel.className = '';
+        if (designer.nodes.indexOf(selected) !== -1) {
+          if (selected.isPseudoState()) {
+            panel.textContent = selected.state.kind === 'initial' ? '初始伪状态（无属性）' : '终止伪状态（无属性）';
+            return;
+          }
+          panel.appendChild(row('名称', input(selected.state.title, (value) => applyAndRender(() => selected.applyPatch({ title: value })))));
+          return;
+        }
+        panel.appendChild(row('事件', input(selected.state.event || '', (value) => applyAndRender(() => selected.applyPatch({ event: value })))));
+        panel.appendChild(row('守卫', input(selected.state.guard || '', (value) => applyAndRender(() => selected.applyPatch({ guard: value })))));
+        panel.appendChild(row('动作', input(selected.state.action || '', (value) => applyAndRender(() => selected.applyPatch({ action: value })))));
+      }
+
+      buildCase();
+      renderPanel();
+    </script>
+  </body>
+</html>
