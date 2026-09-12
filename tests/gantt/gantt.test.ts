@@ -232,6 +232,20 @@ describe('甘特域包 · 自动排程 / 关键路径 / 资源冲突', () => {
     expect(critical.map((task: any) => task.state.title)).not.toContain('快速通道');
   });
 
+  it('关键路径按「尽早排」算：任务自身日期偏晚也不会把链路算错（回归）', () => {
+    const { designer } = makeDesigner();
+    designer.setDayWidth(30);
+    // 依赖链 A(4) → B(6) → C(3)；但 C 自己写了个很晚的日期（没有自动排程）
+    const a = designer.createTask({ title: '设计', start: '2026-03-02', days: 4, row: 0 });
+    const b = designer.createTask({ title: '开发', start: '2026-03-03', days: 6, row: 1 });
+    const c = designer.createTask({ title: '测试', start: '2026-03-20', days: 3, row: 2 });
+    designer.createDependency({ sourceId: a.state.id, targetId: b.state.id });
+    designer.createDependency({ sourceId: b.state.id, targetId: c.state.id });
+
+    // 关键路径是整条链，而不是「浮时为 0 的末端任务」
+    expect(designer.criticalPath().map((task: any) => task.state.title)).toEqual(['设计', '开发', '测试']);
+  });
+
   it('资源冲突：同一负责人的任务时间重叠时报出来，不重叠时不报', () => {
     const { designer } = makeDesigner();
     designer.setDayWidth(30);

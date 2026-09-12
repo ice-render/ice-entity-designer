@@ -261,15 +261,22 @@ export default class GanttDesigner extends FlowDesigner {
       return []; // 有环
     }
 
-    // 最早开工（用任务自身日期作为下界，保证与画布上看到的一致）
+    // 最早开工：**按「尽早排」归一化**（CPM 的标准口径）——
+    // 有前置的任务由前置决定，没有前置的以自身日期为锚。
+    // 不能把任务自己的日期当下界：那样等于按「现有排期」算浮时，末端任务永远零浮时、
+    // 关键路径会退化成单个任务（实测踩过）。
     const earliestStart = new Map<string, string>();
     topo.forEach((id) => {
       const task = byId.get(id);
-      const earliest = (predecessors.get(id) || []).reduce((current: string, fromId: string) => {
+      const preds = predecessors.get(id) || [];
+      let earliest = preds.length ? '' : task.state.start;
+      preds.forEach((fromId) => {
         const from = byId.get(fromId);
         const end = addDays(earliestStart.get(fromId) as string, durationOf(from));
-        return diffDays(current, end) > 0 ? end : current;
-      }, task.state.start);
+        if (!earliest || diffDays(earliest, end) > 0) {
+          earliest = end;
+        }
+      });
       earliestStart.set(id, earliest);
     });
 
