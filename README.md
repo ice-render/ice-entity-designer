@@ -283,59 +283,63 @@ const { svg, width, height } = IED.exportSvgResult(ice, { padding: 12 });
 只保留当前相位）。
 
 #### 5.5 甘特图（`GanttDesigner`）
-+
-+排期场景：横轴是**时间**（`start` 日期 × 持续天数 × 每日像素）、纵轴是行，任务条**按天吸附**拖动，
-+依赖线从「前置任务的结束」指向「后置任务的开始」。
-+
-+```js
-+import { ICE, GanttDesigner } from 'ice-entity-designer';
-+
-+const ice = new ICE().init('canvas-1');
-+const gantt = new GanttDesigner(ice);
-+
-+const review = gantt.createTask({ title: '需求评审', start: '2026-03-02', days: 4, progress: 1 });
-+const design = gantt.createTask({ title: '交互设计', start: '2026-03-05', days: 6, progress: 0.8 });
-+gantt.createDependency({ sourceId: review.state.id, targetId: design.state.id });
-+
-+gantt.setDayWidth(36);        // 时间轴缩放：所有任务与依赖一起重排
-+gantt.validateGantt();        // 依赖成环 / 进度越界 / 持续天数非法
-+const svg = gantt.toSvg({ background: '#ffffff' });
-+```
-+
-+与其它域包同一套机制：任务条是复合组件（条 + 进度覆盖 + 文字由 state 派生）、依赖复用引擎折线
-+（插槽吸附 / 正交路由 / 跟随宿主）、快照与矢量导出全部继承。两条甘特特有的能力：
-+
-+| 能力 | 说明 |
-+|---|---|
-+| 时间轴 | `dayWidth` / `originDate` / `labelColumnWidth` 统一换算；框架（左列任务名 + 日期刻度 + 行线）由派生的 `GanttRuler` 渲染，模型一变就重建 |
-+| 按天吸附 | `GanttTask.setPosition()` 把 x 吸附到整天的格子并反推 `start`（排期不会出现「13:47 开工」） |
-+
-+可运行示例：`examples/gantt-editor.html`（移动端 2.0 发布排期，含依赖、进度、**自动排程**与**关键路径**按钮）。
+
+排期场景：横轴是**时间**（`start` 日期 × 持续天数 × 每日像素）、纵轴是行，任务条**按天吸附**拖动，
+依赖线从「前置任务的结束」指向「后置任务的开始」。
+
+```js
+import { ICE, GanttDesigner } from 'ice-entity-designer';
+
+const ice = new ICE().init('canvas-1');
+const gantt = new GanttDesigner(ice);
+
+const review = gantt.createTask({ title: '需求评审', start: '2026-03-02', days: 4, progress: 1 });
+const design = gantt.createTask({ title: '交互设计', start: '2026-03-05', days: 6, progress: 0.8 });
+gantt.createDependency({ sourceId: review.state.id, targetId: design.state.id });
+
+gantt.setDayWidth(36);        // 时间轴缩放：所有任务与依赖一起重排
+gantt.validateGantt();        // 依赖成环 / 进度越界 / 持续天数非法
+const svg = gantt.toSvg({ background: '#ffffff' });
+```
+
+与其它域包同一套机制：任务条是复合组件（条 + 进度覆盖 + 文字由 state 派生）、依赖复用引擎折线
+（插槽吸附 / 正交路由 / 跟随宿主）、快照与矢量导出全部继承。两条甘特特有的能力：
+
+| 能力 | 说明 |
+|---|---|
+| 时间轴 | `dayWidth` / `originDate` / `labelColumnWidth` 统一换算；框架（左列任务名 + 日期刻度 + 行线）由派生的 `GanttRuler` 渲染，模型一变就重建 |
+| 按天吸附 | `GanttTask.setPosition()` 把 x 吸附到整天的格子并反推 `start`（排期不会出现「13:47 开工」） |
+
+可运行示例：`examples/gantt-editor.html`（移动端 2.0 发布排期，含依赖、进度、**自动排程**与**关键路径**按钮）。
+
+文本互操作：`IED.toMermaidGantt(designer)` / `IED.fromMermaidGantt(text, designer)` 走 Mermaid gantt 语法子集 ——
+`section` 对应负责人（`resource`），单前置依赖写成 `after`（Mermaid 自己画依赖箭头）；
+多前置、或带 buffer 的排期写成显式日期 + `%% task` 注释（Mermaid 只忽略注释，渲染不受影响）。
 
 #### 5.6 BPMN 令牌仿真（`BpmnSimulator`）
-+
-+「流程怎么走」可以直接演示出来：令牌从开始事件出发，沿顺序流前进、在任务上停留、在排他网关选一条分支、
-+在并行网关一分为多，到达结束事件后消失。
-+
-+```js
-+import { BpmnSimulator } from 'ice-entity-designer';
-+
-+const simulator = new BpmnSimulator(bpmn, { nodeDuration: 500, edgeDuration: 700 });
-+simulator.start();      // 每个开始事件一个令牌；浏览器里由引擎帧事件驱动
-+simulator.step(50);     // 也可以手动推进（测试/单步调试用，确定性）
-+simulator.stop();       // 清空令牌
-+```
-+
-+| 能力 | 说明 |
-+|---|---|
-+| 令牌 | 工具层组件（`ice.toolNodes`）：**不进文档、不影响快照与 BPMN XML 导出**，停止即干净退场 |
-+| 路由 | 令牌位置在连线的**实际折点**上按弧长插值，所以始终贴在画出来的线上（含正交绕线） |
-+| 语义 | 排他网关优先走带 `condition` 的流、其次走非默认流；并行/包容网关分裂成多条令牌；结束事件上令牌消亡 |
-+| 推进 | `step(dtMs)` 显式推进（测试可断言）；`start()` 后自动挂帧循环 |
-+
-+可运行示例：`examples/bpmn-editor.html` 的「仿真 / 停止」按钮（案例是信用卡申请审批）。
-+
-+#### 5.7 UML 类图（域包示例）
+
+「流程怎么走」可以直接演示出来：令牌从开始事件出发，沿顺序流前进、在任务上停留、在排他网关选一条分支、
+在并行网关一分为多，到达结束事件后消失。
+
+```js
+import { BpmnSimulator } from 'ice-entity-designer';
+
+const simulator = new BpmnSimulator(bpmn, { nodeDuration: 500, edgeDuration: 700 });
+simulator.start();      // 每个开始事件一个令牌；浏览器里由引擎帧事件驱动
+simulator.step(50);     // 也可以手动推进（测试/单步调试用，确定性）
+simulator.stop();       // 清空令牌
+```
+
+| 能力 | 说明 |
+|---|---|
+| 令牌 | 工具层组件（`ice.toolNodes`）：**不进文档、不影响快照与 BPMN XML 导出**，停止即干净退场 |
+| 路由 | 令牌位置在连线的**实际折点**上按弧长插值，所以始终贴在画出来的线上（含正交绕线） |
+| 语义 | 排他网关优先走带 `condition` 的流、其次走非默认流；并行/包容网关分裂成多条令牌；结束事件上令牌消亡 |
+| 推进 | `step(dtMs)` 显式推进（测试可断言）；`start()` 后自动挂帧循环 |
+
+可运行示例：`examples/bpmn-editor.html` 的「仿真 / 停止」按钮（案例是信用卡申请审批）。
+
+#### 5.7 UML 类图（域包示例）
 
 UML 是**域包（domain pack）**的第一个完整示例：形状 + 应用层 + 语义校验，其余（选择/增删改/连线/
 撤销重做/快照/适应视图/矢量导出）全部沿用引擎与 `FlowDesigner`。
@@ -371,6 +375,43 @@ const svg = uml.toSvg({ background: '#ffffff', padding: 16 });
 接口与枚举带构造型，抽象类标 «abstract»；**框高随成员自动增长**，成员不会被画到框外。
 
 可运行示例：`examples/uml-editor.html`（电商支付的类模型：继承 / 实现 / 组合 / 关联 / 依赖）。
+
+文本互操作：`IED.toPlantUml(designer)` / `IED.fromPlantUml(text, designer)` 走 PlantUML / Mermaid
+类图语法子集（三段式类框 + 六种关系的连接符），导出可直接贴进 Wiki / Markdown / 代码评审。
+
+#### 5.8 状态机（`StatechartDesigner`）
+
+状态机是**域包（domain pack）**的第二个完整示例：伪状态（初始 / 终止）、普通状态、
+**复合状态是容器**（内部可放子状态，拖动父状态子状态跟着走），转移标签是 `事件 [守卫] / 动作`。
+
+```js
+import { ICE, StatechartDesigner } from 'ice-entity-designer';
+
+const ice = new ICE().init('canvas-1');
+const statechart = new StatechartDesigner(ice);
+
+const initial = statechart.createState({ kind: 'initial', left: 120, top: 120 });
+const pending = statechart.createState({ title: '待支付', left: 240, top: 100 });
+const paid = statechart.createState({ title: '已支付', left: 620, top: 100 });
+
+statechart.createTransition({ sourceId: initial.state.id, targetId: pending.state.id });
+statechart.createTransition({
+  sourceId: pending.state.id,
+  targetId: paid.state.id,
+  event: '支付成功',
+  guard: '金额 > 0',
+  action: '生成订单',
+});
+
+statechart.validateStatechart();   // 缺初始 / 终止有出边 / 孤立状态 / 从初始不可达
+const svg = statechart.toSvg({ background: '#ffffff' });
+```
+
+文本互操作：`IED.toPlantUmlState(designer)` / `IED.fromPlantUmlState(text, designer)` 走 PlantUML 状态图语法子集 ——
+伪状态映射成 `[*]`，复合状态成 `state 订单处理 { ... }` 嵌套块（块的嵌套就是容器归属），
+转移标签导入时拆回事件 / 守卫 / 动作三段（`IED.splitTransitionLabel(label)` 是这一步的公开口径）。
+
+可运行示例：`examples/statechart-editor.html`（订单状态机，含复合状态与 PlantUML 导入导出）。
 
 ## 6. 在 React 中使用
 
@@ -526,7 +567,7 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 | 应用层 | `FlowDesigner`（选择 / 增删改 / 连线 / 撤销重做 / 快照 / 适应视图 / 订阅 / `toSvg`） | `UmlDesigner` 只重写「建什么图元 + 类型过滤」 |
 | 语义校验 | 结构校验之外的部分自写，规则直白 | `validateUml()`：重名类 / 悬空关系 / 继承成环 |
 | 文档格式 | 引擎序列化（typeId 注册表 + `hasDerivedChildren`），零登记 | 类与关系统统自动往返 |
-| 互操作 | 有标准格式的域就做 | BPMN 2.0 XML（导入 + 导出，含 BPMNDI 布局）；UML 类图的 PlantUML / Mermaid 文本互操作 |
+| 互操作 | 有标准格式的域就做 | BPMN 2.0 XML（导入 + 导出，含 BPMNDI 布局）；UML 类图与状态机的 PlantUML 文本互操作；甘特的 Mermaid gantt 文本互操作 |
 | 交付物 | 示例页 + e2e + README + （可选）JSON DSL 与技能 | `examples/uml-editor.html` + `e2e/uml-editor.spec.ts` |
 
 新开一个域包时，按这张表从上往下填即可；**不要**在域包里另造序列化、另造选择/历史、另造导出。
@@ -545,12 +586,12 @@ src/
 │   ├── UmlClass.ts                # 复合组件：类名 / 属性 / 方法三段，构造型，框高随成员增长
 │   ├── UmlRelation.ts             # 六种关系 = 线型 + 端点标记（三角/菱形/开放箭头，标记进路径点集）
 │   └── UmlDesigner.ts             # FlowDesigner 薄扩展：建 UML 图元 + 类型过滤 + validateUml()
-+├── gantt/                         # 甘特图（第三个 domain pack：时间轴 + 按天吸附 + 依赖）
-+│   ├── gantt_date.ts              # 日期工具（UTC 口径，YYYY-MM-DD ↔ 天数）
-+│   ├── GanttTask.ts               # 任务条（复合组件）+ setPosition 按天吸附
-+│   ├── GanttRuler.ts              # 图表框架：左列任务名 + 日期刻度 + 行线（派生重建）
-+│   ├── GanttDependency.ts         # 依赖线（完成 → 开始）
-+│   └── GanttDesigner.ts           # 时间轴换算 + syncChrome + validateGantt
+├── gantt/                         # 甘特图（第三个 domain pack：时间轴 + 按天吸附 + 依赖）
+│   ├── gantt_date.ts              # 日期工具（UTC 口径，YYYY-MM-DD ↔ 天数）
+│   ├── GanttTask.ts               # 任务条（复合组件）+ setPosition 按天吸附
+│   ├── GanttRuler.ts              # 图表框架：左列任务名 + 日期刻度 + 行线（派生重建）
+│   ├── GanttDependency.ts         # 依赖线（完成 → 开始）
+│   └── GanttDesigner.ts           # 时间轴换算 + syncChrome + validateGantt
 ├── bpmn/                          # BPMN 2.0（FlowDesigner 之上的业务记法）
 │   ├── BpmnSimulator.ts           # 令牌仿真：沿顺序流推进、网关分叉、结束消亡（令牌在工具层）
 │   ├── bpmn_shapes.ts             # 形状：事件圆 / 网关菱形 / 任务角标 / 子流程标记 / 数据对象 / 注释 / 池泳道
