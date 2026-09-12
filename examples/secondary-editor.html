@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <meta charset="utf-8" />
+  <title>IED-Secondary-editor</title>
+  <style>
+    body { margin: 0; font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; color: #0f172a; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+    button, select, input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font: inherit; }
+    .hint { color: #64748b; font-size: 12px; }
+    .layout { display: grid; grid-template-columns: 1fr 300px; height: calc(100vh - 53px); }
+    .canvas-wrap { overflow: hidden; background: #fff; }
+    canvas { display: block; }
+    aside { padding: 12px 14px; border-left: 1px solid #e2e8f0; background: #fff; overflow: auto; font-size: 13px; }
+    aside h3 { margin: 14px 0 6px; font-size: 13px; color: #64748b; }
+    .issue.error { color: #b91c1c; }
+    .issue.warning { color: #b45309; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .row label { width: 64px; color: #475569; font-size: 13px; }
+    .row input, .row select { flex: 1; }
+  </style>
+  <body>
+    <div class="toolbar">
+      <select id="in-kind" title="新增元件类型">
+        <option value="contactNO">常开接点 52a</option>
+        <option value="contactNC">常闭接点 52b</option>
+        <option value="pushButton">按钮 11</option>
+        <option value="switchRemoteLocal">切换开关 43</option>
+        <option value="linkPlate">压板 XB</option>
+        <option value="indicatorLamp">信号灯 HL</option>
+        <option value="relayDevice">保护装置</option>
+        <option value="ctWinding">互感器绕组 LH</option>
+        <option value="terminal">端子</option>
+        <option value="earth">接地 E</option>
+      </select>
+      <button id="btn-add">新增元件</button>
+      <button id="btn-delete">删除选中</button>
+      <button id="btn-undo">撤销</button>
+      <button id="btn-redo">重做</button>
+      <span class="hint">|</span>
+      <button id="btn-toggle">压板分 / 合</button>
+      <button id="btn-fit">适应视图</button>
+      <button id="btn-reset">复位视图</button>
+      <button id="btn-validate">校验</button>
+      <button id="btn-export-svg">导出 SVG</button>
+      <button id="btn-export-json">导出 JSON</button>
+      <button id="btn-import-json">导入 JSON</button>
+      <span class="hint">二次图是回路图：一条线 = 一个回路，线上标回路编号（A411/B411/C411/N411）</span>
+    </div>
+    <div class="layout">
+      <div class="canvas-wrap"><canvas id="canvas-1" width="1400" height="1000"></canvas></div>
+      <aside>
+        <h3>属性</h3>
+        <div id="panel" class="hint">点击元件 / 导线进行编辑</div>
+        <h3>二次校验（简化版）</h3>
+        <div id="validate-output" class="hint">点击「校验」运行语义检查</div>
+        <h3>案例说明</h3>
+        <div class="hint">
+          110kV 线路保护电流回路（简化）：CT 三个二次绕组 → 电缆 → 端子排 201～204 → 线路保护装置，
+          N411 侧接地。
+        </div>
+      </aside>
+    </div>
+
+    <script src="../dist/index.umd.js"></script>
+    <script src="./canvas-interactions.js"></script>
+    <script type="text/javascript">
+      const { ICE, SecondaryDesigner, SECONDARY_SYMBOL_PRESETS } = IED;
+      const ice = new ICE().init('canvas-1');
+      const designer = new SecondaryDesigner(ice);
+      const canvasEl = document.getElementById('canvas-1');
+      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
+      ice.alignmentGuide.enable({ threshold: 6 });
+      window.__ice = ice;
+      window.__designer = designer;
+
+      const panel = document.getElementById('panel');
+      const validateOutput = document.getElementById('validate-output');
+
+      /* ---------------- 案例：110kV 线路保护电流回路（简化版，照教材图 7-2 的要素组织） ---------------- */
+      function buildCase() {
+        designer.clear();
+        const phases = [
+          { phase: 'A', winding: '1LHa', circuitNo: 'A411', terminal: '201' },
+          { phase: 'B', winding: '1LHb', circuitNo: 'B411', terminal: '202' },
+          { phase: 'C', winding: '1LHc', circuitNo: 'C411', terminal: '203' },
+        ];
+        const windings = phases.map((item, index) =>
+          designer.createSymbol('ctWinding', { name: item.winding, left: 140, top: 200 + index * 120 })
+        );
+        const { terminals } = designer.createTerminalStrip({
+          title: '1D 端子排',
+          left: 440,
+          top: 160,
+          terminals: [{ no: '201' }, { no: '202' }, { no: '203' }, { no: '204' }],
+        });
+        const device = designer.createSymbol('relayDevice', {
+          name: '线路保护',
+          tag: 'RCS-941A',
+          left: 700,
+          top: 200,
+        });
+        const earth = designer.createSymbol('earth', { name: 'N411 接地', left: 440, top: 560 });
+        // 压板（连接片）：保护跳闸出口压板，放在装置旁边（本轮先作为元件示例，不串进回路）
+        designer.createSymbol('linkPlate', { name: 'LP1 跳闸出口', left: 620, top: 560 });
+
+        phases.forEach((item, index) => {
+          // 一次侧 CT 绕组 → 端子排（电缆）
+          designer.createWire({
+            sourceId: windings[index].state.id,
+            targetId: terminals[index].state.id,
+            circuitNo: item.circuitNo,
+            cableNo: `1D${index + 1}`,
+            sourcePort: 'R',
+            targetPort: 'L',
+          });
+          // 端子排 → 保护装置（回路编号不变：等电位）
+          designer.createWire({
+            sourceId: terminals[index].state.id,
+            targetId: device.state.id,
+            circuitNo: item.circuitNo,
+            cableNo: `1D${index + 4}`,
+            sourcePort: 'R',
+            targetPort: 'L',
+          });
+        });
+        // N411：端子 204 接地
+        designer.createWire({
+          sourceId: terminals[3].state.id,
+          targetId: earth.state.id,
+          circuitNo: 'N411',
+          cableNo: '1D8',
+          sourcePort: 'B',
+          targetPort: 'T',
+        });
+        designer.createWire({
+          sourceId: terminals[3].state.id,
+          targetId: device.state.id,
+          circuitNo: 'N411',
+          sourcePort: 'R',
+          targetPort: 'L',
+        });
+        designer.select(null);
+        designer.fitViewport();
+      }
+
+      /* ---------------- 工具栏 ---------------- */
+      document.getElementById('btn-add').addEventListener('click', () => {
+        const kind = document.getElementById('in-kind').value;
+        const preset = SECONDARY_SYMBOL_PRESETS[kind];
+        designer.createSymbol(kind, { name: preset.label, tag: preset.tag });
+        renderPanel();
+      });
+      document.getElementById('btn-delete').addEventListener('click', () => {
+        if (designer.selectedId) {
+          designer.remove(designer.selectedId);
+          renderPanel();
+        }
+      });
+      document.getElementById('btn-undo').addEventListener('click', () => {
+        designer.undo();
+        renderPanel();
+      });
+      document.getElementById('btn-redo').addEventListener('click', () => {
+        designer.redo();
+        renderPanel();
+      });
+      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
+      document.getElementById('btn-toggle').addEventListener('click', () => {
+        const node = designer.symbols.find((item) => item.state.id === designer.selectedId);
+        if (!node || ['linkPlate', 'contactNO', 'contactNC'].indexOf(node.state.kind) === -1) {
+          validateOutput.className = 'hint';
+          validateOutput.textContent = '先选中压板（或接点），再切换分 / 合';
+          return;
+        }
+        node.applyPatch({ switchState: node.state.switchState === 'closed' ? 'open' : 'closed' });
+        renderPanel();
+      });
+      document.getElementById('btn-validate').addEventListener('click', () => {
+        const issues = designer.validateSecondary();
+        validateOutput.innerHTML = '';
+        validateOutput.className = issues.length ? '' : 'hint';
+        if (!issues.length) {
+          validateOutput.textContent = '✅ 未发现问题';
+          return;
+        }
+        issues.forEach((issue) => {
+          const div = document.createElement('div');
+          div.className = `issue ${issue.level}`;
+          div.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
+          validateOutput.appendChild(div);
+        });
+      });
+      document.getElementById('btn-export-svg').addEventListener('click', () => {
+        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
+        window.__exportedSvg = svg;
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'line-protection-current-circuit.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+      document.getElementById('btn-export-json').addEventListener('click', () => {
+        window.__exportedJson = designer.serialize();
+        const blob = new Blob([window.__exportedJson], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'line-protection-current-circuit.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+      document.getElementById('btn-import-json').addEventListener('click', () => {
+        if (!window.__exportedJson) {
+          return;
+        }
+        const report = designer.load(window.__exportedJson);
+        designer.fitViewport();
+        validateOutput.className = 'hint';
+        validateOutput.textContent = `✅ 已导入 ${report.nodes} 个元件 / ${report.edges} 条回路`;
+        renderPanel();
+      });
+
+      /* ---------------- 属性面板 ---------------- */
+      function renderPanel() {
+        const node = designer.symbols.find((item) => item.state.id === designer.selectedId);
+        const edge = designer.edges.find((item) => item.state.id === designer.selectedId);
+        const strip = designer.nodes.find(
+          (item) => item.state.id === designer.selectedId && item.constructor.typeId === 'TerminalStrip'
+        );
+        panel.innerHTML = '';
+        const row = (label, control) => {
+          const div = document.createElement('div');
+          div.className = 'row';
+          const span = document.createElement('label');
+          span.textContent = label;
+          div.appendChild(span);
+          div.appendChild(control);
+          panel.appendChild(div);
+        };
+        if (edge) {
+          const circuitInput = document.createElement('input');
+          circuitInput.value = edge.state.circuitNo || '';
+          circuitInput.addEventListener('change', () => {
+            edge.setState({ circuitNo: circuitInput.value, label: circuitInput.value });
+          });
+          row('回路编号', circuitInput);
+          const cableInput = document.createElement('input');
+          cableInput.value = edge.state.cableNo || '';
+          cableInput.addEventListener('change', () => edge.setState({ cableNo: cableInput.value }));
+          row('电缆编号', cableInput);
+          return;
+        }
+        if (strip) {
+          panel.textContent = `端子排「${strip.state.title}」（拖动它，端子一起走）`;
+          return;
+        }
+        if (!node) {
+          panel.textContent = '点击元件 / 导线进行编辑';
+          return;
+        }
+        const preset = SECONDARY_SYMBOL_PRESETS[node.state.kind];
+        row('元件', Object.assign(document.createElement('span'), { textContent: preset.label }));
+        const nameInput = document.createElement('input');
+        nameInput.value = node.state.name || '';
+        nameInput.addEventListener('change', () => node.applyPatch({ name: nameInput.value }));
+        row('名称', nameInput);
+        const tagInput = document.createElement('input');
+        tagInput.value = node.state.tag || '';
+        tagInput.addEventListener('change', () => node.applyPatch({ tag: tagInput.value }));
+        row('功能号', tagInput);
+        if (['linkPlate', 'contactNO', 'contactNC'].indexOf(node.state.kind) !== -1) {
+          const stateSelect = document.createElement('select');
+          [
+            ['open', '断开'],
+            ['closed', '接通'],
+          ].forEach(([value, label]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            stateSelect.appendChild(option);
+          });
+          stateSelect.value = node.state.switchState || 'open';
+          stateSelect.addEventListener('change', () => node.applyPatch({ switchState: stateSelect.value }));
+          row('状态', stateSelect);
+        }
+      }
+
+      buildCase();
+      renderPanel();
+    </script>
+  </body>
+</html>

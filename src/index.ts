@@ -63,6 +63,18 @@ export type { PowerSymbolKind } from './power/power_shapes';
 export { default as PowerDesigner, PowerLine } from './power/PowerDesigner';
 export type { PowerIssue, PowerTopology } from './power/PowerDesigner';
 export { POWER_VOLTAGE_LEVELS, voltageColorOf, defaultVoltageColors } from './power/power_voltage';
+
+// 电力二次回路（简化版第一刀：保护电流回路 + 端子排）
+export { default as SecondaryDesigner, SecondaryWire } from './secondary/SecondaryDesigner';
+export type { SecondaryIssue } from './secondary/SecondaryDesigner';
+export {
+  default as SecondarySymbol,
+  TerminalStrip,
+  SECONDARY_SYMBOL_KINDS,
+  SECONDARY_SYMBOL_PRESETS,
+  SECONDARY_STYLE,
+} from './secondary/secondary_shapes';
+export type { SecondarySymbolKind } from './secondary/secondary_shapes';
 export { parseDate, formatDate, addDays, diffDays, eachDay, tickLabel } from './gantt/gantt_date';
 
 // 文本互操作：PlantUML / Mermaid 类图语法子集（导入导出）

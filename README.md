@@ -127,6 +127,7 @@ npm run build
 | `examples/statechart-editor.html` | 状态机编辑器：伪状态 / 普通状态 / 复合状态容器、转移标签 `事件 [守卫] / 动作` |
 | `examples/gantt-editor.html` | 甘特编辑器：时间轴与按天吸附、依赖线、自动排程、关键路径、资源冲突校验、矢量导出 |
 | `examples/power-editor.html` | 电力一次系统图（单线图）编辑器：110kV 变电站案例（**110kV 双母线 + 10kV 单母线分段**两级电压，两回进线 / 两台主变 / 母联 / 母线 PT / 4 条 10kV 出线 / 电容器组 / 站用变，共 69 台设备），开关分合、带电分析与色标、五防相关校验 |
+| `examples/secondary-editor.html` | 电力**二次回路**（简化版）：110kV 线路保护电流回路 —— CT 三个二次绕组 → 三相电流回路（A411/B411/C411 + N411）→ 端子排（201～204）→ 线路保护装置，N 侧接地；二次校验（回路编号 / 三相成组 / 端子号唯一 / 必须接地） |
 | `examples/power-symbols.html` | 电力符号表：23 种一次设备符号（记法对齐 JB/T 5872-1991 与 GB/T 4728.1/3/4/6），可缩放平移、导出 SVG |
 | [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
 
@@ -458,6 +459,36 @@ const svg = power.toSvg({ background: '#ffffff' });
 
 可运行示例：`examples/power-editor.html`（110kV 变电站：双母线 + 母联 + 两回进线 + 两台主变）；
 符号表页：`examples/power-symbols.html`。
+
+#### 5.10 电力二次回路（简化版）
+
+一次图是**单线图**，二次图是**回路图**：一条线 = 一个具体回路，线上标**回路编号**（A411/B411/C411/N411）、
+端子带**端子号**（201…）、电缆带**电缆编号**（1D1…）。记法与范围见 `docs/power-secondary-spec.md`
+（图种清单、IEEE C37.2 功能编号对照、来源）。
+
+```js
+import { ICE, SecondaryDesigner } from 'ice-entity-designer';
+
+const ice = new ICE().init('canvas-1');
+const secondary = new SecondaryDesigner(ice);
+
+const winding = secondary.createSymbol('ctWinding', { name: '1LHa' });
+const { strip, terminals } = secondary.createTerminalStrip({ title: '1D 端子排', terminals: [{ no: '201' }, { no: '202' }] });
+const device = secondary.createSymbol('relayDevice', { name: '线路保护', tag: 'RCS-941A' });
+secondary.createWire({ sourceId: winding.state.id, targetId: terminals[0].state.id, circuitNo: 'A411', cableNo: '1D1' });
+secondary.createWire({ sourceId: terminals[0].state.id, targetId: device.state.id, circuitNo: 'A411' });
+secondary.validateSecondary();   // 回路编号 / 三相成组 / 端子号唯一 / 必须接地
+const svg = secondary.toSvg({ background: '#ffffff' });
+```
+
+| 能力 | 说明 |
+|---|---|
+| 元件库 | 常开/常闭接点、按钮、切换开关、压板、信号灯、保护装置方框、互感器二次绕组、端子、接地（记法按 GB/T 4728.7，文字符号用 C37.2 功能编号） |
+| 端子排 | 容器：端子是真实子节点 —— 拖动端子排端子跟着走，端子各自可接线，**快照往返不丢端子** |
+| 回路编号 | `createWire({ circuitNo })`：线就是回路，编号画在线上；电缆编号是数据字段 |
+| 二次校验 | 导线必须有回路编号、三相电流回路编号成组（缺相报错）、端子号唯一、二次回路必须接地 |
+
+可运行示例：`examples/secondary-editor.html`（110kV 线路保护电流回路，简化版）。
 
 ## 6. 在 React 中使用
 
