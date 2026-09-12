@@ -150,3 +150,31 @@ test('母线 T 接（方案 A）：拖动母线，挂在它上面的间隔整体
   expect(delta.attachedBusName).toBe('#2M');
   expect((page as any).__errors).toEqual([]);
 });
+
+test('记法不可变换：符号只允许拖动（transformable=false，且拖完连线跟随）', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const allTransformable = designer.nodes.map((node: any) => node.state.transformable);
+    const draggable = designer.nodes.every((node: any) => node.state.draggable === true);
+    // 拖动一个断路器：位置变、挂在其上的导体端点跟着重算
+    const breaker = designer.nodes.find((node: any) => node.state.name === '1102');
+    const edge = designer.edges.find((item: any) => {
+      const links = item.state.links || {};
+      return links.start && links.start.id === breaker.state.id;
+    });
+    const before = { left: breaker.state.left, points: edge ? JSON.stringify(edge.state.points) : '' };
+    breaker.setPosition(breaker.state.left + 24, breaker.state.top + 12);
+    const after = { left: breaker.state.left, points: edge ? JSON.stringify(edge.state.points) : '' };
+    return {
+      allDisabled: allTransformable.every((value: any) => value === false),
+      draggable,
+      moved: after.left !== before.left,
+      linkRerouted: edge ? after.points !== before.points : false,
+    };
+  });
+  expect(result.allDisabled).toBe(true);
+  expect(result.draggable).toBe(true);
+  expect(result.moved).toBe(true);
+  expect(result.linkRerouted).toBe(true);
+  expect((page as any).__errors).toEqual([]);
+});

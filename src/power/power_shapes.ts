@@ -185,6 +185,13 @@ export default class PowerSymbol extends ICEGroup {
         switchState: 'open' as PowerSwitchState,
         /** 带电状态：undefined = 未计算（静态图纸）；false = 明确不带电 */
         energized: undefined as boolean | undefined,
+        /**
+         * **不可变换**（只能拖动）：符号的尺寸与朝向是记法的一部分 ——
+         * 断路器刀臂的角度、变压器两圆的直径、母线粗细都有统一比例，拉伸/旋转会直接破坏记法与外观统一。
+         * 图纸整体缩放走「视图缩放」（滚轮 / ICE.zoomAt），与图元缩放严格分开（引擎文档 11 号）。
+         * 需要变尺寸的元素（母线长度、柜体宽高）在属性面板里用数值改，而不是拖变换手柄。
+         */
+        transformable: false,
         /** 电源点（发电机 / 进线 / 主变电源侧）—— 拓扑从这里开始推 */
         energizedSource: false,
         /**

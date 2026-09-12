@@ -296,3 +296,39 @@ describe('电力符号库 · 第一批补齐（电容器 / 消弧线圈 / 三绕
     expect(POWER_SYMBOL_PRESETS.cubicle.tag).toBe('GIS');
   });
 });
+
+/**
+ * 一次系统图的符号**只能拖动，不能变换**（缩放/旋转/斜切都不允许）。
+ *
+ * 理由：符号的尺寸与朝向是记法的一部分 —— 断路器刀臂的角度、变压器两圆的直径、
+ * 母线的粗细都有统一比例，拉大拉小或旋转会直接破坏记法与外观统一；
+ * 图纸整体的缩放走「视图缩放」（滚轮 / ICE.zoomAt），引擎把这两件事严格分开（架构文档 11 号）。
+ * 需要变尺寸的元素（母线长度、柜体宽高）由属性面板的数值输入改，而不是拖变换手柄。
+ */
+describe('电力符号库 · 记法不可变换（只允许拖动）', () => {
+  it('所有符号默认 transformable=false，但可拖动、可点选', () => {
+    POWER_SYMBOL_KINDS.forEach((kind: any) => {
+      const symbol = makeSymbol(kind);
+      expect(symbol.state.transformable).toBe(false);
+      expect(symbol.state.draggable).toBe(true);
+      expect(symbol.state.interactive).toBe(true);
+    });
+  });
+
+  it('拖动仍然生效（位置变化会派发 AFTER_MOVE，供连线跟随）', () => {
+    const symbol = makeSymbol('breaker');
+    const moved: string[] = [];
+    symbol.on('AFTER_MOVE', () => moved.push('moved'));
+    symbol.setPosition(symbol.state.left + 40, symbol.state.top + 20);
+    expect(moved.length).toBeGreaterThan(0);
+  });
+
+  it('尺寸类符号（母线 / 柜体）靠参数改尺寸，而不是变换手柄', () => {
+    const busbar = makeSymbol('busbar');
+    expect(busbar.state.transformable).toBe(false);
+    busbar.applyPatch({ width: 480 });
+    expect(busbar.state.width).toBe(480);
+    // 记法随之重建：母线画出来仍是「加粗实线」
+    expect(busbar.part('busbar').state.height).toBe(POWER_STYLE.heavyLineWidth);
+  });
+});

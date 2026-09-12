@@ -338,6 +338,29 @@
         });
         row('电压', voltageSelect);
 
+        // 不可变换 → 需要变尺寸的元素（母线长度、柜体宽高）在这里用数值改
+        if (node.state.kind === 'busbar' || node.state.kind === 'cubicle') {
+          const widthInput = document.createElement('input');
+          widthInput.type = 'number';
+          widthInput.min = '80';
+          widthInput.value = String(Math.round(node.state.width));
+          widthInput.addEventListener('change', () => {
+            node.applyPatch({ width: Math.max(80, Number(widthInput.value) || node.state.width) });
+            designer.applyTopology();
+          });
+          row(node.state.kind === 'busbar' ? '母线段长' : '宽', widthInput);
+          if (node.state.kind === 'cubicle') {
+            const heightInput = document.createElement('input');
+            heightInput.type = 'number';
+            heightInput.min = '60';
+            heightInput.value = String(Math.round(node.state.height));
+            heightInput.addEventListener('change', () => {
+              node.applyPatch({ height: Math.max(60, Number(heightInput.value) || node.state.height) });
+            });
+            row('高', heightInput);
+          }
+        }
+
         const stateSelect = document.createElement('select');
         ['open', 'closed'].forEach((value) => {
           const option = document.createElement('option');
