@@ -207,15 +207,16 @@
       /* ---------------- 案例：信用卡申请审批 ---------------- */
       function buildCase() {
         designer.clear();
-        const bank = designer.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 1180, height: 300 });
-        designer.createNode('bpmnLane', { title: '受理岗', left: 60, top: 60, width: 1180, height: 150 });
-        designer.createNode('bpmnLane', { title: '风控岗', left: 60, top: 210, width: 1180, height: 150 });
-        const customer = designer.createNode('bpmnPool', { title: '客户', left: 60, top: 420, width: 1180, height: 150 });
-        designer.createNode('bpmnLane', { title: '申请人', left: 60, top: 420, width: 1180, height: 150 });
+        // 池的名称带占 32px：泳道从「内容区」开始，避免盖住池标题
+        const bank = designer.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 1180, height: 340 });
+        designer.createNode('bpmnLane', { title: '受理岗', left: 60, top: 92, width: 1180, height: 150 });
+        designer.createNode('bpmnLane', { title: '风控岗', left: 60, top: 242, width: 1180, height: 150 });
+        const customer = designer.createNode('bpmnPool', { title: '客户', left: 60, top: 450, width: 1180, height: 190 });
+        designer.createNode('bpmnLane', { title: '申请人', left: 60, top: 482, width: 1180, height: 150 });
 
         // 客户池也要有自己的开始事件（BPMN 语义：每个 process 至少一个开始事件）
-        const need = designer.createNode('bpmnEvent', { title: '产生用卡需求', eventKind: 'start', left: 120, top: 465 });
-        const apply_ = designer.createNode('bpmnTask', { title: '提交信用卡申请', taskType: 'user', left: 260, top: 455 });
+        const need = designer.createNode('bpmnEvent', { title: '产生用卡需求', eventKind: 'start', left: 120, top: 520 });
+        const apply_ = designer.createNode('bpmnTask', { title: '提交信用卡申请', taskType: 'user', left: 260, top: 510 });
         designer.createEdge({ sourceId: need.state.id, targetId: apply_.state.id });
         const submit = designer.createNode('bpmnEvent', { title: '申请提交', eventKind: 'start', left: 240, top: 120 });
         const verify = designer.createNode('bpmnTask', { title: '身份核验', taskType: 'service', left: 400, top: 100 });

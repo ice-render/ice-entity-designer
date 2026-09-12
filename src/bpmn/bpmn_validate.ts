@@ -43,13 +43,6 @@ function contains(outer: Rect, inner: Rect): boolean {
   return cx >= outer.x0 && cx <= outer.x1 && cy >= outer.y0 && cy <= outer.y1;
 }
 
-/** 泳道/池：按面积从小到大排序，便于「最内层容器」判定 */
-function containersOf(nodes: any[]): any[] {
-  return nodes
-    .filter((node) => node.state.kind === 'bpmnPool' || node.state.kind === 'bpmnLane')
-    .sort((a, b) => a.state.width * a.state.height - b.state.width * b.state.height);
-}
-
 function owningPool(node: any, nodes: any[]): any {
   const box = boxOf(node);
   const pools = nodes.filter((item) => item.state.kind === 'bpmnPool');

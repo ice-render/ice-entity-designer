@@ -6,6 +6,7 @@
  *
  */
 import FlowDesigner from '../flow/FlowDesigner';
+import { FLOW_NODE_KINDS } from '../flow/FlowNode';
 import { BpmnFlowMarker } from './bpmn_shapes';
 import { validateBpmn } from './bpmn_validate';
 import type { BpmnIssue } from './bpmn_validate';
@@ -59,7 +60,11 @@ export default class BpmnDesigner extends FlowDesigner {
       return;
     }
     if (node.state.kind === 'bpmnPool') {
-      return; // 池是最外层容器
+      node.setState({ zIndex: -30000 }); // 结构层：池垫在所有元素之下
+      return;
+    }
+    if (node.state.kind === 'bpmnLane') {
+      node.setState({ zIndex: -20000 }); // 泳道在池之上、业务图元之下
     }
     const box = node.getMinBoundingBox(true);
     const cx = (box.tl[0] + box.br[0]) / 2;
@@ -67,7 +72,7 @@ export default class BpmnDesigner extends FlowDesigner {
     const containers = this.nodes
       .filter((item: any) => item !== node && (item.state.kind === 'bpmnPool' || item.state.kind === 'bpmnLane'))
       .filter((item: any) => {
-        const containerBox = item.getMinBoundingBox(true);
+        const containerBox = this.__contentBox(item);
         return (
           cx >= containerBox.tl[0] && cx <= containerBox.br[0] && cy >= containerBox.tl[1] && cy <= containerBox.br[1]
         );
@@ -88,6 +93,26 @@ export default class BpmnDesigner extends FlowDesigner {
     } finally {
       this.__nesting = false;
     }
+  }
+
+  /**
+   * 容器的**内容区**（扣掉名称带）。
+   *
+   * 池的名称带在顶部、泳道在左侧，名称带属于标题区、不该被内部元素压住；
+   * 所以归属判定按内容区算，否则泳道会盖住池标题。
+   */
+  private __contentBox(container: any): any {
+    const box = container.getMinBoundingBox(true);
+    const preset: any = (FLOW_NODE_KINDS as any)[container.state.kind] || {};
+    const band = preset.band;
+    const bandSize = preset.bandSize || 0;
+    if (!band || !bandSize) {
+      return box;
+    }
+    return {
+      tl: band === 'top' ? [box.tl[0], box.tl[1] + bandSize] : [box.tl[0] + bandSize, box.tl[1]],
+      br: box.br,
+    };
   }
 
   /** 顺序流的条件/默认标记：按需创建、原位更新（放在工具层，不污染文档） */

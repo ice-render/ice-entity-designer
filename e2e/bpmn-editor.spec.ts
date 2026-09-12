@@ -79,14 +79,44 @@ test('容器：拖动池会带着泳道与里面的节点一起走（引擎容�
   const after = await page.evaluate((poolId) => {
     const designer = (window as any).__designer;
     const pool = designer.ice.findComponent(poolId);
+    // 只挑「两端都落在被拖动池内」的连线（跨池的消息流端点不在这个池里）
+    const insidePool = (component: any) => {
+      let current = component;
+      while (current) {
+        if (current.state && current.state.id === poolId) return true;
+        current = current.parentNode;
+      }
+      return false;
+    };
+    const edge = designer.edges.find((item: any) => {
+      const links = item.state.links || {};
+      const source = links.start && links.start.id && designer.ice.findComponent(links.start.id);
+      const target = links.end && links.end.id && designer.ice.findComponent(links.end.id);
+      return source && target && insidePool(source) && insidePool(target);
+    });
+    const edgeBefore = edge && edge.state.points ? edge.state.points.map((p: any) => p.slice()) : null;
     pool.setPosition(pool.state.left + 50, pool.state.top + 30);
     const lane = designer.nodes.find((node: any) => node.state.kind === 'bpmnLane');
     const task = designer.nodes.find((node: any) => node.state.kind === 'bpmnTask');
-    return { laneBox: lane.getMinBoundingBox(true).tl.slice(), taskBox: task.getMinBoundingBox(true).tl.slice() };
+    return {
+      laneBox: lane.getMinBoundingBox(true).tl.slice(),
+      taskBox: task.getMinBoundingBox(true).tl.slice(),
+      edgePointsChanged: edge
+        ? JSON.stringify(edge.state.points.map((p: any) => p.slice())) !== JSON.stringify(edgeBefore)
+        : false,
+      edgeDelta:
+        edge && edgeBefore && edge.state.points[0]
+          ? [edge.state.points[0][0] - edgeBefore[0][0], edge.state.points[0][1] - edgeBefore[0][1]]
+          : null,
+    };
   }, before.poolId);
 
   expect(after.laneBox[0] - before.laneBox[0]).toBeCloseTo(50, 1);
   expect(after.taskBox[1] - before.taskBox[1]).toBeCloseTo(30, 1);
+  // 挂在容器内部图元上的连线必须同步重路由（用户报告的「线不跟随」回归）
+  expect(after.edgePointsChanged).toBe(true);
+  expect(after.edgeDelta[0]).toBeCloseTo(50, 0);
+  expect(after.edgeDelta[1]).toBeCloseTo(30, 0);
 });
 
 test('BPMN 校验：案例本身合法，注入违规后能报出具体问题', async ({ page }) => {

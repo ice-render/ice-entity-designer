@@ -59,6 +59,8 @@ export type FlowNodePreset = {
   bandSize?: number;
   /** 标题摆放：居中（图元）或左上（池/泳道/注释） */
   labelPlacement?: 'center' | 'top-left';
+  /** 背景透明（泳道用：相邻泳道共享边界时，填充会盖住邻居的边框） */
+  transparent?: boolean;
   /** 默认的任务类型角标（bpmnTask 用） */
   taskType?: string;
   /** 默认事件种类 / 触发（bpmnEvent 用） */
@@ -166,6 +168,7 @@ export const FLOW_NODE_KINDS: Record<FlowNodeKind, FlowNodePreset> = {
     band: 'left',
     bandSize: 32,
     labelPlacement: 'top-left',
+    transparent: true,
   },
 };
 
@@ -260,6 +263,7 @@ export default class FlowNode extends ICEGroup {
       taskType: this.state.taskType || preset.taskType,
       band: preset.band,
       bandSize: preset.bandSize,
+      fill: !preset.transparent,
       interactive: false,
       showMinBoundingBox: false,
       showMaxBoundingBox: false,

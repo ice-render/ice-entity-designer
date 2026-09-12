@@ -248,4 +248,35 @@ describe('BPMN 容器：真嵌套（引擎容器能力）', () => {
     ice.evtBus.trigger('mousedown', null, { component: hit });
     expect(designer.selectedId).toBe(task.state.id);
   });
+
+  it('拖动容器时，挂在内部图元上的连线也会重新路由（引擎递归派发 AFTER_MOVE）', () => {
+    const { designer } = makeDesigner();
+    const pool = designer.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 800, height: 320 });
+    designer.createNode('bpmnLane', { title: '受理岗', left: 60, top: 92, width: 800, height: 150 });
+    const a = designer.createNode('bpmnTask', { title: 'A', left: 160, top: 130 });
+    const b = designer.createNode('bpmnTask', { title: 'B', left: 420, top: 130 });
+    // 跨内容区的顺序流（同池）
+    const edge = designer.createEdge({ sourceId: a.state.id, targetId: b.state.id });
+    // 连线的「跟随宿主」监听是在一轮渲染收敛（ROUND_FINISH）后才挂上的，node 测试里手动触发一次
+    (designer as any).ice.evtBus.trigger('ROUND_FINISH');
+    const before = {
+      start: edge.state.startPoint.slice(),
+      end: edge.state.endPoint.slice(),
+      points: (edge.state.points || []).map((p: any) => p.slice()),
+    };
+
+    pool.setPosition(pool.state.left + 80, pool.state.top + 60);
+    const after = {
+      start: edge.state.startPoint.slice(),
+      end: edge.state.endPoint.slice(),
+      points: (edge.state.points || []).map((p: any) => p.slice()),
+    };
+
+    // 连线的**折点**应随宿主节点一起平移（这正是「线跟着图元走」的体现；
+    // startPoint/endPoint 是配置端点，重路由改的是 points/dots）
+    expect(after.points.length).toBe(before.points.length);
+    expect(after.points).not.toEqual(before.points);
+    expect(after.points[0][0] - before.points[0][0]).toBeCloseTo(80, 1);
+    expect(after.points[0][1] - before.points[0][1]).toBeCloseTo(60, 1);
+  });
 });
