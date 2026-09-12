@@ -341,3 +341,110 @@ describe('电力应用层 · 母线 T 接（方案 A）', () => {
     expect(bus.state.width).toBe(600);
   });
 });
+
+/**
+ * 贴合业务的校验细化：真实图纸里这两条是「按电压等级」和「按挂接关系」分开看的。
+ */
+describe('电力应用层 · 贴合业务的校验细化', () => {
+  it('断路器两侧隔离开关：只对 110kV 及以上报（10kV 开关柜的隔离由手车实现，单线图不画隔离开关）', () => {
+    // 110kV：断路器只连了一把隔离开关 → 报
+    const hv = makeDesigner();
+    const bus = hv.designer.createSymbol('busbar', {
+      name: '#1M',
+      voltageLevel: '110kV',
+      left: 100,
+      top: 100,
+      width: 400,
+    });
+    const qf = hv.designer.createSymbol('breaker', { name: '1101', voltageLevel: '110kV', left: 200, top: 200 });
+    const ds = hv.designer.createSymbol('disconnector', { name: '11016', voltageLevel: '110kV', left: 200, top: 150 });
+    const ct = hv.designer.createSymbol('currentTransformer', {
+      name: '1101TA',
+      voltageLevel: '110kV',
+      left: 200,
+      top: 260,
+    });
+    hv.designer.createLine({ sourceId: ds.state.id, targetId: qf.state.id });
+    hv.designer.createLine({ sourceId: qf.state.id, targetId: ct.state.id });
+    hv.designer.attachToBus(ds, bus, { centerX: 200 });
+    expect(hv.designer.validatePower().some((issue: any) => issue.message.includes('两侧隔离开关不足'))).toBe(true);
+
+    // 10kV：同样是「断路器 + CT、没有隔离开关」→ 不报
+    const lv = makeDesigner();
+    const bus10 = lv.designer.createSymbol('busbar', {
+      name: '#3M',
+      voltageLevel: '10kV',
+      left: 100,
+      top: 100,
+      width: 400,
+    });
+    const qf10 = lv.designer.createSymbol('breaker', { name: '601', voltageLevel: '10kV', left: 200, top: 200 });
+    const ct10 = lv.designer.createSymbol('currentTransformer', {
+      name: '601TA',
+      voltageLevel: '10kV',
+      left: 200,
+      top: 260,
+    });
+    const outlet = lv.designer.createSymbol('load', { name: '出线1', voltageLevel: '10kV', left: 200, top: 320 });
+    lv.designer.createLine({ sourceId: qf10.state.id, targetId: ct10.state.id });
+    lv.designer.createLine({ sourceId: ct10.state.id, targetId: outlet.state.id });
+    lv.designer.attachToBus(qf10, bus10, { centerX: 200 });
+    expect(lv.designer.validatePower().some((issue: any) => issue.message.includes('两侧隔离开关不足'))).toBe(false);
+  });
+
+  it('母联那种「刀闸 — 断路器 — CT — 刀闸」不算「两侧隔离开关不足」（CT 是串联元件，不是断口）', () => {
+    const { designer } = makeDesigner();
+    const bus1 = designer.createSymbol('busbar', {
+      name: '#1M',
+      voltageLevel: '110kV',
+      left: 100,
+      top: 100,
+      width: 500,
+    });
+    const bus2 = designer.createSymbol('busbar', {
+      name: '#2M',
+      voltageLevel: '110kV',
+      left: 100,
+      top: 220,
+      width: 500,
+    });
+    const ds1 = designer.createSymbol('disconnector', { name: '10131', voltageLevel: '110kV', left: 300, top: 300 });
+    const qf = designer.createSymbol('breaker', { name: '1013', voltageLevel: '110kV', left: 300, top: 360 });
+    const ct = designer.createSymbol('currentTransformer', {
+      name: '1013TA',
+      voltageLevel: '110kV',
+      left: 300,
+      top: 430,
+    });
+    const ds2 = designer.createSymbol('disconnector', { name: '10132', voltageLevel: '110kV', left: 300, top: 500 });
+    designer.createLine({ sourceId: ds1.state.id, targetId: qf.state.id });
+    designer.createLine({ sourceId: qf.state.id, targetId: ct.state.id });
+    designer.createLine({ sourceId: ct.state.id, targetId: ds2.state.id });
+    designer.attachToBus(ds1, bus1, { centerX: 300 });
+    designer.attachToBus(ds2, bus2, { centerX: 300 });
+    expect(designer.validatePower().some((issue: any) => issue.message.includes('两侧隔离开关不足'))).toBe(false);
+  });
+
+  it('挂在母线上的设备，电压等级必须与母线一致（110kV 间隔不能挂到 10kV 母线上）', () => {
+    const { designer } = makeDesigner();
+    const bus10 = designer.createSymbol('busbar', {
+      name: '#3M',
+      voltageLevel: '10kV',
+      left: 100,
+      top: 100,
+      width: 400,
+    });
+    const wrong = designer.createSymbol('breaker', { name: '1101', voltageLevel: '110kV', left: 200, top: 200 });
+    designer.attachToBus(wrong, bus10, { centerX: 200 });
+    const issues = designer.validatePower();
+    expect(
+      issues.some(
+        (issue: any) =>
+          issue.level === 'error' &&
+          issue.message.includes('挂到了母线') &&
+          issue.message.includes('110kV') &&
+          issue.message.includes('10kV')
+      )
+    ).toBe(true);
+  });
+});

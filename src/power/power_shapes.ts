@@ -701,14 +701,15 @@ export default class PowerSymbol extends ICEGroup {
         })
       );
     }
-    // 设备名 / 调度编号：统一放在符号上方（居中于符号）
+    // 设备名 / 调度编号：统一放在符号上方。
+    // 母线是横向长条，名字放**左端**（居中的话会与挂在母线上的那一排设备名挤在同一行）。
     if (this.state.name) {
       this.__add(
         'nameLabel',
         new ICEText({
           zIndex: baseZ + 4,
-          left: 0,
-          top: -20,
+          left: kind === 'busbar' ? 4 : 0,
+          top: kind === 'busbar' ? -18 : -20,
           width: Math.max(w, 64),
           height: 16,
           text: String(this.state.name),
@@ -717,7 +718,7 @@ export default class PowerSymbol extends ICEGroup {
           style: {
             fontSize: POWER_STYLE.nameFontSize,
             fillStyle: POWER_STYLE.nameColor,
-            textAlign: 'center',
+            textAlign: kind === 'busbar' ? 'left' : 'center',
             textBaseline: 'middle',
           },
         })

@@ -106,71 +106,125 @@
       /* ---------------- 案例：110kV 变电站（双母线 + 母联 + 两回进线 + 两台主变） ---------------- */
       function buildCase() {
         designer.clear();
-        const v = '110kV';
-        const add = (kind, props) => designer.createSymbol(kind, { voltageLevel: v, ...props });
+        const V110 = '110kV';
+        const V10 = '10kV';
+        const add = (kind, props) => designer.createSymbol(kind, { ...props });
 
-        /** 一条间隔（串联设备链）垂直排布：第一个由 attachToBus 定位，其余按固定步长往下排 */
-        function layoutBay(chain, step) {
-          const box = chain[0].getMinBoundingBox(true);
-          chain.forEach((node, index) => {
-            if (index === 0) {
-              return; // 第一个已经在母线上（attachToBus 摆好了）
-            }
-            node.setState({ left: box.tl[0], top: box.tl[1] + index * step });
-          });
+        /** 一条 110kV 间隔（双母线）：Ⅰ母刀闸 + Ⅱ母刀闸 + 断路器 + 电流互感器 + 线路侧刀闸 + 出线/主变
+         *  线路侧再挂接地刀闸与避雷器；正常运行方式：只合一把母线刀闸，另一把分位。 */
+        function bay110(x, name, terminalKind, terminalName, voltageOfTerminal, activeBus) {
+          const prefix = name;
+          const ds1 = add('disconnector', { name: `${prefix}1`, voltageLevel: V110, left: x, top: 320 });
+          const ds2 = add('disconnector', { name: `${prefix}2`, voltageLevel: V110, left: x, top: 320 });
+          const qf = add('breaker', { name: prefix, voltageLevel: V110, left: x, top: 350 });
+          const ct = add('currentTransformer', { name: `${prefix}TA`, voltageLevel: V110, left: x, top: 440 });
+          const ds3 = add('disconnector', { name: `${prefix}3`, voltageLevel: V110, left: x, top: 520 });
+          const terminal = add(terminalKind, { name: terminalName, voltageLevel: voltageOfTerminal, left: x, top: 620 });
+          const es = add('earthingSwitch', { name: `${prefix}9`, voltageLevel: V110, left: x + 80, top: 560 });
+          const fa = add('arrester', { name: `${prefix}F`, voltageLevel: V110, left: x - 80, top: 560 });
+
+          designer.createLine({ sourceId: ds1.state.id, targetId: qf.state.id });
+          designer.createLine({ sourceId: ds2.state.id, targetId: qf.state.id });
+          designer.createLine({ sourceId: qf.state.id, targetId: ct.state.id });
+          designer.createLine({ sourceId: ct.state.id, targetId: ds3.state.id });
+          designer.createLine({ sourceId: ds3.state.id, targetId: terminal.state.id });
+          designer.createLine({ sourceId: ds3.state.id, targetId: es.state.id });
+          designer.createLine({ sourceId: ds3.state.id, targetId: fa.state.id });
+          designer.attachToBus(ds1, bus1, { centerX: x });
+          designer.attachToBus(ds2, bus2, { centerX: x });
+          // 正常运行方式：间隔只接一条母线（另一把母线刀闸分位），双母线并列运行靠母联
+          designer.setSwitchState(ds1.state.id, activeBus === 1 ? 'closed' : 'open');
+          designer.setSwitchState(ds2.state.id, activeBus === 2 ? 'closed' : 'open');
+          [qf, ds3].forEach((device) => designer.setSwitchState(device.state.id, 'closed'));
+          designer.setSwitchState(es.state.id, 'open');
+          return { qf, terminal, ds3 };
         }
 
-        // 两条 110kV 母线（母线之间留出母联的空间）
-        const bus1 = add('busbar', { name: '#1M', left: 120, top: 180, width: 760 });
-        const bus2 = add('busbar', { name: '#2M', left: 120, top: 420, width: 760 });
+        // ---- 110kV 双母线 ----
+        const bus1 = add('busbar', { name: '#1M', voltageLevel: V110, left: 140, top: 120, width: 1320 });
+        const bus2 = add('busbar', { name: '#2M', voltageLevel: V110, left: 140, top: 220, width: 1320 });
 
-        // 间隔：母线侧隔离开关 → 断路器 → 隔离开关 → 出线（线路 / 主变）——全部挂在 #2M 下
-        const bay = (x, dsName, qfName, ds2Name, terminalKind, terminalName) => {
-          const ds = add('disconnector', { name: dsName, left: x, top: 460 });
-          const qf = add('breaker', { name: qfName, left: x, top: 560 });
-          const ds2 = add('disconnector', { name: ds2Name, left: x, top: 660 });
-          const terminal = add(terminalKind, { name: terminalName, left: x, top: 760 });
-          designer.createLine({ sourceId: ds.state.id, targetId: qf.state.id });
-          designer.createLine({ sourceId: qf.state.id, targetId: ds2.state.id });
-          designer.createLine({ sourceId: ds2.state.id, targetId: terminal.state.id });
-          designer.attachToBus(ds, bus2, { centerX: x });
-          layoutBay([ds, qf, ds2, terminal], 96);
-          return { ds, qf, ds2, terminal };
-        };
+        const line1 = bay110(240, '1101', 'generator', '甲线', V110, 1);
+        const line2 = bay110(440, '1102', 'generator', '乙线', V110, 1);
+        const t1 = bay110(640, '1011', 'transformer', 'T1', V110, 1);
+        const t2 = bay110(960, '1012', 'transformer', 'T2', V110, 2);
 
-        const line1 = bay(200, '11026', '1102', '11022', 'generator', '线路1');
-        const line2 = bay(360, '11036', '1103', '11032', 'generator', '线路2');
-        const t1 = bay(520, '10116', '1011', '10112', 'transformer', 'T1');
-        const t2 = bay(680, '10216', '1021', '10212', 'transformer', 'T2');
+        // ---- 母联间隔 1013：两条母线之间，带 CT 与接地刀闸（正常运行合位）----
+        const tieDs1 = add('disconnector', { name: '10131', voltageLevel: V110, left: 1160, top: 320 });
+        const tieQf = add('breaker', { name: '1013', voltageLevel: V110, left: 1160, top: 350 });
+        const tieCt = add('currentTransformer', { name: '1013TA', voltageLevel: V110, left: 1160, top: 440 });
+        const tieDs2 = add('disconnector', { name: '10132', voltageLevel: V110, left: 1160, top: 520 });
+        const tieEs = add('earthingSwitch', { name: '10139', voltageLevel: V110, left: 1250, top: 470 });
+        designer.createLine({ sourceId: tieDs1.state.id, targetId: tieQf.state.id });
+        designer.createLine({ sourceId: tieQf.state.id, targetId: tieCt.state.id });
+        designer.createLine({ sourceId: tieCt.state.id, targetId: tieDs2.state.id });
+        designer.createLine({ sourceId: tieCt.state.id, targetId: tieEs.state.id });
+        designer.attachToBus(tieDs1, bus1, { centerX: 1160 });
+        designer.attachToBus(tieDs2, bus2, { centerX: 1160 });
+        [tieDs1, tieQf, tieDs2].forEach((device) => designer.setSwitchState(device.state.id, 'closed'));
+        designer.setSwitchState(tieEs.state.id, 'open');
 
-        // 母联：#1M 与 #2M 之间「隔离开关 + 断路器 + 隔离开关」，两端各自挂在一条母线上
-        const ds31 = add('disconnector', { name: '10126', left: 800, top: 300 });
-        const qf31 = add('breaker', { name: '1012', left: 800, top: 300 });
-        const ds32 = add('disconnector', { name: '10122', left: 800, top: 300 });
-        designer.createLine({ sourceId: ds31.state.id, targetId: qf31.state.id });
-        designer.createLine({ sourceId: qf31.state.id, targetId: ds32.state.id });
-        designer.attachToBus(ds31, bus1, { centerX: 800 });
-        designer.attachToBus(ds32, bus2, { centerX: 800 });
-        // 母联的断路器摆到两把隔离开关中间
-        const ds31Box = ds31.getMinBoundingBox(true);
-        qf31.setState({ left: ds31Box.tl[0], top: ds31Box.tl[1] + 84 });
+        // ---- 母线 PT 间隔 1014：刀闸 + 熔断器 + 电压互感器（+ 避雷器），挂 Ⅰ 母 ----
+        const ptDs = add('disconnector', { name: '10141', voltageLevel: V110, left: 1340, top: 320 });
+        const ptFu = add('fuse', { name: '1014FU', voltageLevel: V110, left: 1340, top: 400 });
+        const ptTv = add('voltageTransformer', { name: '1014TV', voltageLevel: V110, left: 1340, top: 480 });
+        const ptFa = add('arrester', { name: '1014F', voltageLevel: V110, left: 1420, top: 480 });
+        designer.createLine({ sourceId: ptDs.state.id, targetId: ptFu.state.id });
+        designer.createLine({ sourceId: ptFu.state.id, targetId: ptTv.state.id });
+        designer.createLine({ sourceId: ptTv.state.id, targetId: ptFa.state.id });
+        designer.attachToBus(ptDs, bus1, { centerX: 1340 });
+        designer.setSwitchState(ptDs.state.id, 'closed');
 
-        // 每条母线上挂一把接地开关（默认分位）
-        const es1 = add('earthingSwitch', { name: '11019', left: 940, top: 240 });
-        const es2 = add('earthingSwitch', { name: '11029', left: 940, top: 480 });
-        designer.attachToBus(es1, bus1, { centerX: 940 });
-        designer.attachToBus(es2, bus2, { centerX: 940 });
+        // ---- 10kV 侧：两台主变低压侧（断路器 + CT）接单母线分段 ----
+        const lv1Qf = add('breaker', { name: '901', voltageLevel: V10, left: 640, top: 780 });
+        const lv1Ct = add('currentTransformer', { name: '901TA', voltageLevel: V10, left: 640, top: 860 });
+        const lv2Qf = add('breaker', { name: '902', voltageLevel: V10, left: 960, top: 780 });
+        const lv2Ct = add('currentTransformer', { name: '902TA', voltageLevel: V10, left: 960, top: 860 });
+        designer.createLine({ sourceId: t1.terminal.state.id, targetId: lv1Qf.state.id });
+        designer.createLine({ sourceId: lv1Qf.state.id, targetId: lv1Ct.state.id });
+        designer.createLine({ sourceId: t2.terminal.state.id, targetId: lv2Qf.state.id });
+        designer.createLine({ sourceId: lv2Qf.state.id, targetId: lv2Ct.state.id });
+        [lv1Qf, lv2Qf].forEach((device) => designer.setSwitchState(device.state.id, 'closed'));
 
-        // 电源点：两回进线
+        // 10kV 单母线分段：#3M（左段）— 分段断路器 900 — #4M（右段）
+        const bus3 = add('busbar', { name: '#3M', voltageLevel: V10, left: 240, top: 960, width: 500 });
+        const bus4 = add('busbar', { name: '#4M', voltageLevel: V10, left: 900, top: 960, width: 560 });
+        const secQf = add('breaker', { name: '900', voltageLevel: V10, left: 830, top: 960 });
+        const secCt = add('currentTransformer', { name: '900TA', voltageLevel: V10, left: 770, top: 960 });
+        designer.attachToBus(lv1Ct, bus3, { centerX: 640 });
+        designer.attachToBus(lv2Ct, bus4, { centerX: 960 });
+        // 分段「导体 — CT — 断路器 — 导体」串联（CT 是串联元件，不是死头分支）
+        designer.createLine({ sourceId: bus3.state.id, targetId: secCt.state.id, sourcePort: 'R', targetPort: 'L' });
+        designer.createLine({ sourceId: secCt.state.id, targetId: secQf.state.id, sourcePort: 'R', targetPort: 'L' });
+        designer.createLine({ sourceId: secQf.state.id, targetId: bus4.state.id, sourcePort: 'R', targetPort: 'L' });
+        // 真实运行方式：10kV 分段断路器**分位**（两段分裂运行，避免 10kV 侧合环；备自投负责失电切换）
+        designer.setSwitchState(secQf.state.id, 'open');
+
+        /** 一条 10kV 间隔：断路器 + CT + 末端设备（开关柜的隔离由手车实现，单线图不画隔离开关）*/
+        function bay10(x, name, terminalKind, terminalName, bus) {
+          const qf = add('breaker', { name, voltageLevel: V10, left: x, top: 940 });
+          const ct = add('currentTransformer', { name: `${name}TA`, voltageLevel: V10, left: x, top: 1010 });
+          const terminal = add(terminalKind, { name: terminalName, voltageLevel: V10, left: x, top: 1080 });
+          designer.createLine({ sourceId: qf.state.id, targetId: ct.state.id });
+          designer.createLine({ sourceId: ct.state.id, targetId: terminal.state.id });
+          designer.attachToBus(qf, bus, { centerX: x });
+          designer.setSwitchState(qf.state.id, 'closed');
+          return { qf, terminal };
+        }
+
+        bay10(300, '601', 'load', '1 号出线', bus3);
+        bay10(460, '602', 'load', '2 号出线', bus3);
+        bay10(1080, '603', 'load', '3 号出线', bus4);
+        bay10(1220, '604', 'load', '4 号出线', bus4);
+        // 无功补偿（#3M）与站用变（#4M）—— 用上这一批新补的符号
+        bay10(560, '605', 'capacitor', '电容器组', bus3);
+        bay10(1360, '606', 'groundingTransformer', '站用变', bus4);
+
+        // 电源点：两回 110kV 进线
         designer.setEnergizedSource(line1.terminal.state.id, true);
         designer.setEnergizedSource(line2.terminal.state.id, true);
 
-        // 运行态：全部合闸（正常运行方式）
-        [line1, line2, t1, t2].forEach((item) => {
-          [item.ds, item.qf, item.ds2].forEach((device) => designer.setSwitchState(device.state.id, 'closed'));
-        });
-        [ds31, qf31, ds32].forEach((device) => designer.setSwitchState(device.state.id, 'closed'));
-
+        // 出线间隔的线路侧设备（接地刀闸 / 避雷器）已按分位布置，这里统一再算一次带电范围
         designer.select(null);
         designer.applyTopology();
         designer.fitViewport();

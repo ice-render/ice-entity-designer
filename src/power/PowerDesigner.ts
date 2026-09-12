@@ -66,6 +66,12 @@ export class PowerLine extends FlowEdge {
  *    断路器两侧应有隔离开关，以及两条与「五防」直接相关的规则
  *    （**带电合接地刀闸**、**带接地线合闸送电**）。
  */
+/** 从 '110kV' 这样的等级串里取出数字（取不到返回 0） */
+function kilovoltsOf(voltageLevel: string): number {
+  const matched = /(\d+(?:\.\d+)?)/.exec(String(voltageLevel || ''));
+  return matched ? Number(matched[1]) : 0;
+}
+
 export default class PowerDesigner extends FlowDesigner {
   /** 色标表（可被公司规范覆盖） */
   public voltageColors: Record<string, string> = defaultVoltageColors();
@@ -322,12 +328,49 @@ export default class PowerDesigner extends FlowDesigner {
       });
 
     // 4) 断路器两侧应各有隔离开关（检修时能形成可见断口）
+    //
+    // 这条规则**只在 110kV 及以上**成立：敞开式设备检修必须能形成可见断口；
+    // 10kV / 35kV 的隔离由开关柜手车（插头）实现，单线图上不画隔离开关，
+    // 所以对小电压等级不报（否则每个 10kV 出线柜都会误报）。
+    // 「两侧有隔离开关」按**同一间隔内、不跨越其它开关**的距离判定：
+    // 真实母联间隔是「Ⅰ母刀闸 — 断路器 — 电流互感器 — Ⅱ母刀闸」，CT 就挡在断路器与刀闸之间；
+    // 只看相邻邻居会把这种合法配置误报成「缺少隔离开关」。
+    const hasDisconnectorWithinInterval = (breakerId: string, fromId: string): boolean => {
+      const seen = new Set<string>([breakerId]);
+      let frontier: string[] = [fromId];
+      for (let hop = 0; hop < 3 && frontier.length; hop += 1) {
+        const next: string[] = [];
+        for (const id of frontier) {
+          if (seen.has(id)) {
+            continue;
+          }
+          seen.add(id);
+          const node = byId.get(id);
+          if (!node) {
+            continue;
+          }
+          const kind = node.state.kind;
+          if (kind === 'disconnector') {
+            return true;
+          }
+          // 跨过另一台开关就停：那一侧的隔离是那台开关自己的职责
+          if (POWER_SWITCH_KINDS.indexOf(kind) !== -1 || kind === 'busbar') {
+            continue;
+          }
+          (neighbors.get(id) || []).forEach((neighborId) => next.push(neighborId));
+        }
+        frontier = next;
+      }
+      return false;
+    };
+
     nodes
       .filter((node: any) => node.state.kind === 'breaker')
+      .filter((breaker: any) => kilovoltsOf(breaker.state.voltageLevel) >= 110)
       .forEach((breaker: any) => {
         const around = neighbors.get(breaker.state.id) || [];
-        const disconnectors = around.filter((id) => (byId.get(id) || { state: {} }).state.kind === 'disconnector');
-        if (disconnectors.length < 2) {
+        const coveredSides = around.filter((id) => hasDisconnectorWithinInterval(breaker.state.id, id)).length;
+        if (coveredSides < 2) {
           issues.push({
             level: 'warning',
             message: `断路器「${breaker.state.name || '未命名'}」两侧隔离开关不足（检修时需要可见断口）`,
@@ -336,7 +379,26 @@ export default class PowerDesigner extends FlowDesigner {
         }
       });
 
-    // 5) 五防相关：带电合接地刀闸 / 带接地线合闸送电
+    // 5) 母线 T 接的电压等级必须与母线一致（110kV 间隔不能挂到 10kV 母线上）
+    nodes.forEach((node: any) => {
+      const bus = this.attachedBusOf(node);
+      if (!bus) {
+        return;
+      }
+      const nodeLevel = String(node.state.voltageLevel || '');
+      const busLevel = String(bus.state.voltageLevel || '');
+      if (nodeLevel && busLevel && nodeLevel !== busLevel) {
+        issues.push({
+          level: 'error',
+          message: `电压等级不一致：设备「${node.state.name || node.state.kind}」(${nodeLevel}) 挂到了母线「${
+            bus.state.name || '未命名'
+          }」(${busLevel}) 上`,
+          id: node.state.id,
+        });
+      }
+    });
+
+    // 6) 五防相关：带电合接地刀闸 / 带接地线合闸送电
     const energized = new Set(topology.energized);
     nodes
       .filter((node: any) => node.state.kind === 'earthingSwitch')
@@ -358,7 +420,7 @@ export default class PowerDesigner extends FlowDesigner {
         }
       });
 
-    // 6) 挂在母线上但已经拖离：隐式连接按几何判定，拖离后需要重新贴合或补一段导体
+    // 7) 挂在母线上但已经拖离：隐式连接按几何判定，拖离后需要重新贴合或补一段导体
     nodes.forEach((node: any) => {
       const bus = this.attachedBusOf(node);
       if (bus && !this.isAttachedToBus(node)) {
@@ -372,7 +434,7 @@ export default class PowerDesigner extends FlowDesigner {
       }
     });
 
-    // 7) 孤立设备
+    // 8) 孤立设备
     nodes.forEach((node: any) => {
       if ((neighbors.get(node.state.id) || []).length === 0) {
         issues.push({

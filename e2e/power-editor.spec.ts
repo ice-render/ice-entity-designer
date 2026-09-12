@@ -38,47 +38,62 @@ test('加载：110kV 变电站案例渲染、编号与文字符号齐全、校�
     };
   });
 
-  expect(info.nodes).toBe(23);
-  // 母线接间隔不再画导体（方案 A：容器 + 几何贴合 = 隐式等电位），所以导体是 14 段
-  expect(info.edges).toBe(14);
+  // 110kV 双母线（4 条完整间隔 + 母联 + 母线 PT）+ 10kV 单母线分段（出线 / 电容器 / 站用变）
+  expect(info.nodes).toBe(69);
+  // 母线接间隔不画导体（方案 A：几何贴合 = 隐式等电位），所以导体是 54 段
+  expect(info.edges).toBe(54);
   // 设备编号（调度命名）与文字符号都在
   expect(info.names).toEqual(
-    expect.arrayContaining(['线路1', '线路2', '#1M', '#2M', '11026', '1102', '10116', '1011', '1012', 'T1', 'T2'])
+    expect.arrayContaining(['甲线', '乙线', 'T1', 'T2', '#1M', '#2M', '#3M', '#4M', '1101', '1013', '900', '601'])
   );
-  expect(info.tags).toEqual(expect.arrayContaining(['QF', 'QS', 'QE', 'W', 'TM', 'G']));
+  expect(info.tags).toEqual(expect.arrayContaining(['QF', 'QS', 'QE', 'W', 'TM', 'G', 'C', 'FU', 'TV', 'TA']));
   expect(info.kinds).toEqual(
-    expect.arrayContaining(['busbar', 'breaker', 'disconnector', 'earthingSwitch', 'transformer'])
+    expect.arrayContaining([
+      'busbar',
+      'breaker',
+      'disconnector',
+      'earthingSwitch',
+      'transformer',
+      'currentTransformer',
+      'voltageTransformer',
+      'capacitor',
+      'groundingTransformer',
+      'fuse',
+      'arrester',
+      'generator',
+      'load',
+    ])
   );
   expect(info.issues).toEqual([]);
-  // 案例本身是「全合闸」的正常运行方式：所有设备带电、一个连通域
-  expect(info.energized).toBe(23);
+  // 案例是正常运行方式（间隔各接一条母线、母联合位把另一条母线带上）：全部带电、一个连通域
+  expect(info.energized).toBe(69);
   expect(info.islands).toBe(1);
-  // 8 个「母线侧」设备是挂上去的：4 条间隔首端 + 母联两端 + 2 把接地开关
-  expect(info.attachedToBus).toBe(8);
+  // 19 个设备是「挂」在母线上的：110kV 侧 4 条间隔各 2 把母线刀闸 + 母联两端 + 母线 PT，
+  // 10kV 侧 2 个主变低压侧 CT + 6 条 10kV 间隔的断路器
+  expect(info.attachedToBus).toBe(19);
   expect((page as any).__errors).toEqual([]);
 });
 
-test('运行态：分 / 合切换会改拓扑与色标（不带电变灰）', async ({ page }) => {
+test('运行态：分 / 合切换会改拓扑与色标（双母联拉开 → Ⅱ 段母线失电变灰）', async ({ page }) => {
   const result = await page.evaluate(() => {
     const designer = (window as any).__designer;
-    const breaker = designer.nodes.find((node: any) => node.state.name === '1011');
-    const transformer = designer.nodes.find((node: any) => node.state.name === 'T1');
+    // 案例是双母线运行方式：各间隔只接 #1M，#2M 靠母联 1013 带电
+    const tie = designer.nodes.find((node: any) => node.state.name === '1013');
+    const bus2 = designer.nodes.find((node: any) => node.state.name === '#2M');
     const before = {
-      state: breaker.state.switchState,
-      energized: transformer.state.energized,
-      badge: breaker.part('stateBadge').state.text,
+      state: tie.state.switchState,
+      energized: bus2.state.energized,
+      badge: tie.part('stateBadge').state.text,
     };
-    // 拉掉 1011（主变 T1 的断路器）→ T1 不再带电
-    designer.setSwitchState(breaker.state.id, 'open');
+    designer.setSwitchState(tie.state.id, 'open'); // 拉开母联 → Ⅱ 段母线失电
     const after = {
-      state: breaker.state.switchState,
-      energized: transformer.state.energized,
-      badge: breaker.part('stateBadge').state.text,
-      color: transformer.part('windingPrimary').state.style.strokeStyle,
+      state: tie.state.switchState,
+      energized: bus2.state.energized,
+      badge: tie.part('stateBadge').state.text,
+      color: bus2.part('busbar').state.style.fillStyle,
     };
-    // 再合上 → 恢复
-    designer.setSwitchState(breaker.state.id, 'closed');
-    return { before, after, restored: transformer.state.energized };
+    designer.setSwitchState(tie.state.id, 'closed'); // 合上恢复
+    return { before, after, restored: bus2.state.energized };
   });
 
   expect(result.before.state).toBe('closed');
@@ -117,12 +132,12 @@ test('矢量导出与快照往返：导出的 SVG 含设备编号，JSON 能原�
   const [jsonDownload] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-json')]);
   expect(jsonDownload.suggestedFilename()).toBe('substation-110kv.json');
   await page.click('#btn-import-json');
-  await expect(page.locator('#validate-output')).toContainText('已导入 23 个设备');
+  await expect(page.locator('#validate-output')).toContainText('已导入 69 个设备');
   const counts = await page.evaluate(() => {
     const designer = (window as any).__designer;
     return { nodes: designer.nodes.length, edges: designer.edges.length, issues: designer.validatePower().length };
   });
-  expect(counts).toEqual({ nodes: 23, edges: 14, issues: 0 });
+  expect(counts).toEqual({ nodes: 69, edges: 54, issues: 0 });
   expect((page as any).__errors).toEqual([]);
 });
 
@@ -135,7 +150,7 @@ test('母线 T 接（方案 A）：拖动母线，挂在它上面的间隔整体
   const delta = await page.evaluate(() => {
     const designer = (window as any).__designer;
     const bus = designer.nodes.find((node: any) => node.state.name === '#2M');
-    const bay = designer.nodes.find((node: any) => node.state.name === '10116');
+    const bay = designer.nodes.find((node: any) => node.state.name === '10112');
     const before = [bay.getMinBoundingBox(true).tl[0], bay.getMinBoundingBox(true).tl[1]];
     bus.setPosition(bus.state.left + 60, bus.state.top + 30);
     const after = [bay.getMinBoundingBox(true).tl[0], bay.getMinBoundingBox(true).tl[1]];
