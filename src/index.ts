@@ -43,6 +43,8 @@ export { default as StateNode, STATECHART_NODE_KINDS } from './statechart/StateN
 export type { StatechartNodeKind } from './statechart/StateNode';
 export { default as StateTransition } from './statechart/StateTransition';
 export { default as StatechartDesigner } from './statechart/StatechartDesigner';
+export { toPlantUmlState, fromPlantUmlState, splitTransitionLabel } from './statechart/statechart_text';
+export type { StatechartTextImportResult } from './statechart/statechart_text';
 export type { StatechartIssue } from './statechart/StatechartDesigner';
 
 // 甘特图（domain pack：时间轴刻度 + 拖拽按天吸附 + 依赖）
@@ -52,6 +54,8 @@ export { default as GanttRuler } from './gantt/GanttRuler';
 export type { GanttRulerOptions } from './gantt/GanttRuler';
 export { default as GanttDesigner } from './gantt/GanttDesigner';
 export type { GanttIssue, GanttTaskInput } from './gantt/GanttDesigner';
+export { toMermaidGantt, fromMermaidGantt } from './gantt/gantt_text';
+export type { GanttTextImportResult } from './gantt/gantt_text';
 export { parseDate, formatDate, addDays, diffDays, eachDay, tickLabel } from './gantt/gantt_date';
 
 // 文本互操作：PlantUML / Mermaid 类图语法子集（导入导出）

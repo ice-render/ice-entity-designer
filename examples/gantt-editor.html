@@ -15,6 +15,15 @@
     .hint { color: #64748b; font-size: 12px; }
     .issue.error { color: #b91c1c; }
     .issue.warning { color: #b45309; }
+    #text-output {
+      width: 100%;
+      min-height: 200px;
+      box-sizing: border-box;
+      padding: 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
   </style>
   <body>
     <div class="toolbar">
@@ -31,6 +40,8 @@
       <button id="btn-reset">复位视图</button>
       <button id="btn-validate">校验</button>
       <button id="btn-export-svg">导出 SVG</button>
+      <button id="btn-export-text">导出 Mermaid</button>
+      <button id="btn-import-text">导入 Mermaid</button>
       <span class="hint">拖动任务条会按天吸附（排期语义）</span>
     </div>
     <div class="layout">
@@ -40,6 +51,8 @@
         <div id="panel" class="hint">点击任务条 / 依赖线进行编辑</div>
         <h3>排期校验</h3>
         <div id="validate-output" class="hint">点击「校验」运行语义检查</div>
+        <h3>Mermaid gantt 文本</h3>
+        <textarea id="text-output" spellcheck="false" placeholder="点「导出 Mermaid」生成，或粘贴文本后点「导入 Mermaid」"></textarea>
       </aside>
     </div>
 
@@ -64,12 +77,13 @@
       function buildCase() {
         designer.clear();
         const tasks = [
-          { title: '需求评审', start: '2026-03-02', days: 4, progress: 1 },
-          { title: '交互设计', start: '2026-03-05', days: 6, progress: 0.8 },
-          { title: '前端开发', start: '2026-03-10', days: 12, progress: 0.35 },
-          { title: '后端接口', start: '2026-03-09', days: 14, progress: 0.5 },
-          { title: '联调测试', start: '2026-03-24', days: 6, progress: 0 },
-          { title: '灰度发布', start: '2026-03-30', days: 4, progress: 0 },
+          // resource = 负责人/团队：用于资源冲突校验，也对应 Mermaid gantt 的 section
+          { title: '需求评审', start: '2026-03-02', days: 4, progress: 1, resource: '产品' },
+          { title: '交互设计', start: '2026-03-05', days: 6, progress: 0.8, resource: '设计' },
+          { title: '前端开发', start: '2026-03-10', days: 12, progress: 0.35, resource: '前端' },
+          { title: '后端接口', start: '2026-03-09', days: 14, progress: 0.5, resource: '后端' },
+          { title: '联调测试', start: '2026-03-24', days: 6, progress: 0, resource: '测试' },
+          { title: '灰度发布', start: '2026-03-30', days: 4, progress: 0, resource: '运维' },
         ];
         const created = tasks.map((task, row) => designer.createTask({ ...task, row }));
         designer.createDependency({ sourceId: created[0].state.id, targetId: created[1].state.id });
@@ -149,6 +163,27 @@
         URL.revokeObjectURL(url);
         validateOutput.className = 'hint';
         validateOutput.textContent = `✅ 已导出 SVG（${svg.length} 字节）`;
+      });
+
+      // Mermaid gantt 文本互操作：导出可直接贴进 Markdown/PR，导入可搬别人的排期
+      document.getElementById('btn-export-text').addEventListener('click', () => {
+        const text = IED.toMermaidGantt(designer, { title: '移动端 2.0 发布排期' });
+        document.getElementById('text-output').value = text;
+        window.__exportedText = text;
+      });
+      document.getElementById('btn-import-text').addEventListener('click', () => {
+        try {
+          const result = IED.fromMermaidGantt(document.getElementById('text-output').value, designer);
+          designer.fitViewport();
+          validateOutput.className = result.warnings.length ? '' : 'hint';
+          validateOutput.textContent = `✅ 已导入 ${result.tasks} 个任务 / ${result.dependencies} 条依赖${
+            result.warnings.length ? `（${result.warnings.length} 条提示）` : ''
+          }`;
+        } catch (error) {
+          validateOutput.className = 'issue error';
+          validateOutput.textContent = `❌ 导入失败：${error.message}`;
+        }
+        renderPanel();
       });
 
       /* ---------------- 画布交互：命中 / 拖拽 / 依赖 ---------------- */

@@ -94,3 +94,38 @@ test('画布：滚轮缩放、中键/空白拖拽平移、复位回到单位视�
   await expectCanvasInteractions(page);
   expect((page as any).__errors).toEqual([]);
 });
+
+test('文本互操作：导出 Mermaid → 改文本 → 导入，排期随之更新', async ({ page }) => {
+  await page.click('#btn-export-text');
+  const text = await page.evaluate(() => (window as any).__exportedText as string);
+  expect(text.startsWith('gantt')).toBe(true);
+  expect(text).toContain('dateFormat YYYY-MM-DD');
+  expect(text).toContain('section 前端'); // section ↔ 负责人
+  expect(text).toContain('前端开发 :active, t3, 2026-03-10, 12d');
+  expect(text).toContain('%% task t5: deps=t3,t4'); // 多前置走注释通道
+
+  // 改标题 + 改天数，再导回模型
+  const edited = text
+    .replace('前端开发', '前端联调')
+    .replace('前端联调 :active, t3, 2026-03-10, 12d', '前端联调 :active, t3, 2026-03-10, 8d');
+  await page.fill('#text-output', edited);
+  await page.click('#btn-import-text');
+  await page.waitForTimeout(400);
+
+  const info = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const task = designer.nodes.find((n: any) => n.state.title === '前端联调');
+    return {
+      titles: designer.nodes.map((n: any) => n.state.title),
+      days: task && task.state.days,
+      dependencies: designer.edges.length,
+      status: document.getElementById('validate-output')!.textContent,
+    };
+  });
+  expect(info.titles).toContain('前端联调');
+  expect(info.titles).not.toContain('前端开发');
+  expect(info.days).toBe(8);
+  expect(info.dependencies).toBe(6);
+  expect(info.status).toContain('已导入');
+  expect((page as any).__errors).toEqual([]);
+});

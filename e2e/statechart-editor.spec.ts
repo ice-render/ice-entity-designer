@@ -83,3 +83,37 @@ test('画布：滚轮缩放、中键/空白拖拽平移、复位回到单位视�
   await expectCanvasInteractions(page);
   expect((page as any).__errors).toEqual([]);
 });
+
+test('文本互操作：导出 PlantUML → 改文本 → 导入，模型随之更新', async ({ page }) => {
+  await page.click('#btn-export-text');
+  const text = await page.evaluate(() => (window as any).__exportedText as string);
+  expect(text.startsWith('@startuml')).toBe(true);
+  expect(text).toContain('[*] --> 待支付'); // 初始伪状态映射成 [*]
+  expect(text).toContain('待支付 --> 已支付 : 支付成功 [金额 > 0] / 生成订单');
+  expect(text).toContain('state 订单处理 {'); // 复合状态成块，子状态声明在块里
+  expect(text).toContain('安排发货 --> [*] : 已发货');
+
+  // 改名 + 给复合状态补一个子状态，再导回模型
+  const edited = text.replace(/已取消/g, '已作废').replace('state 安排发货', 'state 安排发货\n  state 打印面单');
+  await page.fill('#text-output', edited);
+  await page.click('#btn-import-text');
+  await page.waitForTimeout(400);
+
+  const info = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const composite = designer.nodes.find((n: any) => n.state.title === '订单处理');
+    return {
+      titles: designer.nodes.map((n: any) => n.state.title).filter((title: string) => !!title),
+      nested: composite.childNodes
+        .filter((child: any) => child.state && child.state.title)
+        .map((child: any) => child.state.title)
+        .sort(),
+      status: document.getElementById('validate-output')!.textContent,
+    };
+  });
+  expect(info.titles).toContain('已作废');
+  expect(info.titles).not.toContain('已取消');
+  expect(info.nested).toContain('打印面单');
+  expect(info.status).toContain('已导入');
+  expect((page as any).__errors).toEqual([]);
+});
