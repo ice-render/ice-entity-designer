@@ -286,7 +286,12 @@ export class BpmnDataObjectShape extends ICEPath {
   }
 }
 
-/** 文本注释：左侧开口括号 */
+/**
+ * 文本注释：**完整矩形** + 左侧内嵌的括号竖线（bpmn.io / Camunda 的标准画法）。
+ *
+ * 曾经画成「左括号 + 上下两条线、右侧开口」—— 那样右侧没有边框，看起来像个残缺的框；
+ * BPMN 2.0 的文本注释是闭合矩形，左侧竖线只是括号装饰，四条边都要有。
+ */
 export class BpmnAnnotationShape extends ICEPath {
   public static readonly typeId = 'BpmnAnnotationShape';
 
@@ -297,15 +302,17 @@ export class BpmnAnnotationShape extends ICEPath {
       return this.path2D;
     }
     const arm = Math.min(16, w * 0.3);
+    // 外框（四条边）
+    path.moveTo(x, y);
+    path.lineTo(x + w, y);
+    path.lineTo(x + w, y + h);
+    path.lineTo(x, y + h);
+    path.closePath();
+    // 左侧括号：短臂 + 竖线 + 短臂
     path.moveTo(x + arm, y);
     path.lineTo(x, y);
     path.lineTo(x, y + h);
     path.lineTo(x + arm, y + h);
-    // 右侧开口（BPMN 注释的标准画法）
-    path.moveTo(x + arm, y + 0.5);
-    path.lineTo(x + w, y + 0.5);
-    path.moveTo(x + arm, y + h - 0.5);
-    path.lineTo(x + w, y + h - 0.5);
     this.path2D = path;
     return this.path2D;
   }
