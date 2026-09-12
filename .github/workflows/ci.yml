@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+
+# 本仓的 ice-render 是 file:../ice-render（本地开发就是这个布局），
+# 所以每个 job 都要先把引擎 checkout 到同级目录并构建出 dist：
+# npm ci 需要它解析 file: 依赖，jest / tsc 需要它的 dist 类型与产物。
+jobs:
+  verify:
+    name: lint + typecheck + test + build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 22]
+    steps:
+      - name: Checkout engine (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: ice-render/ice-render
+          path: ice-render
+
+      - name: Checkout ice-entity-designer
+        uses: actions/checkout@v4
+        with:
+          path: ice-entity-designer
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: |
+            ice-render/package-lock.json
+            ice-entity-designer/package-lock.json
+
+      - name: Build engine
+        working-directory: ice-render
+        run: npm ci && npm run build
+
+      - name: Install dependencies
+        working-directory: ice-entity-designer
+        run: npm ci
+
+      - name: Lint
+        working-directory: ice-entity-designer
+        run: npm run lint
+
+      - name: Type check
+        working-directory: ice-entity-designer
+        run: npm run types:check
+
+      - name: Unit tests
+        working-directory: ice-entity-designer
+        run: npm test
+
+      - name: Build
+        working-directory: ice-entity-designer
+        run: npm run build
+
+  e2e:
+    name: e2e (Playwright) + package integrity
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - name: Checkout engine (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: ice-render/ice-render
+          path: ice-render
+
+      - name: Checkout ice-entity-designer
+        uses: actions/checkout@v4
+        with:
+          path: ice-entity-designer
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            ice-render/package-lock.json
+            ice-entity-designer/package-lock.json
+
+      - name: Build engine
+        working-directory: ice-render
+        run: npm ci && npm run build
+
+      - name: Install dependencies
+        working-directory: ice-entity-designer
+        run: npm ci
+
+      # 示例页加载的是 ../dist/index.umd.js，e2e 之前必须构建
+      - name: Build
+        working-directory: ice-entity-designer
+        run: npm run build
+
+      - name: Package integrity (publint + attw)
+        working-directory: ice-entity-designer
+        run: npm run pkg:check
+
+      - name: Install Playwright Chromium
+        working-directory: ice-entity-designer
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end regression
+        working-directory: ice-entity-designer
+        run: npm run test:e2e
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ice-entity-designer/test-results/
+          retention-days: 7

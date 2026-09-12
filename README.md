@@ -56,7 +56,6 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 - 画布滚轮缩放、空白处拖拽平移。
 - 每个域包示例页统一接入上面这套视口交互（`tests/canvas-interactions.js`）：canvas 铺满可视区，
   滚轮以光标为锚点缩放，空白处左键 / 任意位置中键拖拽平移，工具栏带「适应视图 / 复位视图」。
-  老示例把 canvas 写死成 1800×1100 而可视区更小，`fitViewport()` 是按 canvas 尺寸算的 —— 图会被切在屏幕外。
 - 拖拽对齐辅助线与磁吸效果。
 - Undo / Redo（基于项目快照，最多 100 步）。
 - 项目级保存 / 加载（`serializeProject()` / `loadProject()`）。
@@ -514,8 +513,8 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 
 ### 7.1 一个「域包（domain pack）」由什么组成
 
-域包 = **一个领域的记法 + 应用层 + 语义校验**，跑在同一套引擎与同一套应用层机制上。已落地的三个
-域（ER / 流程图 / BPMN）再加 UML，边际成本主要在「记法本身」，不在编辑器：
+域包 = **一个领域的记法 + 应用层 + 语义校验**，跑在同一套引擎与同一套应用层机制上。现已落地
+6 类文档：ER、流程图、UML 类图、状态机、甘特、BPMN 2.0 —— 边际成本主要在「记法本身」，不在编辑器：
 
 | 组成 | 复用什么 | 以 UML 为例 |
 |---|---|---|
@@ -524,7 +523,7 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 | 应用层 | `FlowDesigner`（选择 / 增删改 / 连线 / 撤销重做 / 快照 / 适应视图 / 订阅 / `toSvg`） | `UmlDesigner` 只重写「建什么图元 + 类型过滤」 |
 | 语义校验 | 结构校验之外的部分自写，规则直白 | `validateUml()`：重名类 / 悬空关系 / 继承成环 |
 | 文档格式 | 引擎序列化（typeId 注册表 + `hasDerivedChildren`），零登记 | 类与关系统统自动往返 |
-| 互操作 | 有标准格式的域就做（BPMN 2.0 XML 已有） | UML 的 XMI / PlantUML 互操作待补 |
+| 互操作 | 有标准格式的域就做 | BPMN 2.0 XML（导入 + 导出，含 BPMNDI 布局）；UML 类图的 PlantUML / Mermaid 文本互操作 |
 | 交付物 | 示例页 + e2e + README + （可选）JSON DSL 与技能 | `tests/uml-editor.html` + `e2e/uml-editor.spec.ts` |
 
 新开一个域包时，按这张表从上往下填即可；**不要**在域包里另造序列化、另造选择/历史、另造导出。
