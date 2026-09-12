@@ -1434,8 +1434,9 @@
           validationOutput.style.color = '#b45309';
           return;
         }
+        let report;
         try {
-          designer.loadProject(json);
+          report = designer.loadProject(json);
         } catch (error) {
           validationOutput.innerHTML = '';
           validationOutput.textContent = `❌ 项目加载失败：${error.message}`;
@@ -1446,8 +1447,14 @@
         setLinkingMode(false);
         refreshHistoryButtons();
         validationOutput.innerHTML = '';
-        validationOutput.textContent = '✅ 项目已加载';
-        validationOutput.style.color = '#059669';
+        if (report && report.unknownTypes && report.unknownTypes.length) {
+          // 未注册的类型会被跳过而不是让整份数据打不开，这里如实提示用户
+          validationOutput.textContent = `⚠️ 项目已加载，但跳过了未注册的类型：${report.unknownTypes.join('、')}`;
+          validationOutput.style.color = '#b45309';
+        } else {
+          validationOutput.textContent = '✅ 项目已加载';
+          validationOutput.style.color = '#059669';
+        }
       });
 
       document.getElementById('btn-reset').addEventListener('click', () => {

@@ -1,7 +1,7 @@
 /**
  * React 绑定层的类型定义。
  */
-import type { EntityDesigner } from '../index';
+import type { EntityDesigner, ProjectLoadReport } from '../index';
 
 export type EntityDesignerChangePayload = {
   /** 项目快照，等价于 designer.serializeProject() 的结果 */
@@ -29,7 +29,7 @@ export type EntityDesignerHandle = {
   updateEntity(id: string, patch: any): any;
   updateRelation(id: string, patch: any): any;
   remove(id: string): void;
-  loadProject(json: string): void;
+  loadProject(json: string): ProjectLoadReport;
   undo(): void;
   redo(): void;
   toSchemaObject(): object;

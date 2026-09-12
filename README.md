@@ -122,9 +122,16 @@ const issues = designer.validate(); // 校验问题列表
 
 // 项目存取与历史
 const snapshot = designer.serializeProject();
-designer.loadProject(snapshot); // 非法 / 版本不兼容的快照会抛错，且不会改动当前项目与历史栈
+const report = designer.loadProject(snapshot); // 非法 / 版本不兼容的快照会抛错，且不会改动当前项目与历史栈
+// report = { loaded, entities, relations, unknownTypes, skipped }
 designer.undo();
 ```
+
+#### 5.1 项目快照契约
+
+- 快照带 `schemaVersion`（当前 `1`）与每个节点的 `typeId`；载入时**按 `typeId` 分派构造函数**（走 ICE 注册表，下游 `ice.registerType()` 注册的领域图元同样可载入）。旧快照没有 `typeId` 时，按所在数组归位（`entities[]` → `Entity`，`relations[]` → `Relation`）。
+- **容错加载**：遇到未注册的 `typeId` 只跳过该节点并记录（`report.unknownTypes` / `report.skipped`），不会让整份数据打不开——与引擎 `Deserializer` 的语义一致。
+- **自洽保证**：`serializeProject()` 的产物永远能通过 `loadProject()` 的结构校验（结构契约见 `src/utils/project-snapshot.schema.json`）；载入失败时当前项目与 `undo`/`redo` 栈都不会被改动。
 
 也支持更底层的组件式用法：
 

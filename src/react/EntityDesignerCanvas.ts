@@ -41,11 +41,8 @@ function createHandle(session: DesignerSession | null): EntityDesignerHandle {
         d.removeComponent(id);
       }
     },
-    loadProject: (json: string) => {
-      if (d) {
-        d.loadProject(json);
-      }
-    },
+    loadProject: (json: string) =>
+      d ? d.loadProject(json) : { loaded: false, entities: 0, relations: 0, unknownTypes: [], skipped: [] },
     undo: () => {
       if (d) {
         d.undo();

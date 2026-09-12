@@ -6,6 +6,36 @@ import { PROJECT_SCHEMA_VERSION, validateProjectSnapshot } from '../utils/projec
 import { validateSchema } from '../utils/schema_validator';
 import { toSchemaObject, toSchemaString } from '../utils/serialization_util';
 
+/** 载入快照时被跳过的节点明细（typeId 未注册） */
+export type ProjectLoadSkippedNode = {
+  /** 该节点所在的数组 */
+  bucket: 'entities' | 'relations';
+  /** 该节点在数组中的下标 */
+  index: number;
+  /** 快照里声明的类型标识 */
+  typeId: string;
+  /** 快照里的节点 id（若存在），便于定位数据问题 */
+  id?: string;
+};
+
+/** loadProject() 的载入报告 */
+export type ProjectLoadReport = {
+  /** 是否真的发生了一次项目替换（空值 / 非项目快照为 false） */
+  loaded: boolean;
+  /** 实际创建出的实体数量 */
+  entities: number;
+  /** 实际创建出的关系数量 */
+  relations: number;
+  /** 因未注册被跳过的类型（去重），语义同引擎 `deserializer.unknownTypes` */
+  unknownTypes: string[];
+  /** 被跳过的节点明细 */
+  skipped: ProjectLoadSkippedNode[];
+};
+
+function createEmptyLoadReport(): ProjectLoadReport {
+  return { loaded: false, entities: 0, relations: 0, unknownTypes: [], skipped: [] };
+}
+
 /**
  * EntityDesigner 是 Entity / Relation 之上的轻量应用层。
  *
@@ -165,19 +195,31 @@ export default class EntityDesigner {
     return JSON.stringify(payload);
   }
 
-  public loadProject(json: string): void {
+  /**
+   * 载入项目快照（整体替换当前项目）。
+   *
+   * 节点按 `typeId` 分派构造：typeId 已注册 → 用注册的构造函数创建（下游二次开发
+   * 注册的领域图元同样适用）；未注册 → **跳过该节点并记录**，不会导致整份数据打不开，
+   * 与引擎 `Deserializer` 的容错语义一致。旧快照没有 typeId 时，按所在数组
+   * （entities / relations）归位。
+   *
+   * @throws 快照结构非法或 schemaVersion 不兼容时抛错；此时当前项目与历史栈都不会被改动。
+   * @returns 载入报告（创建数量、被跳过的未知类型）
+   */
+  public loadProject(json: string): ProjectLoadReport {
     if (!json) {
-      return;
+      return createEmptyLoadReport();
     }
     // 先解析 + 校验，确认是合法快照之后再动历史栈和画布：
     // 载入失败既不该污染 undo/redo，也不该丢弃当前项目。
     const data = this.__parseProject(json);
     if (!data) {
-      return;
+      return createEmptyLoadReport();
     }
     this.captureHistory();
-    this.__applySnapshot(data);
+    const report = this.__applySnapshot(data);
     this.__emitChange();
+    return report;
   }
 
   private __componentBaseSnapshot(state: any): any {
@@ -321,11 +363,59 @@ export default class EntityDesigner {
     this.__applySnapshot(data);
   }
 
-  private __applySnapshot(data: any): void {
+  /** typeId 优先；缺省时按所在数组归位（兼容没有 typeId 的旧快照） */
+  private __resolveTypeId(item: any, bucket: 'entities' | 'relations'): string {
+    if (item && typeof item.typeId === 'string' && item.typeId) {
+      return item.typeId;
+    }
+    return bucket === 'entities' ? Entity.typeId : Relation.typeId;
+  }
+
+  /** 由 typeId 反查构造函数：优先问 ICE 的注册表（与引擎反序列化一致） */
+  private __resolveComponentClass(typeId: string): any {
+    const ice: any = this.ice;
+    if (typeof ice.getType === 'function') {
+      const Clazz = ice.getType(typeId);
+      if (typeof Clazz === 'function') {
+        return Clazz;
+      }
+    } else if (ice.typeMapping && typeof ice.typeMapping[typeId] === 'function') {
+      return ice.typeMapping[typeId];
+    }
+    // 兜底：设计器自身的两种领域图元（精简 / mock 的 ICE 实例也能工作）
+    if (typeId === Entity.typeId) {
+      return Entity;
+    }
+    if (typeId === Relation.typeId) {
+      return Relation;
+    }
+    return null;
+  }
+
+  private __recordUnknownType(
+    report: ProjectLoadReport,
+    bucket: 'entities' | 'relations',
+    index: number,
+    typeId: string,
+    item: any
+  ): void {
+    if (report.unknownTypes.indexOf(typeId) === -1) {
+      report.unknownTypes.push(typeId);
+      console.warn(
+        `[ice-entity-designer] 载入项目时跳过未注册的类型：${typeId}（如需支持请先 ice.registerType() 注册）`
+      );
+    }
+    const id = item && typeof item.id === 'string' ? item.id : undefined;
+    report.skipped.push(id === undefined ? { bucket, index, typeId } : { bucket, index, typeId, id });
+  }
+
+  private __applySnapshot(data: any): ProjectLoadReport {
     const renderer = this.ice.renderer;
     if (renderer) {
       renderer.stop();
     }
+
+    const report: ProjectLoadReport = { loaded: true, entities: 0, relations: 0, unknownTypes: [], skipped: [] };
 
     try {
       // 先清空旧项目，避免旧内容与新内容叠加。
@@ -335,21 +425,30 @@ export default class EntityDesigner {
         this.ice.ctx.clearRect(0, 0, this.ice.canvasWidth || 0, this.ice.canvasHeight || 0);
       }
 
-      const entities: any[] = [];
-      const entityMap = new Map<string, any>();
-      data.entities.forEach((item: any) => {
-        const entity = new Entity(item);
-        this.ice.addChild(entity);
-        entities.push(entity);
-        if (item.id) {
-          entityMap.set(item.id, entity);
+      const createNode = (item: any, bucket: 'entities' | 'relations', index: number): any => {
+        const typeId = this.__resolveTypeId(item, bucket);
+        const Clazz = this.__resolveComponentClass(typeId);
+        if (typeof Clazz !== 'function') {
+          // 未注册的类型：跳过并记录，不终止整份数据的加载
+          this.__recordUnknownType(report, bucket, index, typeId, item);
+          return null;
         }
-      });
+        const component = new Clazz(item);
+        this.ice.addChild(component);
+        return component;
+      };
 
-      (data.relations || []).forEach((item: any) => {
-        const relation = new Relation(item);
-        this.ice.addChild(relation);
-      });
+      const collect = (item: any, bucket: 'entities' | 'relations', index: number) => {
+        const component = createNode(item, bucket, index);
+        if (isEntity(component)) {
+          report.entities += 1;
+        } else if (isRelation(component)) {
+          report.relations += 1;
+        }
+      };
+
+      data.entities.forEach((item: any, index: number) => collect(item, 'entities', index));
+      (data.relations || []).forEach((item: any, index: number) => collect(item, 'relations', index));
 
       this.selectedId = null;
     } finally {
@@ -363,6 +462,7 @@ export default class EntityDesigner {
         }, 50);
       }
     }
+    return report;
   }
 
   private __applyHistorySnapshot(json: string): void {

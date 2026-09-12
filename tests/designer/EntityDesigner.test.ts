@@ -621,11 +621,135 @@ describe('validateProjectSnapshot 的宽严边界', () => {
       { entities: [], relations: [{ id: 'r1', links: { start: { id: 1 } } }] },
       { entities: [], relations: [{ id: 'r1', links: { end: { position: 1 } } }] },
       { entities: [], relations: [{ links: {} }] },
+      { entities: [{ id: 'e1', entityName: 'A', typeId: 1 }] },
+      { entities: [], relations: [{ id: 'r1', typeId: {} }] },
       { entities: [], schemaVersion: '1' },
     ];
     cases.forEach((item) => {
       expect(validateProjectSnapshot(item).valid).toBe(false);
     });
+  });
+
+  it('节点形状按 typeId 判定，typeId 优先于所在数组', () => {
+    // 声明了 typeId 的关系放在 entities[] 里：合法（载入时按 Relation 构造）
+    expect(validateProjectSnapshot({ entities: [{ id: 'r1', typeId: 'Relation', links: {} }] }).valid).toBe(true);
+    // 声明了 typeId 的实体放在 relations[] 里：合法，但必须满足 Entity 形状（要有 entityName）
+    expect(
+      validateProjectSnapshot({ entities: [], relations: [{ id: 'e1', typeId: 'Entity', entityName: 'A' }] }).valid
+    ).toBe(true);
+    expect(validateProjectSnapshot({ entities: [], relations: [{ id: 'e1', typeId: 'Entity' }] }).valid).toBe(false);
+    // 下游注册的自定义图元 / 未注册类型：只做通用检查
+    expect(validateProjectSnapshot({ entities: [{ id: 'b1', typeId: 'Badge' }] }).valid).toBe(true);
+    expect(validateProjectSnapshot({ entities: [{ id: 'b1', typeId: 'Badge', links: 'nope' }] }).valid).toBe(true);
+    // 缺 typeId 时按数组归位，仍按对应形状校验
+    expect(validateProjectSnapshot({ entities: [], relations: [{ id: 'r1', links: 'nope' }] }).valid).toBe(false);
+  });
+});
+
+describe('EntityDesigner 载入时按 typeId 分派（含未注册类型容错）', () => {
+  it('loadProject 返回载入报告（创建数量 / 跳过明细）', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    const b = designer.createEntity({ entityName: 'B' });
+    designer.createRelation({ sourceId: a.state.id, targetId: b.state.id });
+
+    const report = designer.loadProject(designer.serializeProject());
+    expect(report).toMatchObject({ loaded: true, entities: 2, relations: 1, unknownTypes: [], skipped: [] });
+
+    // 空值 / 非项目快照：不算法一次载入
+    expect(designer.loadProject('')).toMatchObject({ loaded: false, entities: 0, relations: 0 });
+    expect(designer.loadProject('{"nope":true}')).toMatchObject({ loaded: false });
+  });
+
+  it('typeId 优先于所在数组：关系放进 entities[] 仍按 Relation 构造', () => {
+    const { designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    const b = designer.createEntity({ entityName: 'B' });
+    designer.createRelation({ sourceId: a.state.id, targetId: b.state.id });
+
+    const payload = JSON.parse(designer.serializeProject());
+    const entity = payload.entities[0];
+    const relation = payload.relations[0];
+    relation.typeId = 'Relation'; // 显式声明
+    entity.typeId = 'Entity';
+    // 把两个节点交换到「不对应」的数组里
+    const crossed = { ...payload, entities: [entity, relation], relations: [] };
+
+    const report = designer.loadProject(JSON.stringify(crossed));
+    expect(report).toMatchObject({ loaded: true, entities: 1, relations: 1, unknownTypes: [] });
+    expect(designer.entities.length).toBe(1);
+    expect(designer.relations.length).toBe(1);
+  });
+
+  it('未注册的 typeId 被跳过并记录，其余节点照常加载', () => {
+    const { designer } = makeDesigner();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const payload = {
+      version: 1,
+      schemaVersion: 1,
+      entities: [
+        { id: 'e1', entityName: 'Good', typeId: 'Entity', fields: [] },
+        { id: 'x1', entityName: 'Alien', typeId: 'AlienWidget' },
+      ],
+      relations: [{ id: 'r-alien', relationType: 'one-to-many', typeId: 'AlienLink' }],
+    };
+
+    let report: any;
+    expect(() => {
+      report = designer.loadProject(JSON.stringify(payload));
+    }).not.toThrow();
+
+    expect(report).toMatchObject({ loaded: true, entities: 1, relations: 0 });
+    expect(report.unknownTypes.sort()).toEqual(['AlienLink', 'AlienWidget']);
+    expect(report.skipped).toEqual([
+      { bucket: 'entities', index: 1, typeId: 'AlienWidget', id: 'x1' },
+      { bucket: 'relations', index: 0, typeId: 'AlienLink', id: 'r-alien' },
+    ]);
+    expect(names(designer.entities)).toEqual(['Good']);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('缺 typeId 的旧快照按数组归属构造（向后兼容）', () => {
+    const { designer } = makeDesigner();
+    const legacy = JSON.stringify({
+      version: 1,
+      entities: [{ id: 'e1', entityName: 'A', fields: [{ name: 'id', type: 'number' }] }],
+      relations: [
+        {
+          id: 'r1',
+          relationType: 'one-to-many',
+          links: { start: { id: 'e1', position: 'R' }, end: { id: 'e1', position: 'L' } },
+        },
+      ],
+    });
+
+    let report: any;
+    expect(() => {
+      report = designer.loadProject(legacy);
+    }).not.toThrow();
+    expect(report).toMatchObject({ loaded: true, entities: 1, relations: 1, unknownTypes: [] });
+  });
+
+  it('已注册的自定义领域图元也能按 typeId 载入', () => {
+    const { ice, designer } = makeDesigner();
+    class Badge extends ICERect {
+      public static readonly typeId = 'Badge';
+    }
+    ice.registerType('Badge', Badge);
+
+    const payload = {
+      version: 1,
+      schemaVersion: 1,
+      entities: [{ id: 'b1', entityName: 'ignored', typeId: 'Badge', width: 20, height: 20 }],
+      relations: [],
+    };
+    const report = designer.loadProject(JSON.stringify(payload));
+    expect(report.unknownTypes).toEqual([]);
+    expect(report).toMatchObject({ entities: 0, relations: 0 });
+    const created = ice.childNodes.find((item: any) => item.state.id === 'b1');
+    expect(created).toBeInstanceOf(Badge);
   });
 });
 

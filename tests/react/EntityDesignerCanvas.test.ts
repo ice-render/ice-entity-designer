@@ -34,6 +34,7 @@ jest.mock('../../src/index', () => {
         if (listener) {
           listener(json);
         }
+        return { loaded: true, entities: 0, relations: 0, unknownTypes: [], skipped: [] };
       });
       toSchemaObject = jest.fn(() => ({ mock: 'schema' }));
       subscribe = jest.fn((listener: any) => {
@@ -169,6 +170,8 @@ describe('<EntityDesignerCanvas> 生命周期与受控', () => {
     expect(handle.designer).toBe(MockEntityDesigner.instances[0]);
     expect(typeof handle.addEntity).toBe('function');
     expect(handle.toSchemaObject()).toEqual({ mock: 'schema' });
+    // loadProject 把载入报告透传给调用方
+    expect(handle.loadProject('{"v":1}')).toMatchObject({ loaded: true, unknownTypes: [] });
   });
 
   it('非法 defaultValue：挂载不崩，走 onError 上报', () => {
