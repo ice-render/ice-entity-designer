@@ -24,6 +24,8 @@ import { registerIEDType } from '../utils/type-registry';
 export type FlowSnapshot = {
   version: 2;
   kind: 'flowchart';
+  /** 文档首次创建时间（ISO 8601 UTC）；载入时回填给引擎，因此「打开 → 再保存」不会改写它 */
+  createTime?: string;
   scene: {
     /** 引擎的序列化格式版本（SERIALIZATION_VERSION） */
     version: number;
@@ -418,7 +420,9 @@ export default class FlowDesigner {
     return {
       version: 2,
       kind: 'flowchart',
-      // 只丢 createTime/lastModifyTime（每次序列化都会变，会让「两次 serialize 结果相同」的契约失效）
+      // `createTime` 是"文档出生时间"，载入时会回填给引擎，因此**保留**（两次 serialize 也稳定）；
+      // 只丢 `lastModifyTime`——它每次写出都会变，留着会让「两次 serialize 结果相同」的契约失效。
+      createTime: engineDoc.createTime,
       scene: { version: engineDoc.version, childNodes: engineDoc.childNodes },
     };
   }
@@ -470,17 +474,19 @@ export default class FlowDesigner {
 
     // 先校验再动历史栈：非法输入不该污染 undo/redo，也不该清空当前流程
     this.__captureHistory();
-    const report = isEngineScene ? this.__applyEngineScene(data.scene) : this.__clearAndBuild(data);
+    const report = isEngineScene ? this.__applyEngineScene(data.scene, data.createTime) : this.__clearAndBuild(data);
     this.__emitChange();
     return report;
   }
 
   /** v2：把引擎序列化产物交给引擎 Deserializer 重建（容错、类型分派全部复用引擎实现） */
-  private __applyEngineScene(scene: any): FlowLoadReport {
+  private __applyEngineScene(scene: any, createTime?: unknown): FlowLoadReport {
     this.ice.clearAll();
     this.selectedId = null;
     const deserializer: any = this.__deserializer();
-    deserializer.fromJSONObject({ version: scene.version, childNodes: scene.childNodes });
+    // 把文档级 createTime 一并交给引擎：引擎会做归一化（历史格式 → ISO）并记住它，
+    // 于是「载入 → 再保存」里 createTime 不被改写（缺失则清空、回退到当前时刻）
+    deserializer.fromJSONObject({ version: scene.version, createTime, childNodes: scene.childNodes });
     const report: FlowLoadReport = {
       loaded: true,
       nodes: this.nodes.length,
