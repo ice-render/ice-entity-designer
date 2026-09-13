@@ -150,7 +150,7 @@ export default class SecondarySymbol extends ICEGroup {
         new ICEPolyLine({
           zIndex: baseZ + 2,
           points,
-          interactive: false,
+          linkable: false,
           style: { strokeStyle, fillStyle: strokeStyle, lineWidth: width },
         })
       );
@@ -165,7 +165,7 @@ export default class SecondarySymbol extends ICEGroup {
           height,
           radius,
           stroke: true,
-          interactive: false,
+          linkable: false,
           style: { fillStyle: '#ffffff', strokeStyle, lineWidth: lw },
         })
       );
@@ -178,7 +178,7 @@ export default class SecondarySymbol extends ICEGroup {
           top,
           radius,
           stroke: true,
-          interactive: false,
+          linkable: false,
           style: { fillStyle: '#ffffff', strokeStyle, lineWidth: lw },
         })
       );
@@ -202,7 +202,7 @@ export default class SecondarySymbol extends ICEGroup {
           height,
           text: value,
           stroke: false,
-          interactive: false,
+          linkable: false,
           style: { fontSize: size, fillStyle: color, textAlign: 'center', textBaseline: 'middle' },
         })
       );
@@ -405,7 +405,7 @@ export default class SecondarySymbol extends ICEGroup {
             height: 18,
             text: String(this.state.name),
             stroke: false,
-            interactive: false,
+            linkable: false,
             style: {
               fontSize: SECONDARY_STYLE.labelFontSize,
               fillStyle: SECONDARY_STYLE.labelColor,
@@ -439,7 +439,7 @@ export default class SecondarySymbol extends ICEGroup {
           height: 16,
           text: String(this.state.tag),
           stroke: false,
-          interactive: false,
+          linkable: false,
           style: {
             fontSize: SECONDARY_STYLE.tagFontSize,
             fillStyle: (this.state.tagStyle && this.state.tagStyle.textColor) || SECONDARY_STYLE.tagColor,
@@ -493,6 +493,8 @@ export class TerminalStrip extends ICEGroup {
           lineWidth: 1,
           style: { fillStyle: '#f8fafc', strokeStyle: '#cbd5e1', lineWidth: 1 },
           transformable: false,
+          // 容器语义：接线连到**端子**，不连到端子排本身（端子在下面的 addChild 里逐个创建）
+          linkable: false,
         },
         props
       )
@@ -505,7 +507,7 @@ export class TerminalStrip extends ICEGroup {
         height: 16,
         text: String(this.state.title || '端子排'),
         stroke: false,
-        interactive: false,
+        linkable: false,
         style: {
           fontSize: SECONDARY_STYLE.labelFontSize,
           fillStyle: SECONDARY_STYLE.labelColor,
