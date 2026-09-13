@@ -292,28 +292,63 @@ export default class FlowNode extends ICEGroup {
     });
     this.__buildDecorations(preset);
     const topLeftLabel = preset.labelPlacement === 'top-left';
-    this.labelComponent = new ICEText({
-      left: topLeftLabel ? 10 : 0,
-      top: topLeftLabel ? (preset.band === 'top' ? 18 : 16) : 0,
-      width: topLeftLabel ? Math.max(this.state.width - 20, 20) : this.state.width,
-      height: topLeftLabel ? 18 : this.state.height,
-      text: String(this.state.title || ''),
-      wrap: !topLeftLabel,
-      maxLines: 2,
-      interactive: false,
-      stroke: false,
-      showMinBoundingBox: false,
-      showMaxBoundingBox: false,
-      style: {
-        fontSize: this.state.fontSize || (topLeftLabel ? 13 : DEFAULT_FONT_SIZE),
-        fillStyle: this.state.textColor || DEFAULT_TEXT_COLOR,
-        textAlign: topLeftLabel ? 'left' : 'center',
-        textBaseline: 'middle',
-        fontWeight: topLeftLabel ? 'bold' : 'normal',
-        paddingLeft: topLeftLabel ? 0 : 12,
-        paddingRight: topLeftLabel ? 0 : 12,
-      },
-    });
+    // 泳道（名称带在左）的标题按 BPMN 惯例**逆时针旋转 90°**（读向自下而上），居中放在名称带里。
+    //
+    // 走的是**组件变换**而不是引擎层竖排 —— 与「竖排 / 富文本不做，交给应用层」的契约一致
+    //（见 ice-render 的 17-i18n-boundary.md）。做法：标签盒先按横向排（长 = 泳道高 − 8、厚 = 名称带宽），
+    // 默认 origin 是盒子中心，转 -90° 后正好落在左侧名称带、并沿泳道居中：
+    //   盒子中心 = (bandSize/2, laneHeight/2) = 名称带的中心。
+    // 标题太长也不会跑出名称带 —— 它以名称带中心向两端均分溢出，而不是像旧实现那样横着压进泳道内容区。
+    const verticalBandLabel = preset.shape === 'lane' && preset.band === 'left';
+    const bandSize = verticalBandLabel
+      ? Math.min(Number(preset.bandSize) || 30, this.state.width * 0.4, this.state.height * 0.4)
+      : 0;
+    const bandLabelLength = verticalBandLabel ? Math.max(this.state.height - 8, bandSize) : 0;
+    this.labelComponent = new ICEText(
+      verticalBandLabel
+        ? {
+            left: bandSize / 2 - bandLabelLength / 2,
+            top: this.state.height / 2 - bandSize / 2,
+            width: bandLabelLength,
+            height: bandSize,
+            text: String(this.state.title || ''),
+            wrap: false,
+            transform: { rotate: -90 },
+            interactive: false,
+            stroke: false,
+            showMinBoundingBox: false,
+            showMaxBoundingBox: false,
+            style: {
+              fontSize: this.state.fontSize || 13,
+              fillStyle: this.state.textColor || DEFAULT_TEXT_COLOR,
+              textAlign: 'center',
+              textBaseline: 'middle',
+              fontWeight: 'bold',
+            },
+          }
+        : {
+            left: topLeftLabel ? 10 : 0,
+            top: topLeftLabel ? (preset.band === 'top' ? 18 : 16) : 0,
+            width: topLeftLabel ? Math.max(this.state.width - 20, 20) : this.state.width,
+            height: topLeftLabel ? 18 : this.state.height,
+            text: String(this.state.title || ''),
+            wrap: !topLeftLabel,
+            maxLines: 2,
+            interactive: false,
+            stroke: false,
+            showMinBoundingBox: false,
+            showMaxBoundingBox: false,
+            style: {
+              fontSize: this.state.fontSize || (topLeftLabel ? 13 : DEFAULT_FONT_SIZE),
+              fillStyle: this.state.textColor || DEFAULT_TEXT_COLOR,
+              textAlign: topLeftLabel ? 'left' : 'center',
+              textBaseline: 'middle',
+              fontWeight: topLeftLabel ? 'bold' : 'normal',
+              paddingLeft: topLeftLabel ? 0 : 12,
+              paddingRight: topLeftLabel ? 0 : 12,
+            },
+          }
+    );
     this.addChild(this.shapeComponent);
     this.addChild(this.labelComponent);
   }
