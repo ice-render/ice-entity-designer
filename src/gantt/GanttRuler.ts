@@ -34,7 +34,18 @@ export default class GanttRuler extends ICEGroup {
   public static readonly typeId = 'ice-entity-designer:GanttRuler';
 
   constructor() {
-    super({ left: 0, top: 0, width: 0, height: 0, fill: false, stroke: false, interactive: false, draggable: false });
+    // 时间标尺（表头 + 刻度）不是业务图元：任何连线都不该连到它，也不该被连线插槽当成连接目标
+    super({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      fill: false,
+      stroke: false,
+      interactive: false,
+      draggable: false,
+      linkable: false,
+    });
   }
 
   public hasDerivedChildren(): boolean {
@@ -60,6 +71,7 @@ export default class GanttRuler extends ICEGroup {
         width: chartWidth,
         height: this.state.height,
         stroke: false,
+        linkable: false,
         interactive: false,
         style: { fillStyle: '#ffffff' },
       })
@@ -72,6 +84,7 @@ export default class GanttRuler extends ICEGroup {
         width: labelColumnWidth,
         height: this.state.height,
         stroke: false,
+        linkable: false,
         interactive: false,
         style: { fillStyle: '#f8fafc' },
       })
@@ -84,6 +97,7 @@ export default class GanttRuler extends ICEGroup {
         width: chartWidth,
         height: headerHeight,
         stroke: false,
+        linkable: false,
         interactive: false,
         style: { fillStyle: '#f1f5f9' },
       })
@@ -109,6 +123,7 @@ export default class GanttRuler extends ICEGroup {
           width: dayWidth,
           height: Math.max(this.state.height - headerHeight, 0),
           stroke: false,
+          linkable: false,
           interactive: false,
           style: { fillStyle: '#f1f5f9' },
         })
@@ -133,6 +148,7 @@ export default class GanttRuler extends ICEGroup {
             [left, headerHeight],
             [left, this.state.height],
           ],
+          linkable: false,
           interactive: false,
           style: {
             strokeStyle: isMonthStart ? '#cbd5e1' : isWeekStart ? '#e2e8f0' : '#f1f5f9',
@@ -157,6 +173,7 @@ export default class GanttRuler extends ICEGroup {
             [0, top + rowHeight],
             [chartWidth, top + rowHeight],
           ],
+          linkable: false,
           interactive: false,
           style: { strokeStyle: '#e2e8f0', fillStyle: '#e2e8f0', lineWidth: 1 },
         })
@@ -171,6 +188,7 @@ export default class GanttRuler extends ICEGroup {
           [0, headerHeight],
           [chartWidth, headerHeight],
         ],
+        linkable: false,
         interactive: false,
         style: { strokeStyle: '#cbd5e1', fillStyle: '#cbd5e1', lineWidth: 1 },
       })
@@ -184,6 +202,7 @@ export default class GanttRuler extends ICEGroup {
           [labelColumnWidth, 0],
           [labelColumnWidth, this.state.height],
         ],
+        linkable: false,
         interactive: false,
         style: { strokeStyle: '#cbd5e1', fillStyle: '#cbd5e1', lineWidth: 1 },
       })
@@ -218,6 +237,7 @@ export default class GanttRuler extends ICEGroup {
       height,
       text,
       stroke: false,
+      linkable: false,
       interactive: false,
       style: {
         fontSize,
