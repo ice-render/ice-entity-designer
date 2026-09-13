@@ -409,9 +409,7 @@ test('联动：画布拖动节点后，右侧 JSON 与属性面板同步（回�
   const jsonNode = await page.evaluate(() => {
     const parsed = JSON.parse(document.getElementById('json-output')?.textContent || '{}');
     // v2 文档：scene 是引擎的原生序列化产物（{ type, state, childNodes }）
-    const nodeData = parsed.scene.childNodes.filter(
-      (item: any) => item.type === 'ice-entity-designer:FlowNode',
-    )[2];
+    const nodeData = parsed.scene.childNodes.filter((item: any) => item.type === 'ice-entity-designer:FlowNode')[2];
     return { left: nodeData.state.left, top: nodeData.state.top };
   });
   expect(jsonNode.left).toBeCloseTo(node.left, 3);

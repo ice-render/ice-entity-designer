@@ -536,9 +536,7 @@ describe('EntityDesigner 连线形态（linkShape）', () => {
       // 脏值 / 缺失 → 回退当前时刻
       for (const createTime of ['不是时间', undefined]) {
         const { designer: fresh } = makeDesigner();
-        fresh.loadProject(
-          JSON.stringify({ version: 1, schemaVersion: 1, createTime, entities: [], relations: [] })
-        );
+        fresh.loadProject(JSON.stringify({ version: 1, schemaVersion: 1, createTime, entities: [], relations: [] }));
         expect(JSON.parse(fresh.serializeProject()).createTime).toBe('2026-09-13T10:00:00.000Z');
       }
 
@@ -715,8 +713,7 @@ describe('validateProjectSnapshot 的宽严边界', () => {
   it('节点形状按 typeId 判定，typeId 优先于所在数组', () => {
     // 声明了 typeId 的关系放在 entities[] 里：合法（载入时按 Relation 构造）
     expect(
-      validateProjectSnapshot({ entities: [{ id: 'r1', typeId: 'ice-entity-designer:Relation', links: {} }] })
-        .valid
+      validateProjectSnapshot({ entities: [{ id: 'r1', typeId: 'ice-entity-designer:Relation', links: {} }] }).valid
     ).toBe(true);
     // 声明了 typeId 的实体放在 relations[] 里：合法，但必须满足 Entity 形状（要有 entityName）
     expect(
@@ -730,9 +727,7 @@ describe('validateProjectSnapshot 的宽严边界', () => {
     ).toBe(false);
     // 下游注册的自定义图元 / 未注册类型：只做通用检查
     expect(validateProjectSnapshot({ entities: [{ id: 'b1', typeId: 'test:Badge' }] }).valid).toBe(true);
-    expect(validateProjectSnapshot({ entities: [{ id: 'b1', typeId: 'test:Badge', links: 'nope' }] }).valid).toBe(
-      true
-    );
+    expect(validateProjectSnapshot({ entities: [{ id: 'b1', typeId: 'test:Badge', links: 'nope' }] }).valid).toBe(true);
     // 缺 typeId 时按数组归位，仍按对应形状校验
     expect(validateProjectSnapshot({ entities: [], relations: [{ id: 'r1', links: 'nope' }] }).valid).toBe(false);
   });
