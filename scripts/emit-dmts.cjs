@@ -12,8 +12,8 @@
  * 补上 `.mjs` 扩展名（TS 会把 `./x.mjs` 解析到 `./x.d.mts`）。
  * require 条件继续用 `.d.ts`，两边都正确。
  *
- * 注意：必须在本包的 `vendor-engine-types.cjs` **之后**运行 —— 后者会把本包 .d.ts 里的
- * `from 'ice-render'` 改写为 vendor 目录的相对路径（`.d.mts` 需要基于改写后的结果再补扩展名）。
+ * 注意：ice-render 是 peer 依赖，类型声明保持对 `ice-render` 的模块引用；
+ * 本脚本只处理本包内部的相对导入说明符。
  *
  * 用法：node scripts/emit-dmts.cjs（由 npm run build:types 串起来）
  */

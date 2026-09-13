@@ -33,7 +33,8 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 默认域包 ER 以「节点 = 实体，连线 = 关系」组织数据模型，把画布上的设计结果序列化为符合 TypeORM `EntitySchema` 规范的 Schema，从而将「结构设计」与「实体类 / CRUD 代码生成」直接衔接；其它域包复用同一套交互闭环（选择、创建、更新、删除、关系连接、校验与导出），只在**记法**与**语义校验**上做区分。
 
-> **引擎内核已打包进本包**：安装 `ice-entity-designer` 即可直接使用，无需再安装 `ice-render`——内核在构建时被打进产物并从本包一并导出（含完整类型声明），保证 `ICE` 实例与 `Entity` / `Relation` 组件来自同一份内核。
+> **引擎内核 `ice-render` 是 peer 依赖**：请与 `ice-entity-designer` 一起安装（npm 7+ 也会自动安装 peer）。
+> 本包只 re-export 引擎，不再内联第二份内核，因此同一页面上的编辑器与其它 ICE 家族包共用同一个 `ICE` 实例、事件总线和类型注册表。
 
 完整使用案例请参见：
 
@@ -536,7 +537,7 @@ const svg = secondary.toSvg({ background: '#ffffff' });
 包内置 React 绑定（子路径导出 `ice-entity-designer/react`），不需要自己写 ref / effect 胶水代码。
 
 ```bash
-npm install ice-entity-designer react react-dom
+npm install ice-entity-designer ice-render react react-dom
 ```
 
 ```tsx
@@ -758,13 +759,13 @@ src/
 
 ## 9. 环境要求与依赖
 
-- Node.js >= 10.13.0，npm >= 6.4.1。
-- **引擎内核 `ice-render` 已打包进产物**（构建时 inline），因此无需安装 `ice-render`：
-  - 运行时：`import { ICE, EntityDesigner } from 'ice-entity-designer'`，两者来自同一份内核；
-  - 类型：引擎的类型声明也已一并 vendor 进包并改写为相对引用，`skipLibCheck: false` 下同样可解析。
-- 运行时依赖已全部内联（`lodash` 等），安装本包即可独立运行。
+- Node.js >= 18，npm >= 9。
+- `ice-render` 是 peer 依赖（`^1.4.10`）：运行时和类型都使用宿主提供的那一份引擎，
+  与 `ice-web-components` / `ice-chart` 等上层包保持同一份内核。
+  - 运行时：`import { ICE, EntityDesigner } from 'ice-entity-designer'`，其中 `ICE` 由 peer 的 `ice-render` re-export。
+  - 类型：本包 `.d.ts` 保持对 `ice-render` 的模块引用，不再 vendor 一份类型。
 - React 绑定为**可选**对等依赖 `react` / `react-dom`（`^18 || ^19`），仅在使用 `ice-entity-designer/react` 时需要。
-- 构建链：Rollup 2 + Babel 7 + TypeScript 4.6；测试框架：Jest。
+- 构建链：Rollup 3 + Babel 7 + TypeScript 5.9；测试框架：Jest 29。
 
 ## 10. License
 

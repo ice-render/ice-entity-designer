@@ -1,7 +1,7 @@
 {
   "author": "大漠穷秋",
   "name": "ice-entity-designer",
-  "version": "0.0.40",
+  "version": "0.1.0",
   "description": "An entity designer based on ice-render.",
   "repository": {
     "type": "git",
@@ -43,7 +43,7 @@
     "start": "rollup -c -w  --environment NODE_ENV:development",
     "build": "npm run clean && npm run build:types && npm run build:js",
     "build:js": "rollup -c --environment NODE_ENV:production",
-    "build:types": "tsc --emitDeclarationOnly && node scripts/vendor-engine-types.cjs && node scripts/emit-dmts.cjs",
+    "build:types": "tsc --emitDeclarationOnly && node scripts/emit-dmts.cjs",
     "clean": "rimraf dist",
     "prepare": "husky install",
     "test": "jest --runInBand",
@@ -59,6 +59,7 @@
     "types:watch": "npm run types:check -- --watch"
   },
   "peerDependencies": {
+    "ice-render": "^1.4.11",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19"
   },
@@ -72,23 +73,27 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
-    "@babel/core": "7.17.8",
-    "@babel/preset-env": "7.16.11",
-    "@babel/preset-typescript": "7.9.0",
+    "@babel/core": "7.28.5",
+    "@babel/preset-env": "7.28.5",
+    "@babel/preset-typescript": "7.28.5",
     "@commitlint/cli": "8.3.5",
     "@commitlint/config-conventional": "8.3.4",
     "@playwright/test": "1.63.0",
-    "@rollup/plugin-commonjs": "21.0.2",
-    "@rollup/plugin-json": "4.1.0",
-    "@rollup/plugin-node-resolve": "13.1.3",
-    "@rollup/plugin-strip": "^2.1.0",
-    "@types/jest": "25.2.1",
+    "@rollup/plugin-babel": "6.1.0",
+    "@rollup/plugin-commonjs": "28.0.1",
+    "@rollup/plugin-json": "6.1.0",
+    "@rollup/plugin-node-resolve": "15.3.1",
+    "@rollup/plugin-strip": "3.0.4",
+    "@rollup/plugin-terser": "0.4.4",
+    "@types/jest": "29.5.14",
     "@types/lodash": "4.14.180",
+    "@types/node": "18.19.130",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@typescript-eslint/eslint-plugin": "5.62.0",
     "@typescript-eslint/parser": "5.62.0",
     "antd": "5.26.5",
+    "babel-jest": "29.7.0",
     "eslint": "8.57.1",
     "eslint-config-prettier": "8.10.0",
     "eslint-plugin-jest": "27.9.0",
@@ -96,20 +101,19 @@
     "eslint-plugin-react-hooks": "4.6.0",
     "http-server": "14.1.1",
     "husky": "8.0.3",
-    "ice-render": "file:../ice-render",
-    "jest": "25.4.0",
+    "ice-render": "^1.4.11",
+    "jest": "29.7.0",
+    "jest-environment-jsdom": "29.7.0",
     "lint-staged": "15.5.2",
     "lodash": "4.17.21",
     "prettier": "2.8.8",
     "publint": "0.3.24",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "rimraf": "3.0.2",
-    "rollup": "2.70.1",
-    "rollup-plugin-babel": "4.4.0",
-    "rollup-plugin-license": "2.3.0",
-    "rollup-plugin-terser": "5.3.0",
-    "typescript": "4.6.2"
+    "rimraf": "5.0.10",
+    "rollup": "3.29.5",
+    "rollup-plugin-license": "3.6.0",
+    "typescript": "5.9.3"
   },
   "commitlint": {
     "extends": [
@@ -138,8 +142,8 @@
     ]
   },
   "engines": {
-    "npm": ">=6.4.1",
-    "node": ">=10.13.0"
+    "npm": ">=9",
+    "node": ">=18"
   },
   "license": "MIT"
 }
