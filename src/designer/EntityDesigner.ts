@@ -1,3 +1,4 @@
+import { toIsoTime } from 'ice-render';
 import type { ICE } from 'ice-render';
 import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
@@ -188,13 +189,46 @@ export default class EntityDesigner {
   }
 
   public serializeProject(): string {
+    // `createTime` = 这份项目首次创建的时刻；第一次写出时定下来并存到实例上，
+    // 于是同一会话里反复 serializeProject() 结果稳定（undo/redo 的快照回放依赖这一点），
+    // 载入别人的快照时也会把它读回来（见 __applySnapshot）。
+    const createTime =
+      toIsoTime(this.ice && (this.ice as any).documentMeta && (this.ice as any).documentMeta.createTime) ||
+      this.__rememberCreateTime(undefined);
     const payload = {
       version: 1,
       schemaVersion: PROJECT_SCHEMA_VERSION,
+      createTime,
       entities: this.entities.map((entity: any) => this.__entitySnapshot(entity)),
       relations: this.relations.map((relation: any) => this.__relationSnapshot(relation)),
     };
     return JSON.stringify(payload);
+  }
+
+  /**
+   * 记下（或清掉）文档的 `createTime`，返回最终采用的值。
+   *
+   * - 传合法值 → 归一化成 ISO 8601 UTC 后记住；
+   * - 传 undefined（首次写出 / 数据里没有该字段）→ 清掉旧值并返回当前时刻。
+   */
+  private __rememberCreateTime(value: unknown): string {
+    const ice: any = this.ice;
+    if (ice && typeof ice === 'object') {
+      if (!ice.documentMeta || typeof ice.documentMeta !== 'object') {
+        ice.documentMeta = {};
+      }
+    }
+    const normalized = toIsoTime(value);
+    if (normalized) {
+      if (ice && ice.documentMeta) {
+        ice.documentMeta.createTime = normalized;
+      }
+      return normalized;
+    }
+    if (ice && ice.documentMeta) {
+      delete ice.documentMeta.createTime;
+    }
+    return new Date().toISOString();
   }
 
   /**
@@ -340,6 +374,9 @@ export default class EntityDesigner {
     try {
       // 先清空旧项目，避免旧内容与新内容叠加。
       this.ice.clearAll();
+      // 文档级 createTime：快照里带了就记下来（归一化成 ISO 8601 UTC），没带/解析不了就清掉，
+      // 由下一次 serializeProject() 取当前时刻（与引擎 Serializer 的语义保持一致）
+      this.__rememberCreateTime(data && data.createTime);
       if (this.ice.ctx && typeof this.ice.ctx.clearRect === 'function') {
         this.ice.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ice.ctx.clearRect(0, 0, this.ice.canvasWidth || 0, this.ice.canvasHeight || 0);

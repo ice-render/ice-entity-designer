@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ice-entity-designer project snapshot",
-  "$comment": "结构契约，与 src/utils/project_schema.ts 的 validateProjectSnapshot() 保持同步。契约：serializeProject() 的产物必须永远满足本 schema；可选值（连线端点 id/position、字段 name、fields/relations 整体）允许缺省，仅在出现时校验类型。节点形状按 typeId 判定（缺省时按所在数组归位），因此 entities/relations 的 items 共用同一套节点定义，Entity/Relation 各自的必填项由 TS 校验器按 typeId 施加。",
+  "$comment": "结构契约，与 src/utils/project_schema.ts 的 validateProjectSnapshot() 保持同步。契约：serializeProject() 的产物必须永远满足本 schema；可选值（createTime、连线端点 id/position、字段 name、fields/relations 整体）允许缺省，仅在出现时校验类型。节点形状按 typeId 判定（缺省时按所在数组归位），因此 entities/relations 的 items 共用同一套节点定义，Entity/Relation 各自的必填项由 TS 校验器按 typeId 施加。",
   "type": "object",
   "required": ["entities"],
   "properties": {
@@ -10,6 +10,10 @@
     },
     "schemaVersion": {
       "type": "number"
+    },
+    "createTime": {
+      "type": "string",
+      "description": "文档首次创建时间（ISO 8601 UTC）；载入时会回填给设计器，因此「打开 → 再保存」不会改写它"
     },
     "entities": {
       "type": "array",

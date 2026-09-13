@@ -1,7 +1,7 @@
 {
   "author": "大漠穷秋",
   "name": "ice-entity-designer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "An entity designer based on ice-render.",
   "repository": {
     "type": "git",
@@ -59,7 +59,7 @@
     "types:watch": "npm run types:check -- --watch"
   },
   "peerDependencies": {
-    "ice-render": "^2.0.0",
+    "ice-render": "^2.1.0",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19"
   },
@@ -101,7 +101,7 @@
     "eslint-plugin-react-hooks": "4.6.0",
     "http-server": "14.1.1",
     "husky": "8.0.3",
-    "ice-render": "^2.0.0",
+    "ice-render": "^2.1.0",
     "jest": "29.7.0",
     "jest-environment-jsdom": "29.7.0",
     "lint-staged": "15.5.2",

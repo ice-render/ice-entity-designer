@@ -479,6 +479,83 @@ describe('EntityDesigner 连线形态（linkShape）', () => {
     expect(designer.serializeProject()).toBe(afterFirst);
   });
 
+  describe('项目快照里的 createTime（文档出生时间）', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('快照带 ISO 的 createTime，且同一会话反复 serializeProject() 稳定', () => {
+      const { designer } = makeDesigner();
+      designer.createEntity({ entityName: 'User' });
+      const first: any = JSON.parse(designer.serializeProject());
+
+      expect(first.createTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(first.lastModifyTime).toBeUndefined();
+      // 关键：undo/redo 的快照回放依赖「同一份内容序列化结果稳定」
+      expect(designer.serializeProject()).toBe(JSON.stringify(first));
+      expect(validateProjectSnapshot(first)).toEqual({ valid: true, errors: [] });
+    });
+
+    it('「载入 → 再保存」保留 createTime（只有内容在变）', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-09-13T00:00:00.000Z'));
+
+      const { designer } = makeDesigner();
+      designer.createEntity({ entityName: 'User' });
+      const first: any = JSON.parse(designer.serializeProject());
+      expect(first.createTime).toBe('2026-09-13T00:00:00.000Z');
+
+      jest.setSystemTime(new Date('2026-09-13T09:00:00.000Z'));
+      const { designer: other } = makeDesigner();
+      other.loadProject(JSON.stringify(first));
+      other.createEntity({ entityName: 'Order' });
+      const second: any = JSON.parse(other.serializeProject());
+
+      expect(second.createTime).toBe(first.createTime); // 出生时间不变
+      expect(second.entities.length).toBe(first.entities.length + 1); // 内容确实变了
+    });
+
+    it('历史格式 / 缺失 / 脏值分别归一化与回退，且载入失败不改动它', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-09-13T10:00:00.000Z'));
+
+      // 历史格式（旧 toLocaleString 产物）→ 归一化成 ISO，且时刻不变
+      const { designer } = makeDesigner();
+      designer.loadProject(
+        JSON.stringify({ version: 1, schemaVersion: 1, createTime: '2022/1/1 00:00:00', entities: [], relations: [] })
+      );
+      const normalized: any = JSON.parse(designer.serializeProject());
+      expect(normalized.createTime).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+      expect(Date.parse(normalized.createTime)).toBe(Date.parse('2022/1/1 00:00:00'));
+
+      // 脏值 / 缺失 → 回退当前时刻
+      for (const createTime of ['不是时间', undefined]) {
+        const { designer: fresh } = makeDesigner();
+        fresh.loadProject(
+          JSON.stringify({ version: 1, schemaVersion: 1, createTime, entities: [], relations: [] })
+        );
+        expect(JSON.parse(fresh.serializeProject()).createTime).toBe('2026-09-13T10:00:00.000Z');
+      }
+
+      // 载入失败（schemaVersion 不支持）抛错，此时不该改动已有的 createTime
+      const { designer: guarded } = makeDesigner();
+      guarded.createEntity({ entityName: 'Keep' });
+      const before: any = JSON.parse(guarded.serializeProject());
+      expect(() =>
+        guarded.loadProject(
+          JSON.stringify({
+            version: 1,
+            schemaVersion: 999,
+            createTime: '2030-01-01T00:00:00.000Z',
+            entities: [],
+            relations: [],
+          })
+        )
+      ).toThrow(/schemaVersion/);
+      expect(JSON.parse(guarded.serializeProject()).createTime).toBe(before.createTime);
+    });
+  });
+
   it('updateRelation 可在运行时切换形态', () => {
     const { designer } = makeDesigner();
     const a = designer.createEntity({ entityName: 'A' });
