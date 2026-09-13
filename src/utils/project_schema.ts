@@ -46,6 +46,10 @@ export function validateProjectSnapshot(data: any): ProjectSnapshotValidationRes
   if (data.schemaVersion !== undefined && typeof data.schemaVersion !== 'number') {
     errors.push('schemaVersion must be a number when present');
   }
+  // 文档出生时间：可选；出现时必须是字符串（历史格式由 EntityDesigner 归一化成 ISO）
+  if (data.createTime !== undefined && typeof data.createTime !== 'string') {
+    errors.push('createTime must be a string when present');
+  }
   if (!Array.isArray(data.entities)) {
     errors.push('entities must be an array');
   } else {
