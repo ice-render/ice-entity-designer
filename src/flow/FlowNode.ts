@@ -312,7 +312,12 @@ export default class FlowNode extends ICEGroup {
             width: bandLabelLength,
             height: bandSize,
             text: String(this.state.title || ''),
-            wrap: false,
+            // 标题比泳道还长时**按行宽截断加省略号**（单行，不折成多列）：
+            // 名称带只有 32px 厚，让它折行会在带里并排挤出一列列文字；
+            // 不截断又会顺着泳道上下溢出到相邻泳道。截断后的完整标题仍可在属性面板里看到。
+            wrap: true,
+            maxLines: 1,
+            ellipsis: '…',
             transform: { rotate: -90 },
             interactive: false,
             stroke: false,
