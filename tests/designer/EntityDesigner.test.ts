@@ -485,13 +485,18 @@ describe('EntityDesigner 连线形态（linkShape）', () => {
     });
 
     it('快照带 ISO 的 createTime，且同一会话反复 serializeProject() 稳定', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-09-13T00:00:00.000Z'));
       const { designer } = makeDesigner();
       designer.createEntity({ entityName: 'User' });
       const first: any = JSON.parse(designer.serializeProject());
 
       expect(first.createTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       expect(first.lastModifyTime).toBeUndefined();
-      // 关键：undo/redo 的快照回放依赖「同一份内容序列化结果稳定」
+
+      // 关键：undo/redo 的快照回放依赖「同一份内容序列化结果稳定」。
+      // 推进时钟再写一次，避免"同一毫秒所以碰巧相等"的假通过。
+      jest.setSystemTime(new Date('2026-09-13T00:10:00.000Z'));
       expect(designer.serializeProject()).toBe(JSON.stringify(first));
       expect(validateProjectSnapshot(first)).toEqual({ valid: true, errors: [] });
     });
