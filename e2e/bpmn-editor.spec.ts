@@ -170,29 +170,31 @@ test('泳道标题竖排：真实画布上旋转 -90°，居中在左侧名称�
       const box = comp.getMinBoundingBox(true).getMinAndMaxPoint();
       return { w: box.maxX - box.minX, h: box.maxY - box.minY };
     };
-    return lanes.map((lane: any) => {
-      const label = lane.labelComponent;
-      return {
-        title: lane.state.title,
-        rotate: label.state.transform.rotate,
-        label: span(label),
-        lane: span(lane),
-        bandSize: lane.shapeComponent.state.bandSize,
-        // 标签在泳道本地坐标里的中心（应等于名称带中心：bandSize/2, laneHeight/2）
-        centerX: label.state.left + label.state.width / 2,
-        centerY: label.state.top + label.state.height / 2,
-      };
-    }).concat([
-      {
-        title: pool.state.title,
-        rotate: pool.labelComponent.state.transform.rotate || 0,
-        label: span(pool.labelComponent),
-        lane: span(pool),
-        bandSize: pool.shapeComponent.state.bandSize,
-        centerX: 0,
-        centerY: 0,
-      },
-    ]);
+    return lanes
+      .map((lane: any) => {
+        const label = lane.labelComponent;
+        return {
+          title: lane.state.title,
+          rotate: label.state.transform.rotate,
+          label: span(label),
+          lane: span(lane),
+          bandSize: lane.shapeComponent.state.bandSize,
+          // 标签在泳道本地坐标里的中心（应等于名称带中心：bandSize/2, laneHeight/2）
+          centerX: label.state.left + label.state.width / 2,
+          centerY: label.state.top + label.state.height / 2,
+        };
+      })
+      .concat([
+        {
+          title: pool.state.title,
+          rotate: pool.labelComponent.state.transform.rotate || 0,
+          label: span(pool.labelComponent),
+          lane: span(pool),
+          bandSize: pool.shapeComponent.state.bandSize,
+          centerX: 0,
+          centerY: 0,
+        },
+      ]);
   });
 
   const lanes = info.slice(0, -1);
@@ -209,6 +211,41 @@ test('泳道标题竖排：真实画布上旋转 -90°，居中在左侧名称�
   // 池标题保持横向（顶部名称带）
   expect(pool.rotate).toBe(0);
   expect(pool.label.w).toBeGreaterThan(pool.label.h);
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('泳道标题过长：按名称带长度截断加省略号，不折成多列也不溢出', async ({ page }) => {
+  const info = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const lane = designer.nodes.find((node: any) => node.state.kind === 'bpmnLane');
+    const longTitle = '这是一个非常长的泳道名称，长到名称带里放不下，需要截断';
+    designer.updateNode(lane.state.id, { title: longTitle });
+    const label = lane.labelComponent;
+    // 改名只置脏；这里按公开约定 refreshParams() 立刻重算（等价于等下一帧渲染）
+    label.refreshParams();
+    const lines = label.getRenderLines();
+    // 用真实 canvas 度量核对「截断后确实放得下」——引擎截断用的就是同一套量测
+    label.ctx.font = label.state.style.font;
+    const measured = label.ctx.measureText(lines[0].text).width;
+    return {
+      title: lane.state.title,
+      rendered: lines.map((line: any) => line.text),
+      measured,
+      boxWidth: label.state.width,
+      laneHeight: lane.state.height,
+      wrap: label.state.wrap,
+      maxLines: label.state.maxLines,
+    };
+  });
+
+  expect(info.title).toBe('这是一个非常长的泳道名称，长到名称带里放不下，需要截断'); // 完整标题仍在文档里
+  expect(info.wrap).toBe(true);
+  expect(info.maxLines).toBe(1);
+  expect(info.rendered.length).toBe(1); // 单行：不折成多列
+  expect(info.rendered[0].endsWith('…')).toBe(true);
+  expect(info.rendered[0].length).toBeLessThan(info.title.length);
+  expect(info.measured).toBeLessThanOrEqual(info.boxWidth); // 「内容 + 省略号」放得下
+  expect(info.boxWidth).toBeLessThanOrEqual(info.laneHeight); // 标签盒不超泳道
   expect((page as any).__errors).toEqual([]);
 });
 
@@ -239,7 +276,7 @@ test('连线：切换为消息流后线型变化，条件/默认流标记生成'
     const sequence = designer.edges.find((edge: any) => (edge.state.flowType || 'sequence') === 'sequence');
     designer.updateEdge(sequence.state.id, { flowType: 'message' });
     const markers = (window as any).__ice.toolNodes.filter(
-      (node: any) => node.constructor.typeId === 'ice-entity-designer:BpmnFlowMarker',
+      (node: any) => node.constructor.typeId === 'ice-entity-designer:BpmnFlowMarker'
     );
     return {
       lineDash: sequence.state.lineDash,

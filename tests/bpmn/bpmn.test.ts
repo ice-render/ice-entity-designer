@@ -312,7 +312,9 @@ describe('泳道标题竖排（旋转 -90°）', () => {
     expect(label.state.top + label.state.height / 2).toBeCloseTo(lane.state.height / 2, 5);
     expect(label.state.style.textAlign).toBe('center');
     expect(label.state.style.textBaseline).toBe('middle');
-    expect(label.state.wrap).toBe(false);
+    // 单行截断（wrap 只是给 maxLines 提供断行宽度，见下面的截断用例）
+    expect(label.state.wrap).toBe(true);
+    expect(label.state.maxLines).toBe(1);
     // 名称带本身由形状画：分隔线在 x = bandSize
     expect((lane as any).shapeComponent.state.bandSize).toBe(bandSize);
     expect((pool as any).shapeComponent.state.band).toBe('top');
@@ -363,5 +365,53 @@ describe('泳道标题竖排（旋转 -90°）', () => {
     const label: any = findLane(designer).labelComponent;
     expect(label.state.top + label.state.height / 2).toBeCloseTo(120, 5);
     expect(label.state.width).toBeGreaterThan(200);
+  });
+
+  it('标题比泳道还长时按行宽截断加省略号（单行，不折成多列、也不溢出）', () => {
+    const { designer } = makeDesigner();
+    const lane = designer.createNode('bpmnLane', {
+      title: '这是一个非常长的泳道名称，长到放不下',
+      left: 40,
+      top: 40,
+      width: 900,
+      height: 150,
+    });
+    const label: any = findLane(designer).labelComponent;
+    expect(label.state.wrap).toBe(true);
+    expect(label.state.maxLines).toBe(1);
+    expect(label.state.ellipsis).toBe('…');
+
+    // 塞一个能真实量宽的桩 ctx：每字符 13px（与 fontSize 一致），行宽 = 泳道高 − 8
+    label.ctx = {
+      font: '',
+      measureText: (s: string) => ({
+        width: Array.from(String(s)).length * 13,
+        actualBoundingBoxAscent: 10,
+        actualBoundingBoxDescent: 3,
+      }),
+    };
+    (label as any).measureText();
+    const rendered = label.getRenderLines();
+    expect(rendered.length).toBe(1); // 单行：不折成多列
+    expect(rendered[0].text.endsWith('…')).toBe(true);
+    expect(rendered[0].text.length).toBeLessThan(lane.state.title.length);
+    // 「内容 + 省略号」的行宽不超过标签盒（= 泳道高 − 8）
+    expect(Array.from(rendered[0].text).length * 13).toBeLessThanOrEqual(label.state.width);
+  });
+
+  it('正常长度的泳道标题不被截断', () => {
+    const { designer } = makeDesigner();
+    designer.createNode('bpmnLane', { title: '风控岗', left: 40, top: 40, width: 900, height: 150 });
+    const label: any = findLane(designer).labelComponent;
+    label.ctx = {
+      font: '',
+      measureText: (s: string) => ({
+        width: Array.from(String(s)).length * 13,
+        actualBoundingBoxAscent: 10,
+        actualBoundingBoxDescent: 3,
+      }),
+    };
+    (label as any).measureText();
+    expect(label.getRenderLines()[0].text).toBe('风控岗');
   });
 });
