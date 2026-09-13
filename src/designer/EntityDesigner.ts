@@ -6,6 +6,7 @@ import { ENTITY_DOCUMENT_FIELDS, pickDocumentNode, RELATION_DOCUMENT_FIELDS } fr
 import { PROJECT_SCHEMA_VERSION, validateProjectSnapshot } from '../utils/project_schema';
 import { validateSchema } from '../utils/schema_validator';
 import { toSchemaObject, toSchemaString } from '../utils/serialization_util';
+import { registerIEDType } from '../utils/type-registry';
 
 /** 载入快照时被跳过的节点明细（typeId 未注册） */
 export type ProjectLoadSkippedNode = {
@@ -58,8 +59,8 @@ export default class EntityDesigner {
 
   constructor(ice: ICE) {
     this.ice = ice;
-    this.ice.registerType(Entity.typeId, Entity);
-    this.ice.registerType(Relation.typeId, Relation);
+    registerIEDType(this.ice, Entity);
+    registerIEDType(this.ice, Relation);
     this.ice.evtBus.on('mousedown', this.__mousedownHandler, this);
   }
 

@@ -24,7 +24,7 @@ function createEmptyPath(component: any): any {
 
 /** 判定节点：菱形 */
 export class FlowDiamond extends ICEPath {
-  public static readonly typeId = 'FlowDiamond';
+  public static readonly typeId = 'ice-entity-designer:FlowDiamond';
 
   protected createPathObject(): any {
     const w = this.state.width;
@@ -47,7 +47,7 @@ export class FlowDiamond extends ICEPath {
 
 /** 输入 / 输出节点：平行四边形 */
 export class FlowParallelogram extends ICEPath {
-  public static readonly typeId = 'FlowParallelogram';
+  public static readonly typeId = 'ice-entity-designer:FlowParallelogram';
 
   protected createPathObject(): any {
     const w = this.state.width;

@@ -108,10 +108,11 @@ describe('BPMN 连线类型与派生样式', () => {
 
   it('条件流 / 默认流会生成派生标记，且标记不进入文档', () => {
     const { ice, designer } = makeCreditFlow();
-    const markers = ice.toolNodes.filter((node: any) => node.constructor.typeId === 'BpmnFlowMarker');
+    const markers = ice.toolNodes.filter((node: any) => node.constructor.typeId === 'ice-entity-designer:BpmnFlowMarker');
     expect(markers.length).toBe(2);
     // 工具层不参与引擎序列化 → 文档里没有标记
-    expect(designer.serialize()).not.toContain('BpmnFlowMarker');
+    // 流标记是工具层组件，不进文档（typeId 带 namespace 后同样不该出现）
+    expect(designer.serialize()).not.toContain('ice-entity-designer:BpmnFlowMarker');
   });
 });
 

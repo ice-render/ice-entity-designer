@@ -10,6 +10,7 @@ import GanttTask from './GanttTask';
 import GanttDependency from './GanttDependency';
 import GanttRuler from './GanttRuler';
 import { addDays, diffDays } from './gantt_date';
+import { registerIEDType } from '../utils/type-registry';
 
 export type GanttIssue = { level: 'error' | 'warning'; message: string; id?: string };
 
@@ -51,9 +52,9 @@ export default class GanttDesigner extends FlowDesigner {
 
   constructor(ice: any) {
     super(ice);
-    this.ice.registerType(GanttTask.typeId, GanttTask as any);
-    this.ice.registerType(GanttDependency.typeId, GanttDependency as any);
-    this.ice.registerType(GanttRuler.typeId, GanttRuler as any);
+    registerIEDType(this.ice, GanttTask);
+    registerIEDType(this.ice, GanttDependency);
+    registerIEDType(this.ice, GanttRuler);
   }
 
   public get nodes(): any[] {

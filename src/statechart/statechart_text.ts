@@ -61,7 +61,7 @@ function isPseudo(kind: StatechartNodeKind): boolean {
 function nearestStateAncestor(node: any): any {
   let current = node.parentNode;
   while (current) {
-    if (current.constructor && current.constructor.typeId === 'StateNode') {
+    if (current.constructor && current.constructor.typeId === 'ice-entity-designer:StateNode') {
       return current;
     }
     current = current.parentNode;

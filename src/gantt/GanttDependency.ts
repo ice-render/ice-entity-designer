@@ -15,7 +15,7 @@ import merge from 'lodash/merge';
  * 依赖只表达约束，不改变条的位置（自动排程是后续能力，不属于本包 v1）。
  */
 export default class GanttDependency extends ICEPolyLine {
-  public static readonly typeId = 'GanttDependency';
+  public static readonly typeId = 'ice-entity-designer:GanttDependency';
 
   constructor(props: any = {}) {
     super(

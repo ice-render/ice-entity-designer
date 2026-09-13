@@ -11,6 +11,7 @@ import FlowEdge from './FlowEdge';
 import FlowNode from './FlowNode';
 import type { FlowNodeKind } from './FlowNode';
 import type { FlowPort } from './FlowEdge';
+import { registerIEDType } from '../utils/type-registry';
 
 /**
  * 流程图文档。
@@ -147,8 +148,8 @@ export default class FlowDesigner {
 
   constructor(ice: ICE) {
     this.ice = ice;
-    this.ice.registerType(FlowNode.typeId, FlowNode as any);
-    this.ice.registerType(FlowEdge.typeId, FlowEdge as any);
+    registerIEDType(this.ice, FlowNode);
+    registerIEDType(this.ice, FlowEdge);
     this.ice.evtBus.on('mousedown', this.__mousedownHandler, this);
     this.ice.evtBus.on('mouseup', this.__mouseupHandler, this);
   }
@@ -497,7 +498,7 @@ export default class FlowDesigner {
     const report: FlowLoadReport = { loaded: true, nodes: 0, edges: 0, skipped: [] };
 
     (data.nodes || []).forEach((item: any) => {
-      if (item.typeId !== undefined && item.typeId !== FlowNode.typeId) {
+      if (item.typeId !== undefined && this.ice.getType(item.typeId) !== FlowNode) {
         report.skipped.push(String(item.typeId));
         return;
       }
@@ -508,7 +509,7 @@ export default class FlowDesigner {
       report.nodes += 1;
     });
     (data.edges || []).forEach((item: any) => {
-      if (item.typeId !== undefined && item.typeId !== FlowEdge.typeId) {
+      if (item.typeId !== undefined && this.ice.getType(item.typeId) !== FlowEdge) {
         report.skipped.push(String(item.typeId));
         return;
       }

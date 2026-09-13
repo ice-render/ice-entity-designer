@@ -9,6 +9,7 @@ import FlowDesigner from '../flow/FlowDesigner';
 import UmlClass from './UmlClass';
 import UmlRelation, { UML_RELATION_STYLE, UML_RELATION_KINDS } from './UmlRelation';
 import type { UmlRelationKind } from './UmlRelation';
+import { registerIEDType } from '../utils/type-registry';
 
 export type UmlIssue = { level: 'error' | 'warning'; message: string; id?: string };
 
@@ -28,8 +29,8 @@ export type UmlIssue = { level: 'error' | 'warning'; message: string; id?: strin
 export default class UmlDesigner extends FlowDesigner {
   constructor(ice: any) {
     super(ice);
-    this.ice.registerType(UmlClass.typeId, UmlClass as any);
-    this.ice.registerType(UmlRelation.typeId, UmlRelation as any);
+    registerIEDType(this.ice, UmlClass);
+    registerIEDType(this.ice, UmlRelation);
   }
 
   /** 只认 UML 类框（继承来的 FlowNode 过滤换掉） */

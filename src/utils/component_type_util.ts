@@ -35,3 +35,13 @@ export function isEntity(component: any): boolean {
 export function isRelation(component: any): boolean {
   return typeIdOf(component) === Relation.typeId;
 }
+
+/** 领域快照里的 typeId 是否代表 Entity。 */
+export function isEntityTypeId(typeId: unknown): boolean {
+  return typeId === Entity.typeId;
+}
+
+/** 领域快照里的 typeId 是否代表 Relation。 */
+export function isRelationTypeId(typeId: unknown): boolean {
+  return typeId === Relation.typeId;
+}

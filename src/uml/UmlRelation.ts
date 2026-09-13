@@ -79,7 +79,7 @@ export const UML_RELATION_COLOR: Record<UmlRelationKind, string> = {
  * - 包围盒、命中检测也跟着正确。
  */
 export default class UmlRelation extends ICEPolyLine {
-  public static readonly typeId = 'UmlRelation';
+  public static readonly typeId = 'ice-entity-designer:UmlRelation';
 
   constructor(props: any = {}) {
     super(UmlRelation.arrangeParam(props));

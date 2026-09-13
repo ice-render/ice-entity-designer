@@ -157,7 +157,7 @@ describe('UML 域包 · 设计器（复用 FlowDesigner 的选择/历史/快照�
     const order = designer.createClass({ className: 'Order', attributes: ['- id: string'], left: 100, top: 100 });
     const payable = designer.createClass({ kind: 'interface', className: 'Payable', left: 400, top: 100 });
 
-    expect(ice.getTypeId(UmlClass)).toBe('UmlClass');
+    expect(ice.getTypeId(UmlClass)).toBe('ice-entity-designer:UmlClass');
     expect(designer.nodes.length).toBe(2);
     expect(order.state.kind).toBe('class');
     expect(payable.state.kind).toBe('interface');

@@ -28,7 +28,7 @@ test('符号表：23 种符号齐备，文字符号对齐 JB/T 5872 与 GB/T 472
     const symbols: Array<{ kind: string; tag: string; parts: number }> = [];
     const walk = (list: any[]) => {
       (list || []).forEach((child: any) => {
-        if (child.constructor && child.constructor.typeId === 'PowerSymbol') {
+        if (child.constructor && child.constructor.typeId === 'ice-entity-designer:PowerSymbol') {
           symbols.push({ kind: child.state.kind, tag: child.state.tag, parts: child.parts.length });
         }
         walk(child.childNodes);

@@ -58,7 +58,8 @@ describe('BPMN 令牌仿真 · 基本推进', () => {
     expect(tokens[0].nodeId).toBe(start.state.id);
     // 令牌是工具层组件：文档里看不到它，快照也不受影响
     expect(ice.toolNodes.length).toBeGreaterThan(0);
-    expect(designer.serialize()).not.toContain('SimToken');
+    // 令牌是工具层组件，不进文档（typeId 带 namespace 后同样不该出现）
+    expect(designer.serialize()).not.toContain('ice-entity-designer:SimToken');
   });
 
   it('令牌沿顺序流推进到下一个节点（位置单调前进）', () => {
@@ -188,7 +189,7 @@ describe('BPMN 令牌仿真 · 生命周期', () => {
 
     simulator.stop();
     expect(simulator.getTokens().length).toBe(0);
-    expect(ice.toolNodes.filter((node: any) => node.constructor.typeId === 'SimToken').length).toBe(0);
+    expect(ice.toolNodes.filter((node: any) => node.constructor.typeId === 'ice-entity-designer:SimToken').length).toBe(0);
 
     simulator.reset();
     expect(simulator.getVisitedNodeIds().length).toBe(0);

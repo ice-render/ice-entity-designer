@@ -184,7 +184,9 @@ test('连线：切换为消息流后线型变化，条件/默认流标记生成'
     const designer = (window as any).__designer;
     const sequence = designer.edges.find((edge: any) => (edge.state.flowType || 'sequence') === 'sequence');
     designer.updateEdge(sequence.state.id, { flowType: 'message' });
-    const markers = (window as any).__ice.toolNodes.filter((node: any) => node.constructor.typeId === 'BpmnFlowMarker');
+    const markers = (window as any).__ice.toolNodes.filter(
+      (node: any) => node.constructor.typeId === 'ice-entity-designer:BpmnFlowMarker',
+    );
     return {
       lineDash: sequence.state.lineDash,
       arrowStyle: sequence.state.arrowStyle,
@@ -210,7 +212,7 @@ test('令牌仿真：从开始事件出发沿顺序流推进，停止后令牌�
     const ice = (window as any).__ice;
     return {
       tokens: simulator.getTokens().length,
-      dots: ice.toolNodes.filter((node: any) => node.constructor.typeId === 'SimToken').length,
+      dots: ice.toolNodes.filter((node: any) => node.constructor.typeId === 'ice-entity-designer:SimToken').length,
       visited: simulator.getVisitedNodeIds().length,
       running: simulator.isRunning(),
       // 令牌是工具层组件：快照里不该出现
@@ -233,7 +235,7 @@ test('令牌仿真：从开始事件出发沿顺序流推进，停止后令牌�
     const ice = (window as any).__ice;
     return {
       tokens: simulator.getTokens().length,
-      dots: ice.toolNodes.filter((node: any) => node.constructor.typeId === 'SimToken').length,
+      dots: ice.toolNodes.filter((node: any) => node.constructor.typeId === 'ice-entity-designer:SimToken').length,
     };
   });
   expect(stopped.tokens).toBe(0);

@@ -16,6 +16,7 @@
  * 记法与范围见 `docs/power-secondary-spec.md`。
  */
 import FlowDesigner from '../flow/FlowDesigner';
+import { registerIEDType } from '../utils/type-registry';
 import FlowEdge from '../flow/FlowEdge';
 import SecondarySymbol, { SECONDARY_SYMBOL_PRESETS, TerminalStrip } from './secondary_shapes';
 import type { SecondarySymbolKind } from './secondary_shapes';
@@ -24,7 +25,7 @@ export type SecondaryIssue = { level: 'error' | 'warning'; message: string; id?:
 
 /** 二次回路的导线：复用引擎折线（插槽吸附 / 正交路由 / 标签），额外带回路编号与电缆编号 */
 export class SecondaryWire extends FlowEdge {
-  public static readonly typeId = 'SecondaryWire';
+  public static readonly typeId = 'ice-entity-designer:SecondaryWire';
 
   constructor(props: any = {}) {
     super({ ...props, arrow: props.arrow || 'none' });
@@ -41,9 +42,9 @@ export class SecondaryWire extends FlowEdge {
 export default class SecondaryDesigner extends FlowDesigner {
   constructor(ice: any) {
     super(ice);
-    this.ice.registerType(SecondarySymbol.typeId, SecondarySymbol as any);
-    this.ice.registerType(SecondaryWire.typeId, SecondaryWire as any);
-    this.ice.registerType(TerminalStrip.typeId, TerminalStrip as any);
+    registerIEDType(this.ice, SecondarySymbol);
+    registerIEDType(this.ice, SecondaryWire);
+    registerIEDType(this.ice, TerminalStrip);
   }
 
   public get nodes(): any[] {

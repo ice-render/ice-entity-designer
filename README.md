@@ -213,6 +213,12 @@ designer.undo();
 #### 5.1 项目快照契约
 
 - 快照带 `schemaVersion`（当前 `1`）与每个节点的 `typeId`；载入时**按 `typeId` 分派构造函数**（走 ICE 注册表，下游 `ice.registerType()` 注册的领域图元同样可载入）。旧快照没有 `typeId` 时，按所在数组归位（`entities[]` → `Entity`，`relations[]` → `Relation`）。
+- **`typeId` 一律是 `namespace:Type` 格式**（2026-09-13 起）：本包的领域图元统一用 `ice-entity-designer:*`
+  （`ice-entity-designer:Entity`、`ice-entity-designer:FlowNode`、`ice-entity-designer:GanttTask`…），
+  与引擎内置的 `ice-render:*`、图表的 `ice-chart:*` 分属不同命名空间，因此**跨包不会撞名**。
+  注册走 `registerIEDType()`（`src/utils/type-registry.ts`）；**不做旧名兼容**（家族仍在发布初期），
+  旧快照里的 `Entity`、`FlowNode` 之类无 namespace 值会被当作未注册类型跳过并记入 `report.unknownTypes`。
+  判型不要拿字面量与 `typeId` 比：用 `x instanceof FlowNode` 或 `selected.constructor.typeId === FlowNode.typeId`。
 - **容错加载**：遇到未注册的 `typeId` 只跳过该节点并记录（`report.unknownTypes` / `report.skipped`），不会让整份数据打不开——与引擎 `Deserializer` 的语义一致。
 - **自洽保证**：`serializeProject()` 的产物永远能通过 `loadProject()` 的结构校验（结构契约见 `src/utils/project-snapshot.schema.json`）；载入失败时当前项目与 `undo`/`redo` 栈都不会被改动。
 - **唯一字段定义**：快照写什么、校验查什么，都由 `src/utils/project_codec.ts` 的一份定义驱动（不再 snapshot 一份、validator 一份）。新增 state 字段却忘了登记时，`tests/designer/codec-completeness.test.ts` 会以「未覆盖的 state 键」直接报红。
@@ -686,7 +692,7 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 | 连线 | 引擎折线（插槽吸附 / 正交·贝塞尔路由 / 标签 / 跟随宿主）；**端点标记进路径点集**，因此描边、填充、导出都自动带上 | `UmlRelation`：六种关系 = 线型 + 三角/菱形/开放箭头 |
 | 应用层 | `FlowDesigner`（选择 / 增删改 / 连线 / 撤销重做 / 快照 / 适应视图 / 订阅 / `toSvg`） | `UmlDesigner` 只重写「建什么图元 + 类型过滤」 |
 | 语义校验 | 结构校验之外的部分自写，规则直白 | `validateUml()`：重名类 / 悬空关系 / 继承成环 |
-| 文档格式 | 引擎序列化（typeId 注册表 + `hasDerivedChildren`），零登记 | 类与关系统统自动往返 |
+| 文档格式 | 引擎序列化（`namespace:Type` 的 typeId 注册表 + `hasDerivedChildren`），零登记 | 类与关系统统自动往返 |
 | 互操作 | 有标准格式的域就做 | BPMN 2.0 XML（导入 + 导出，含 BPMNDI 布局）；UML 类图与状态机的 PlantUML 文本互操作；甘特的 Mermaid gantt 文本互操作 |
 | 交付物 | 示例页 + e2e + README + （可选）JSON DSL 与技能 | `examples/uml-editor.html` + `e2e/uml-editor.spec.ts` |
 

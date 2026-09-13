@@ -230,7 +230,9 @@
         const node = designer.symbols.find((item) => item.state.id === designer.selectedId);
         const edge = designer.edges.find((item) => item.state.id === designer.selectedId);
         const strip = designer.nodes.find(
-          (item) => item.state.id === designer.selectedId && item.constructor.typeId === 'TerminalStrip'
+          (item) =>
+            item.state.id === designer.selectedId &&
+            item.constructor.typeId === 'ice-entity-designer:TerminalStrip'
         );
         panel.innerHTML = '';
         const row = (label, control) => {

@@ -4,7 +4,7 @@ import Relation from '../src/er-component/Relation';
 function fakeEntity(id: string, name: string, columns: any = { id: { type: 'number', primary: true } }) {
   return {
     // 判型走稳定 typeId，不依赖类名（下游压缩会 mangle 类名）
-    constructor: { typeId: 'Entity' },
+    constructor: { typeId: 'ice-entity-designer:Entity' },
     state: { id },
     toEntityObject() {
       return { name, columns };
@@ -21,7 +21,7 @@ function fakeRelation(
   options: any = {}
 ) {
   return {
-    constructor: { typeId: 'Relation' },
+    constructor: { typeId: 'ice-entity-designer:Relation' },
     toEntityObject() {
       return {
         title: 'Relation',

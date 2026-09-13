@@ -147,7 +147,7 @@ function arcPoints(cx: number, cy: number, radius: number, startDeg: number, end
  * **不用位置去猜**。
  */
 export default class PowerSymbol extends ICEGroup {
-  public static readonly typeId = 'PowerSymbol';
+  public static readonly typeId = 'ice-entity-designer:PowerSymbol';
 
   /** 派生部件：`{ role, component }` 列表（按添加顺序） */
   public parts: Array<{ role: string; component: any }> = [];

@@ -40,7 +40,7 @@ export default class Entity extends ICEGroup {
    * （实测 webpack 生产构建下 Entity → `Dr`），基于类名的判断会静默失效。
    * 属性名默认不会被压缩，子类也会继承这个值。
    */
-  public static readonly typeId = 'Entity';
+  public static readonly typeId = 'ice-entity-designer:Entity';
 
   /**
    * 表头背景 / 标题 / 分隔线 / 字段文本都是由 entityName、fields、各 style 派生的内部子组件，
