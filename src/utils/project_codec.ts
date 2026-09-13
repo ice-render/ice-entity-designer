@@ -70,6 +70,10 @@ export const COMPONENT_BASE_FIELDS: CodecField[] = [
   { key: 'fill', type: 'boolean' },
   { key: 'stroke', type: 'boolean' },
   { key: 'linkable', type: 'boolean' },
+  // 引擎 2.3.0 起新增：连线端点手柄（hook）开关，与 transformable 解耦。
+  // 本仓连线的记法不可变换（transformable:false），但仍要让用户点连线后拖动端点改连接关系 ——
+  // 所以这个键要随文档往返保存（默认 true）。
+  { key: 'linkEditable', type: 'boolean' },
   { key: 'transformable', type: 'boolean' },
   { key: 'animations', type: 'object' },
 ];
