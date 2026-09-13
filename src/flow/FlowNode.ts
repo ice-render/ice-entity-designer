@@ -172,6 +172,22 @@ export const FLOW_NODE_KINDS: Record<FlowNodeKind, FlowNodePreset> = {
   },
 };
 
+/**
+ * BPMN 语义上**不能作为连线端点**的图元（2026-09-13 修）。
+ *
+ * 引擎的 `linkable` 是"能不能作为**任何**连线的端点"的单一开关，本身不区分连线类型；
+ * 本设计器当前只实现**顺序流（Sequence Flow）**，所以按顺序流的语义取默认值：
+ * - **泳道（Lane）**：组织分区，任何连线都不该连到它；
+ * - **池（Participant）**：顺序流**不得跨越池边界**（池内元素之间才连顺序流）。池只接受**消息流（Message Flow）**——
+ *   将来支持消息流时，要按"连线类型"判断，而不是把这个开关一律打开；
+ * - **注释（Text Annotation）**：只能通过**关联（Association）**连到流元素；
+ * - **数据对象（Data Object）**：只能通过**数据关联（Data Association）**连。
+ *
+ * 可连的是**流元素**：事件 / 任务 / 网关 / 子流程。
+ * （起止事件的入边/出边限制属于流程合法性校验，不在这里表达，见 BPMN 校验器。）
+ */
+const NOT_LINKABLE_KINDS: readonly FlowNodeKind[] = ['bpmnPool', 'bpmnLane', 'bpmnAnnotation', 'bpmnDataObject'];
+
 const SHAPE_BY_KIND: Record<FlowNodePreset['shape'], any> = {
   rect: ICERect,
   diamond: FlowDiamond,
@@ -246,6 +262,8 @@ export default class FlowNode extends ICEGroup {
        * 数据对象、注释）在属性面板里用数值改。
        */
       transformable: false,
+      // BPMN 可连接性：泳道/池/注释/数据对象不是顺序流的端点（见 NOT_LINKABLE_KINDS 的说明）
+      linkable: NOT_LINKABLE_KINDS.indexOf(kind) === -1,
       ...props,
     });
     this.__buildShape();
@@ -282,6 +300,9 @@ export default class FlowNode extends ICEGroup {
       bandSize: preset.bandSize,
       fill: !preset.transparent,
       interactive: false,
+      // 装饰子组件不参与「可连接」判定：可连接性由外层 FlowNode 按 kind 决定
+      // （否则泳道/池的**内部形状**会被连线插槽系统当成可连接组件，插槽贴到它们身上）
+      linkable: false,
       showMinBoundingBox: false,
       showMaxBoundingBox: false,
       style: {
@@ -320,6 +341,7 @@ export default class FlowNode extends ICEGroup {
             ellipsis: '…',
             transform: { rotate: -90 },
             interactive: false,
+            linkable: false,
             stroke: false,
             showMinBoundingBox: false,
             showMaxBoundingBox: false,
@@ -340,6 +362,7 @@ export default class FlowNode extends ICEGroup {
             wrap: !topLeftLabel,
             maxLines: 2,
             interactive: false,
+            linkable: false,
             stroke: false,
             showMinBoundingBox: false,
             showMaxBoundingBox: false,
@@ -381,6 +404,7 @@ export default class FlowNode extends ICEGroup {
             stroke: true,
             fill: false,
             interactive: false,
+            linkable: false,
             showMinBoundingBox: false,
             showMaxBoundingBox: false,
             taskType,
@@ -401,6 +425,7 @@ export default class FlowNode extends ICEGroup {
           stroke: true,
           fill: false,
           interactive: false,
+          linkable: false,
           showMinBoundingBox: false,
           showMaxBoundingBox: false,
           style: { strokeStyle, lineWidth: 1.4 },
