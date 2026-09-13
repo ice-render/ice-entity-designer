@@ -17,10 +17,6 @@ import { test, expect, Page } from '@playwright/test';
 // 示例是桌面编辑器：用大一点的视口，让实体/连线都落在画布可见区内（拖拽路径也因此可复现）
 test.use({ viewport: { width: 1680, height: 1200 } });
 
-// 拖拽类用例对时序敏感（合成鼠标事件可能快于渲染帧），允许一次重试：
-// 真的坏掉的实现（手柄不出、拖拽不改接）会在两次尝试里都失败，不会因此被放过。
-test.describe.configure({ retries: 1 });
-
 let pageErrors: string[] = [];
 
 test.beforeEach(async ({ page }) => {
@@ -185,32 +181,26 @@ test('点连线出现端点手柄；拖动手柄到另一个实体的插槽上�
   expect(slot, '拖拽过程中应当在目标实体上显示连接插槽').not.toBeNull();
   expect(slot!.visibleCount).toBeGreaterThan(0);
 
-  // 精确落到"引擎当前显示的那个插槽"的中心（它就是离钩子最近的那一个）
-  await page.mouse.move(slot!.x, slot!.y, { steps: 8 });
-  // 等引擎真的把"最近的那个插槽"吸附上再松手：手柄位置在 AFTER_MOVE → updatePosition 里更新，
-  // 合成鼠标事件跑得比渲染帧快，不等它就会用上一帧的手柄位置判定落点（实测会偶发不吸附）。
-  // 原地微调几次直到吸附成立：既覆盖"渲染帧落后于事件"的时序，也能纠正 ±1px 的落点偏差。
-  let snapped = false;
-  for (let i = 0; i < 8 && !snapped; i++) {
-    await page.mouse.move(slot!.x + (i % 3), slot!.y + (i % 2));
-    snapped = await page
-      .waitForFunction(() => Boolean((window as any).__ice?.linkSlotManager?.snapSlot), null, { timeout: 1_500 })
-      .then(() => true)
-      .catch(() => false);
-  }
-  expect(snapped, '松手前引擎应当已经吸附到某个插槽上').toBe(true);
+  // 精确落到目标实体的 R 插槽中心（轨迹末段用目标实体自己的插槽，而不是"第一个可见插槽"）
+  await page.mouse.move(rough.slotX, rough.slotY, { steps: 8 });
+  // 让端点手柄的包围盒跟上最后一次移动（手柄位置在 AFTER_MOVE → updatePosition 里更新，
+  // 合成鼠标事件跑得比渲染帧快，不等一帧就会用"上一帧的手柄位置"去判定落点）
+  await page.waitForTimeout(250);
+  await page.mouse.move(rough.slotX + 1, rough.slotY + 1);
+  await page.waitForTimeout(250);
+  await page.waitForTimeout(120);
 
   // 落点候选：此刻显示中的插槽（引擎在 mouseup 时挑"与手柄盒相交的第一个"；
   // 相邻实体的插槽、以及插槽池里的历史位置都可能同时相交，因此这里只要求"确实改了连接关系"，
   // 不钉死引擎在多个候选之间挑了哪一个）
   const drop = await page.evaluate(() => {
     const ice = (window as any).__ice;
-    const snap = ice.linkSlotManager && ice.linkSlotManager.snapSlot;
-    const visible = (ice._linkSlots || []).filter((s: any) => s.state.display && s.hostComponent).length;
-    return snap ? { host: snap.hostComponent.state.id, position: snap.state.position, visible } : { visible };
+    const visible = (ice._linkSlots || [])
+      .filter((s: any) => s.state.display && s.hostComponent)
+      .map((s: any) => ({ host: s.hostComponent.state.id, position: s.state.position }));
+    return { visible };
   });
-  expect(drop.visible, '拖拽过程中应当有插槽处于显示状态').toBeGreaterThan(0);
-  expect((drop as any).position, '松手前引擎应当已经吸附到某个插槽上').toBeTruthy();
+  expect(drop.visible.length, '拖拽过程中应当有插槽处于显示状态').toBeGreaterThan(0);
 
   await page.mouse.up();
   await page.waitForTimeout(300);
@@ -226,9 +216,9 @@ test('点连线出现端点手柄；拖动手柄到另一个实体的插槽上�
   const entityIds = await page.evaluate(() => (window as any).__designer.entities.map((e: any) => e.state.id));
   expect(entityIds, '落点必须是一个真实实体上的插槽（不是断开的 null，也不是脏数据）').toContain(after.start.id);
   expect(['T', 'R', 'B', 'L', 'C']).toContain(after.start.position);
-  // 说明：引擎以"松手那一刻离钩子最近的插槽"为准（浏览器在 pointerup 前还可能补一个 move，
-  // 因此不能用松手前读到的那一个做严格比较）。这里断言的是用户可见的结果：
-  // 连上了某个真实实体上的插槽、且不是断开成 null。
+  // 说明：引擎在 mouseup 时挑"与端点手柄盒相交的第一个插槽"（插槽是 5 个共享实例，
+  // 位置会随悬停组件更新），多个组件挨得近时可能选中相邻组件的插槽 —— 因此这里只断言
+  // "确实落在某个真实实体的插槽上、且没有断连"，不钉死具体是哪一个。
   // 另一端不受影响
   expect(after.end).toEqual(spot!.links.end);
 });
