@@ -3,7 +3,7 @@
 <html lang="en">
   <meta charset="utf-8" />
   <title>IED-flowchart-editor</title>
-  <!-- 依赖只走本地 ../dist（IED 已把 ice-render 内核打包进产物），离线可跑、e2e 可复现。
+  <!-- 依赖走本地 node_modules/ice-render + ../dist（共享内核，不内联），离线可跑、e2e 可复现。
        流程图图元（FlowNode / FlowEdge / FlowDesigner）由 IED 库提供，本页只做 UI 编排。 -->
   <style>
     html,
@@ -247,6 +247,7 @@
       </aside>
     </div>
 
+    <script src="../node_modules/ice-render/dist/index.umd.js"></script>
     <script src="../dist/index.umd.js"></script>
     <script type="text/javascript">
       /* 流程图相关的类全部来自 IED 库（FlowNode / FlowEdge / FlowDesigner / FLOW_NODE_KINDS），

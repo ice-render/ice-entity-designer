@@ -1,14 +1,19 @@
+import babel from '@rollup/plugin-babel';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import strip from '@rollup/plugin-strip';
-import babel from 'rollup-plugin-babel';
-import { terser } from 'rollup-plugin-terser';
-import pkg from './package.json';
+import terser from '@rollup/plugin-terser';
+import { createRequire } from 'module';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const path = require('path');
+const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const pkg = require('./package.json');
 const license = require('rollup-plugin-license');
-
 const env = process.env.NODE_ENV;
 const extensions = ['.js', '.jsx', '.ts', '.tsx'];
 const CommonPlugins = [
@@ -17,6 +22,7 @@ const CommonPlugins = [
   commonjs(),
   babel({
     extensions,
+    babelHelpers: 'bundled',
     include: ['src/**/*'],
   }),
   env === 'production' &&
@@ -44,16 +50,12 @@ const CommonPlugins = [
     },
   }),
 ].filter(Boolean);
-// ice-render 内核在构建时被打包进产物，因此从 external 中排除；其余依赖保持外部
-const external = [...Object.keys(pkg.devDependencies || {}), ...Object.keys(pkg.peerDependencies || {})].filter(
-  (name) => name !== 'ice-render'
-);
+
+// ice-render 是 peer 依赖：保持 external，由宿主提供同一份引擎；其余依赖同样外部化。
+const external = [...Object.keys(pkg.devDependencies || {}), ...Object.keys(pkg.peerDependencies || {})];
 const globals = { 'ice-render': 'ICE' };
 
-/**
- * support config Intellisense
- * @type {import('rollup').RollupOptions[]}
- */
+/** @type {import('rollup').RollupOptions[]} */
 const configs = [
   {
     input: 'src/index.ts',
@@ -86,7 +88,7 @@ const configs = [
     },
     plugins: CommonPlugins,
   },
-  //React 绑定入口（子路径导出 ice-entity-designer/react，仅 ESM + CJS，不打 UMD）
+  // React 绑定入口（子路径导出 ice-entity-designer/react，仅 ESM + CJS，不打 UMD）
   {
     input: 'src/react/index.ts',
     external,
@@ -108,4 +110,5 @@ const configs = [
     plugins: CommonPlugins,
   },
 ];
+
 export default configs;
