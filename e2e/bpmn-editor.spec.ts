@@ -149,12 +149,66 @@ test('SVG 导出：矢量产物含池/泳道/节点/连线，可下载且与画�
   // 节点文字进的是 <text><tspan>，标题与任务名应当都在
   expect(svg).toContain('银行');
   expect(svg).toContain('身份核验');
+  // 泳道标题是**旋转 -90°** 的竖排（BPMN 惯例）：文字进 SVG，且带 -90° 的变换矩阵
+  expect(svg).toContain('受理岗');
+  expect(svg).toMatch(/matrix\(0\s-1\s1\s0/);
   // 图形确实是路径（不是把画布贴成一张位图）
   expect(svg).toContain('<path');
   expect(svg).not.toContain('<image');
   // 顺序流/消息流都在（示例里消息流是虚线）
   expect(svg).toContain('stroke-dasharray');
   await expect(page.locator('#validate-output')).toContainText('已导出 SVG');
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('泳道标题竖排：真实画布上旋转 -90°，居中在左侧名称带里', async ({ page }) => {
+  const info = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const lanes = designer.nodes.filter((node: any) => node.state.kind === 'bpmnLane');
+    const pool = designer.nodes.find((node: any) => node.state.kind === 'bpmnPool');
+    const span = (comp: any) => {
+      const box = comp.getMinBoundingBox(true).getMinAndMaxPoint();
+      return { w: box.maxX - box.minX, h: box.maxY - box.minY };
+    };
+    return lanes.map((lane: any) => {
+      const label = lane.labelComponent;
+      return {
+        title: lane.state.title,
+        rotate: label.state.transform.rotate,
+        label: span(label),
+        lane: span(lane),
+        bandSize: lane.shapeComponent.state.bandSize,
+        // 标签在泳道本地坐标里的中心（应等于名称带中心：bandSize/2, laneHeight/2）
+        centerX: label.state.left + label.state.width / 2,
+        centerY: label.state.top + label.state.height / 2,
+      };
+    }).concat([
+      {
+        title: pool.state.title,
+        rotate: pool.labelComponent.state.transform.rotate || 0,
+        label: span(pool.labelComponent),
+        lane: span(pool),
+        bandSize: pool.shapeComponent.state.bandSize,
+        centerX: 0,
+        centerY: 0,
+      },
+    ]);
+  });
+
+  const lanes = info.slice(0, -1);
+  const pool = info[info.length - 1];
+
+  expect(lanes.length).toBeGreaterThan(0);
+  lanes.forEach((lane: any) => {
+    expect(lane.rotate).toBe(-90);
+    expect(lane.label.w).toBeCloseTo(lane.bandSize, 1); // 厚度 = 名称带宽
+    expect(lane.label.h).toBeGreaterThan(lane.label.w); // 竖条
+    expect(lane.centerX).toBeCloseTo(lane.bandSize / 2, 1); // 居中在名称带里
+    expect(lane.centerY).toBeCloseTo(lane.lane.h / 2, 1);
+  });
+  // 池标题保持横向（顶部名称带）
+  expect(pool.rotate).toBe(0);
+  expect(pool.label.w).toBeGreaterThan(pool.label.h);
   expect((page as any).__errors).toEqual([]);
 });
 

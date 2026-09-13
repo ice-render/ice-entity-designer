@@ -89,6 +89,8 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
   包容 / 事件）、任务与子流程（用户 / 服务 / 脚本 / 发送 / 接收 / 手动角标）、数据对象、文本注释、池、泳道。
 - **池 → 泳道 → 节点是真嵌套**（引擎的容器能力），拖动池或泳道时内部图元与挂在它们上面的连线一起走；
   池的标题带与泳道的标题带不参与内容区，不会被内部图元压住。
+  池标题横排在顶部 32px 名称带里；**泳道标题按 BPMN 惯例逆时针旋转 90° 竖排**（读向自下而上），
+  居中放在左侧 32px 名称带里 —— 用的是组件变换（`ICEText.transform.rotate = -90`），不是引擎层竖排。
 - 三种流：`sequence` 顺序流、`message` 消息流（跨参与者，虚线 + 实心箭头）、`association` 关联
   （数据对象 / 注释）；顺序流可带条件表达式与「默认流」斜杠标记，标记是派生装饰，放在工具层、不污染文档。
 - **BPMN 语义校验**：每个池至少一个开始事件、顺序流不得跨池、消息流应连接不同参与者、网关分支是否齐全、
@@ -311,7 +313,7 @@ const report = fromBpmnXml(xml, bpmn); // 导入并重建（含池 / 泳道容�
 | 节点类型 | `createNode('bpmnEvent' \| 'bpmnTask' \| 'bpmnGateway' \| 'bpmnSubprocess' \| 'bpmnDataObject' \| 'bpmnAnnotation' \| 'bpmnPool' \| 'bpmnLane', props)`；预设见 `FLOW_NODE_KINDS` |
 | 语义属性 | 事件 `eventKind`（start / intermediate / end）+ `trigger`；网关 `gatewayType`；任务 / 子流程 `taskType` —— `updateNode()` 改完立即重建形状与角标 |
 | 连线 | `createEdge({ sourceId, targetId, flowType: 'sequence' \| 'message' \| 'association', label, condition, isDefault, linkShape })`；线型与箭头由 `flowType` 派生 |
-| 容器 | 池 `bpmnPool`（顶部 32px 标题带）、泳道 `bpmnLane`（左侧 32px 标题带）；建节点时按几何自动嵌套，拖动容器时内部图元与连线一起走 |
+| 容器 | 池 `bpmnPool`（顶部 32px 标题带，标题横排）、泳道 `bpmnLane`（左侧 32px 标题带，标题**旋转 -90° 竖排**、居中）；建节点时按几何自动嵌套，拖动容器时内部图元与连线一起走 |
 | 校验与互操作 | `validateBpmn()`、`toBpmnXml(designer)`、`fromBpmnXml(xml, designer)` |
 | 其余 | 与 `FlowDesigner` 完全相同：`nodes` / `edges` / `select()` / `updateNode()` / `updateEdge()` / `remove()` / `undo()` / `redo()` / `serialize()` / `load()` / `fitViewport()` / `subscribe()` |
 

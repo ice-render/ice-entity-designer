@@ -108,7 +108,9 @@ describe('BPMN 连线类型与派生样式', () => {
 
   it('条件流 / 默认流会生成派生标记，且标记不进入文档', () => {
     const { ice, designer } = makeCreditFlow();
-    const markers = ice.toolNodes.filter((node: any) => node.constructor.typeId === 'ice-entity-designer:BpmnFlowMarker');
+    const markers = ice.toolNodes.filter(
+      (node: any) => node.constructor.typeId === 'ice-entity-designer:BpmnFlowMarker'
+    );
     expect(markers.length).toBe(2);
     // 工具层不参与引擎序列化 → 文档里没有标记
     // 流标记是工具层组件，不进文档（typeId 带 namespace 后同样不该出现）
@@ -279,5 +281,87 @@ describe('BPMN 容器：真嵌套（引擎容器能力）', () => {
     expect(after.points).not.toEqual(before.points);
     expect(after.points[0][0] - before.points[0][0]).toBeCloseTo(80, 1);
     expect(after.points[0][1] - before.points[0][1]).toBeCloseTo(60, 1);
+  });
+});
+
+/**
+ * 泳道标题的竖排。
+ *
+ * BPMN 惯例（bpmn-js / Camunda Modeler / Visio 一致）：泳道的**名称带在左**，标题**逆时针旋转 90°**
+ * （读向自下而上）居中放在名称带里。此前我们把它当普通「左上角标题」横着写，13px 的中文标题
+ * （3 个字 ≈ 39px）比 32px 的名称带还宽，直接压进泳道内容区，和池的横向标题混在一起看很乱。
+ *
+ * 实现走**组件变换**（`transform.rotate = -90`，默认绕盒子中心转），不是引擎层竖排 —— 与
+ * 「竖排 / 富文本不做，交给应用层」的契约一致（见 ice-render 的 17-i18n-boundary.md）。
+ */
+describe('泳道标题竖排（旋转 -90°）', () => {
+  const findLane = (designer: any) => designer.nodes.find((node: any) => node.state.kind === 'bpmnLane');
+  const findPool = (designer: any) => designer.nodes.find((node: any) => node.state.kind === 'bpmnPool');
+
+  it('泳道标题逆时针 90°、居中在左侧名称带（盒子中心 = 名称带中心）', () => {
+    const { designer } = makeDesigner();
+    const pool = designer.createNode('bpmnPool', { title: '银行', left: 40, top: 40, width: 900, height: 300 });
+    const lane = designer.createNode('bpmnLane', { title: '审批岗', left: 40, top: 72, width: 900, height: 150 });
+    const label: any = findLane(designer).labelComponent;
+    const bandSize = 32; // FLOW_NODE_KINDS.bpmnLane.bandSize
+
+    expect(label.state.transform.rotate).toBe(-90);
+    // 旋转前的盒子是「长 = 泳道高、厚 = 名称带宽」的横条：绕盒子中心转 -90° 后正好落在名称带里
+    expect(label.state.height).toBe(bandSize);
+    expect(label.state.left + label.state.width / 2).toBeCloseTo(bandSize / 2, 5);
+    expect(label.state.top + label.state.height / 2).toBeCloseTo(lane.state.height / 2, 5);
+    expect(label.state.style.textAlign).toBe('center');
+    expect(label.state.style.textBaseline).toBe('middle');
+    expect(label.state.wrap).toBe(false);
+    // 名称带本身由形状画：分隔线在 x = bandSize
+    expect((lane as any).shapeComponent.state.bandSize).toBe(bandSize);
+    expect((pool as any).shapeComponent.state.band).toBe('top');
+  });
+
+  it('池的标题仍然是横向（顶部名称带），不受这次改动影响', () => {
+    const { designer } = makeDesigner();
+    designer.createNode('bpmnPool', { title: '银行', left: 40, top: 40, width: 900, height: 300 });
+    const label: any = findPool(designer).labelComponent;
+    expect(label.state.transform.rotate).toBeFalsy();
+    expect(label.state.height).toBe(18);
+    expect(label.state.style.textAlign).toBe('left');
+  });
+
+  it('其它「左上角标题」的图元（事件 / 网关）不受影响', () => {
+    const { designer } = makeDesigner();
+    const event = designer.createNode('bpmnEvent', { title: '开始', eventKind: 'start', left: 100, top: 100 });
+    const label: any = (event as any).labelComponent;
+    expect(label.state.transform.rotate).toBeFalsy();
+    expect(label.state.style.textAlign).toBe('left');
+  });
+
+  it('真实矩阵：旋转后泳道标题的包围盒是竖条（高 > 宽），池标题仍是横条', () => {
+    const { designer } = makeDesigner();
+    designer.createNode('bpmnPool', { title: '银行', left: 40, top: 40, width: 900, height: 300 });
+    const lane = designer.createNode('bpmnLane', { title: '审批岗', left: 40, top: 72, width: 900, height: 150 });
+    const laneLabel: any = findLane(designer).labelComponent;
+    const poolLabel: any = findPool(designer).labelComponent;
+
+    lane.getMinBoundingBox(true);
+    // 旋转后的包围盒是不可用 tl/br 直接相减的（角点跟着转了），要走 min/max 口径
+    const laneSpan = laneLabel.getMinBoundingBox(true).getMinAndMaxPoint();
+    const laneW = laneSpan.maxX - laneSpan.minX;
+    const laneH = laneSpan.maxY - laneSpan.minY;
+    expect(laneW).toBeCloseTo(32, 1); // 厚度 = 名称带宽
+    expect(laneH).toBeGreaterThan(laneW * 2); // 长度 = 泳道高（-8）
+
+    const poolSpan = poolLabel.getMinBoundingBox(true).getMinAndMaxPoint();
+    const poolW = poolSpan.maxX - poolSpan.minX;
+    const poolH = poolSpan.maxY - poolSpan.minY;
+    expect(poolW).toBeGreaterThan(poolH * 2); // 池标题仍是横条
+  });
+
+  it('改泳道高度后标题重新居中（applyPatch 会重建派生形状/标题）', () => {
+    const { designer } = makeDesigner();
+    const lane = designer.createNode('bpmnLane', { title: '风控岗', left: 40, top: 40, width: 900, height: 150 });
+    lane.applyPatch({ height: 240 });
+    const label: any = findLane(designer).labelComponent;
+    expect(label.state.top + label.state.height / 2).toBeCloseTo(120, 5);
+    expect(label.state.width).toBeGreaterThan(200);
   });
 });
