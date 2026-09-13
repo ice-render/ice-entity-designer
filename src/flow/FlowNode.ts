@@ -196,7 +196,7 @@ const DEFAULT_FONT_SIZE = 14;
  */
 export default class FlowNode extends ICEGroup {
   /** 稳定的类型标识（下游打包会 mangle 类名，判型不要用 constructor.name） */
-  public static readonly typeId = 'FlowNode';
+  public static readonly typeId = 'ice-entity-designer:FlowNode';
 
   protected shapeComponent: any = null;
   protected labelComponent: any = null;

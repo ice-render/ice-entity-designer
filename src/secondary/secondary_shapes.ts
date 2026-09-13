@@ -68,7 +68,7 @@ export const SECONDARY_STYLE = {
  * 每个派生部件带稳定 `role`，测试按 role 认记法。
  */
 export default class SecondarySymbol extends ICEGroup {
-  public static readonly typeId = 'SecondarySymbol';
+  public static readonly typeId = 'ice-entity-designer:SecondarySymbol';
 
   public parts: Array<{ role: string; component: any }> = [];
 
@@ -479,7 +479,7 @@ export default class SecondarySymbol extends ICEGroup {
  * 跳过全部子节点，端子排的端子在快照往返时会整套丢掉（BPMN 池/泳道目前就踩了这个坑）。
  */
 export class TerminalStrip extends ICEGroup {
-  public static readonly typeId = 'TerminalStrip';
+  public static readonly typeId = 'ice-entity-designer:TerminalStrip';
 
   constructor(props: any = {}) {
     super(

@@ -326,7 +326,7 @@
         }
         //判类型不要用 constructor.name：下游打包会 mangle 类名（Entity → Xr），判断会静默失效。
         //Entity / Relation 上挂了稳定标识 typeId，用它判断（压缩安全）。
-        return root && root.constructor && root.constructor.typeId === 'Entity' ? root : null;
+        return root && root.constructor && root.constructor.typeId === 'ice-entity-designer:Entity' ? root : null;
       }
 
       function entityCenterInCanvas(entity) {
@@ -1260,7 +1260,7 @@
           }
           //判类型不要用 constructor.name：下游打包会 mangle 类名（Relation → Br），判断会静默失效。
           //Relation / Entity 上都挂了稳定标识 typeId，用它判断（压缩安全）。
-          if (selected.constructor && selected.constructor.typeId === 'Relation') {
+          if (selected.constructor && selected.constructor.typeId === 'ice-entity-designer:Relation') {
             // key 绑定选中项 id：面板里的输入框是**非受控**（defaultValue）的，
             // 不换 key 的话 React 复用旧 DOM，切换选中后仍显示上一个对象的旧值
             //（用户照着旧值编辑，会写到新选中的对象上）。
@@ -1353,7 +1353,7 @@
           relShapeSelect &&
           selectedRel &&
           selectedRel.constructor &&
-          selectedRel.constructor.typeId === 'Relation' &&
+          selectedRel.constructor.typeId === 'ice-entity-designer:Relation' &&
           selectedRel.state.linkShape
         ) {
           relShapeSelect.value = selectedRel.state.linkShape;
@@ -1465,7 +1465,11 @@
       //工具栏「连线形态」：选中连线时直接改这条线；没选中时只作为新建连线的默认形态。
       document.getElementById('rel-shape').addEventListener('change', (evt) => {
         const selectedRel = designer.selected;
-        if (selectedRel && selectedRel.constructor && selectedRel.constructor.typeId === 'Relation') {
+        if (
+          selectedRel &&
+          selectedRel.constructor &&
+          selectedRel.constructor.typeId === 'ice-entity-designer:Relation'
+        ) {
           designer.updateRelation(selectedRel.state.id, { linkShape: evt.target.value });
           renderPanel();
           refreshHistoryButtons();

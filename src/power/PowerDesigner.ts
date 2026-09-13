@@ -11,6 +11,7 @@ import FlowEdge from '../flow/FlowEdge';
 import PowerSymbol, { POWER_SWITCH_KINDS } from './power_shapes';
 import type { PowerSymbolKind, PowerSwitchState } from './power_shapes';
 import { defaultVoltageColors, voltageColorOf } from './power_voltage';
+import { registerIEDType } from '../utils/type-registry';
 
 export type PowerIssue = { level: 'error' | 'warning'; message: string; id?: string };
 
@@ -36,7 +37,7 @@ export type PowerTopology = {
 
 /** 一次系统图的导线（导体）—— 复用引擎折线，颜色跟电压等级走 */
 export class PowerLine extends FlowEdge {
-  public static readonly typeId = 'PowerLine';
+  public static readonly typeId = 'ice-entity-designer:PowerLine';
 
   constructor(props: any = {}) {
     super({ ...props, label: props.label || '', style: { ...(props.style || {}) } });
@@ -78,8 +79,8 @@ export default class PowerDesigner extends FlowDesigner {
 
   constructor(ice: any) {
     super(ice);
-    this.ice.registerType(PowerSymbol.typeId, PowerSymbol as any);
-    this.ice.registerType(PowerLine.typeId, PowerLine as any);
+    registerIEDType(this.ice, PowerSymbol);
+    registerIEDType(this.ice, PowerLine);
   }
 
   public get nodes(): any[] {

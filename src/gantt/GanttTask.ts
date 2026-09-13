@@ -18,7 +18,7 @@ import { addDays, diffDays } from './gantt_date';
  * 并据此反推起始日期 —— 拖动不会产生「3 月 5 日的 13:47 开工」这种排期。
  */
 export default class GanttTask extends ICEGroup {
-  public static readonly typeId = 'GanttTask';
+  public static readonly typeId = 'ice-entity-designer:GanttTask';
 
   protected barComponent: ICERect | null = null;
   protected progressComponent: ICERect | null = null;

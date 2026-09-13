@@ -18,7 +18,7 @@ import merge from 'lodash/merge';
  * 判型与序列化都靠它（应用层不要用 constructor.name，打包会 mangle）。
  */
 export default class StateTransition extends ICEPolyLine {
-  public static readonly typeId = 'StateTransition';
+  public static readonly typeId = 'ice-entity-designer:StateTransition';
 
   constructor(props: any = {}) {
     super(StateTransition.arrangeParam(props));

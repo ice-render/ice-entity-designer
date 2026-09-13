@@ -48,7 +48,9 @@ test('加载：三相电流回路 + 端子排 + 保护装置齐全，二次校�
 test('端子排是容器：拖动端子排，端子跟着走；端子各自可接线', async ({ page }) => {
   const delta = await page.evaluate(() => {
     const designer = (window as any).__designer;
-    const strip = designer.nodes.find((item: any) => item.constructor.typeId === 'TerminalStrip');
+    const strip = designer.nodes.find(
+      (item: any) => item.constructor.typeId === 'ice-entity-designer:TerminalStrip',
+    );
     const terminal = designer.terminals[0];
     const before = terminal.getMinBoundingBox(true).tl.slice();
     strip.setPosition(strip.state.left + 50, strip.state.top + 20);

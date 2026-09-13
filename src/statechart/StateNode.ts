@@ -24,7 +24,7 @@ const PSEUDO_STATE_SIZE = 24;
  * - `composite` 复合状态：**容器** —— 名字靠左上，框里留给子状态；拖动它子状态一起走（引擎容器能力）
  */
 export default class StateNode extends ICEGroup {
-  public static readonly typeId = 'StateNode';
+  public static readonly typeId = 'ice-entity-designer:StateNode';
 
   protected shapeComponent: any = null;
   protected innerRingComponent: any = null;

@@ -2,6 +2,7 @@ import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
 import { ENTITY_DOCUMENT_FIELDS, RELATION_DOCUMENT_FIELDS, validateDocumentNode } from './project_codec';
 import type { CodecField } from './project_codec';
+import { isEntityTypeId, isRelationTypeId } from './component_type_util';
 
 export const PROJECT_SCHEMA_VERSION = 1;
 
@@ -74,11 +75,11 @@ function validateNode(node: any, prefix: string, defaultTypeId: string, errors: 
   }
   const effectiveTypeId: string = node.typeId === undefined ? defaultTypeId : node.typeId;
   // 字段定义与 serializeProject() 共用同一份 codec（见 utils/project_codec.ts）
-  if (effectiveTypeId === Entity.typeId) {
+  if (isEntityTypeId(effectiveTypeId)) {
     validateDocumentNode(node, prefix, ENTITY_DOCUMENT_FIELDS, errors);
     return;
   }
-  if (effectiveTypeId === Relation.typeId) {
+  if (isRelationTypeId(effectiveTypeId)) {
     validateDocumentNode(node, prefix, RELATION_DOCUMENT_FIELDS, errors);
     return;
   }

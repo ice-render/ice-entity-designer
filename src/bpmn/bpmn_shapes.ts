@@ -41,7 +41,7 @@ function localBox(component: any) {
  * state.trigger:   'none' | 'message' | 'timer' | 'error' | 'terminate'
  */
 export class BpmnEventShape extends ICEPath {
-  public static readonly typeId = 'BpmnEventShape';
+  public static readonly typeId = 'ice-entity-designer:BpmnEventShape';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);
@@ -103,7 +103,7 @@ export class BpmnEventShape extends ICEPath {
 
 /** 网关（菱形 + 内部符号）：排他 × / 并行 + / 包容 ○ / 事件网关（五边形） */
 export class BpmnGatewayShape extends ICEPath {
-  public static readonly typeId = 'BpmnGatewayShape';
+  public static readonly typeId = 'ice-entity-designer:BpmnGatewayShape';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);
@@ -161,7 +161,7 @@ export class BpmnGatewayShape extends ICEPath {
 
 /** 任务类型角标（左上角小图标，尺寸固定 12×12，由节点定位） */
 export class BpmnTaskIcon extends ICEPath {
-  public static readonly typeId = 'BpmnTaskIcon';
+  public static readonly typeId = 'ice-entity-designer:BpmnTaskIcon';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);
@@ -237,7 +237,7 @@ export class BpmnTaskIcon extends ICEPath {
 
 /** 子流程折叠标记（底部居中的「+」小方块） */
 export class BpmnSubprocessMarker extends ICEPath {
-  public static readonly typeId = 'BpmnSubprocessMarker';
+  public static readonly typeId = 'ice-entity-designer:BpmnSubprocessMarker';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);
@@ -262,7 +262,7 @@ export class BpmnSubprocessMarker extends ICEPath {
 
 /** 数据对象：右上角折角矩形 */
 export class BpmnDataObjectShape extends ICEPath {
-  public static readonly typeId = 'BpmnDataObjectShape';
+  public static readonly typeId = 'ice-entity-designer:BpmnDataObjectShape';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);
@@ -293,7 +293,7 @@ export class BpmnDataObjectShape extends ICEPath {
  * BPMN 2.0 的文本注释是闭合矩形，左侧竖线只是括号装饰，四条边都要有。
  */
 export class BpmnAnnotationShape extends ICEPath {
-  public static readonly typeId = 'BpmnAnnotationShape';
+  public static readonly typeId = 'ice-entity-designer:BpmnAnnotationShape';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);
@@ -323,7 +323,7 @@ export class BpmnAnnotationShape extends ICEPath {
  * `band` = 'left'（横向泳道，默认）| 'top'（池标题带）
  */
 export class BpmnLaneShape extends ICEPath {
-  public static readonly typeId = 'BpmnLaneShape';
+  public static readonly typeId = 'ice-entity-designer:BpmnLaneShape';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);
@@ -351,7 +351,7 @@ export class BpmnLaneShape extends ICEPath {
 
 /** 顺序流上的条件/默认标记（小菱形 / 斜杠），尺寸固定 14×14 */
 export class BpmnFlowMarker extends ICEPath {
-  public static readonly typeId = 'BpmnFlowMarker';
+  public static readonly typeId = 'ice-entity-designer:BpmnFlowMarker';
 
   protected createPathObject(): any {
     const { w, h, x, y } = localBox(this);

@@ -47,10 +47,10 @@ describe('电力应用层 · 建图', () => {
     const { designer } = makeDesigner();
     const { breaker } = buildSimpleBus(designer);
 
-    expect(breaker.constructor.typeId).toBe('PowerSymbol');
+    expect(breaker.constructor.typeId).toBe(PowerSymbol.typeId);
     expect(designer.nodes.length).toBe(3);
     expect(designer.edges.length).toBe(2);
-    expect(designer.edges[0].constructor.typeId).toBe('PowerLine');
+    expect(designer.edges[0].constructor.typeId).toBe(PowerLine.typeId);
   });
 
   it('导体的颜色跟电压等级走；母线/设备也按色标着色', () => {
@@ -232,8 +232,8 @@ describe('电力应用层 · 色标表', () => {
   });
 
   it('PowerSymbol / PowerLine 都有稳定 typeId（序列化靠它，不靠类名）', () => {
-    expect(PowerSymbol.typeId).toBe('PowerSymbol');
-    expect(PowerLine.typeId).toBe('PowerLine');
+    expect(PowerSymbol.typeId).toBe('ice-entity-designer:PowerSymbol');
+    expect(PowerLine.typeId).toBe('ice-entity-designer:PowerLine');
   });
 });
 

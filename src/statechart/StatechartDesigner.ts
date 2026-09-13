@@ -8,6 +8,7 @@
 import FlowDesigner from '../flow/FlowDesigner';
 import StateNode from './StateNode';
 import StateTransition from './StateTransition';
+import { registerIEDType } from '../utils/type-registry';
 
 export type StatechartIssue = { level: 'error' | 'warning'; message: string; id?: string };
 
@@ -23,8 +24,8 @@ export default class StatechartDesigner extends FlowDesigner {
 
   constructor(ice: any) {
     super(ice);
-    this.ice.registerType(StateNode.typeId, StateNode as any);
-    this.ice.registerType(StateTransition.typeId, StateTransition as any);
+    registerIEDType(this.ice, StateNode);
+    registerIEDType(this.ice, StateTransition);
   }
 
   public get nodes(): any[] {

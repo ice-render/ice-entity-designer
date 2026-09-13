@@ -31,7 +31,7 @@ export type GanttRulerOptions = {
  * 避免长排期把画布画满文字（这也是甘特工具通行做法）。
  */
 export default class GanttRuler extends ICEGroup {
-  public static readonly typeId = 'GanttRuler';
+  public static readonly typeId = 'ice-entity-designer:GanttRuler';
 
   constructor() {
     super({ left: 0, top: 0, width: 0, height: 0, fill: false, stroke: false, interactive: false, draggable: false });

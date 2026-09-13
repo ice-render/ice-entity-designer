@@ -32,7 +32,7 @@ const STEREOTYPE_BY_KIND: Record<UmlClassKind, string> = {
  */
 export default class UmlClass extends ICEGroup {
   /** 稳定类型标识（判型/序列化都用它，不要用 constructor.name：打包会被 mangle） */
-  public static readonly typeId = 'UmlClass';
+  public static readonly typeId = 'ice-entity-designer:UmlClass';
 
   protected stereotypeComponent: ICEText | null = null;
   protected nameComponent: ICEText | null = null;

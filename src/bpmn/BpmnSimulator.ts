@@ -14,7 +14,7 @@ import { ICECircle } from 'ice-render';
  * 快照与 BPMN XML 导出，一旦 `stop()` 就干净退场。
  */
 export class SimTokenDot extends ICECircle {
-  public static readonly typeId = 'SimToken';
+  public static readonly typeId = 'ice-entity-designer:SimToken';
 
   constructor(props: any = {}) {
     super({ radius: 7, stroke: false, interactive: false, zIndex: 10000020, ...props });

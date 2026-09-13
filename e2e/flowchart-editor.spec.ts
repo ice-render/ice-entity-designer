@@ -98,8 +98,14 @@ test('加载：示例流程就绪、画布有落墨、零控制台报错', async
       children: node.childNodes.map((child: any) => child.constructor.typeId || child.constructor.name),
     }));
   });
-  expect(kinds.find((item: any) => item.kind === 'decision').children).toEqual(['FlowDiamond', 'ICEText']);
-  expect(kinds.find((item: any) => item.kind === 'io').children).toEqual(['FlowParallelogram', 'ICEText']);
+  expect(kinds.find((item: any) => item.kind === 'decision').children).toEqual([
+    'ice-entity-designer:FlowDiamond',
+    'ICEText',
+  ]);
+  expect(kinds.find((item: any) => item.kind === 'io').children).toEqual([
+    'ice-entity-designer:FlowParallelogram',
+    'ICEText',
+  ]);
   expect(kinds.filter((item: any) => item.kind === 'terminator').length).toBe(4);
 
   const painted = await page.evaluate(() => {
@@ -274,7 +280,7 @@ test('属性面板：选中节点可改标题/类型/配色，选中连线可改
     };
   });
   expect(switched.kind).toBe('decision');
-  expect(switched.children).toEqual(['FlowDiamond', 'ICEText']);
+  expect(switched.children).toEqual(['ice-entity-designer:FlowDiamond', 'ICEText']);
 
   const edgeId = await page.evaluate(() => (window as any).__designer.edges[0].state.id);
   await page.evaluate((id) => (window as any).__designer.select(id), edgeId);
@@ -403,7 +409,9 @@ test('联动：画布拖动节点后，右侧 JSON 与属性面板同步（回�
   const jsonNode = await page.evaluate(() => {
     const parsed = JSON.parse(document.getElementById('json-output')?.textContent || '{}');
     // v2 文档：scene 是引擎的原生序列化产物（{ type, state, childNodes }）
-    const nodeData = parsed.scene.childNodes.filter((item: any) => item.type === 'FlowNode')[2];
+    const nodeData = parsed.scene.childNodes.filter(
+      (item: any) => item.type === 'ice-entity-designer:FlowNode',
+    )[2];
     return { left: nodeData.state.left, top: nodeData.state.top };
   });
   expect(jsonNode.left).toBeCloseTo(node.left, 3);
@@ -532,7 +540,8 @@ test('清空后可从零建流程：新增节点 + 连线 + 导出 JSON', async 
   const json = await page.textContent('#json-output');
   // v2：文档即引擎 payload（scene.childNodes，节点类型由 type 字段标识）
   expect(json).toContain('"scene"');
-  expect(json).toContain('"FlowNode"');
-  expect(json).toContain('"FlowEdge"');
+  // typeId 一律带 namespace（canonical 形式）：无 namespace 的旧类名不被识别
+  expect(json).toContain('"ice-entity-designer:FlowNode"');
+  expect(json).toContain('"ice-entity-designer:FlowEdge"');
   expect((page as any).__errors).toEqual([]);
 });

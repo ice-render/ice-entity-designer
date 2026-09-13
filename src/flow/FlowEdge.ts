@@ -18,7 +18,7 @@ export type FlowPort = 'T' | 'R' | 'B' | 'L' | 'C';
  */
 export default class FlowEdge extends ICEVisioLink {
   /** 稳定类型标识。声明为 `string`（而不是字面量类型）：域包可以派生自己的导体类型（如 PowerLine） */
-  public static readonly typeId: string = 'FlowEdge';
+  public static readonly typeId: string = 'ice-entity-designer:FlowEdge';
 
   /** 连线没有子组件；声明派生可保证将来即使加了内部装饰也不会被重复序列化 */
   public hasDerivedChildren(): boolean {

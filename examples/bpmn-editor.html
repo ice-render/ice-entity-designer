@@ -313,7 +313,7 @@
           return element;
         };
 
-        if (selected.constructor.typeId === 'FlowEdge') {
+        if (selected.constructor.typeId === 'ice-entity-designer:FlowEdge') {
           const edge = selected;
           controls = {
             label: row('标签', input('label', edge.state.label, (value) => designer.updateEdge(edge.state.id, { label: value }))),
@@ -563,7 +563,7 @@
         if (linking) {
           const node = rootNodeAt(evt.offsetX, evt.offsetY);
           const typeId = node && node.constructor && node.constructor.typeId;
-          if (typeId !== 'FlowNode' && typeId !== 'FlowEdge') {
+          if (typeId !== 'ice-entity-designer:FlowNode' && typeId !== 'ice-entity-designer:FlowEdge') {
             return;
           }
           evt.preventDefault();

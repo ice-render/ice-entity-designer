@@ -66,8 +66,8 @@ function sceneNodes(json: string): any[] {
 describe('FlowDesigner 构造与类型注册', () => {
   it('注册 FlowNode / FlowEdge 并订阅 mousedown', () => {
     const { ice, designer } = makeDesigner();
-    expect(ice.getTypeId(FlowNode)).toBe('FlowNode');
-    expect(ice.getTypeId(FlowEdge)).toBe('FlowEdge');
+    expect(ice.getTypeId(FlowNode)).toBe('ice-entity-designer:FlowNode');
+    expect(ice.getTypeId(FlowEdge)).toBe('ice-entity-designer:FlowEdge');
     expect((ice.evtBus.listeners['mousedown'] || []).length).toBe(1);
     expect(designer.nodes).toEqual([]);
     expect(designer.edges).toEqual([]);
@@ -191,7 +191,7 @@ describe('FlowDesigner 快照', () => {
     const first = designer.serialize();
     expect(JSON.parse(first)).toMatchObject({ version: 2, kind: 'flowchart' });
     // v2 用引擎的序列化产物当 payload：节点类型由引擎的 typeId 分派
-    expect(sceneNodes(first).map((item: any) => item.type)).toContain('FlowNode');
+    expect(sceneNodes(first).map((item: any) => item.type)).toContain('ice-entity-designer:FlowNode');
     expect(validateFlowSnapshot(JSON.parse(first))).toEqual({ valid: true, errors: [] });
 
     designer.load(first);
@@ -223,14 +223,23 @@ describe('FlowDesigner 快照', () => {
         version: 1,
         kind: 'flowchart',
         nodes: [
-          { id: 'n1', typeId: 'FlowNode', kind: 'process', title: 'A', left: 0, top: 0, width: 220, height: 80 },
-          { id: 'x1', typeId: 'Entity', title: 'Alien' },
+          {
+            id: 'n1',
+            typeId: 'ice-entity-designer:FlowNode',
+            kind: 'process',
+            title: 'A',
+            left: 0,
+            top: 0,
+            width: 220,
+            height: 80,
+          },
+          { id: 'x1', typeId: 'ice-entity-designer:Entity', title: 'Alien' },
         ],
-        edges: [{ id: 'e1', typeId: 'Relation', sourceId: 'n1', targetId: 'n1' }],
+        edges: [{ id: 'e1', typeId: 'ice-entity-designer:Relation', sourceId: 'n1', targetId: 'n1' }],
       })
     );
     expect(report).toMatchObject({ loaded: true, nodes: 1, edges: 0 });
-    expect(report.skipped).toEqual(['Entity', 'Relation']);
+    expect(report.skipped).toEqual(['ice-entity-designer:Entity', 'ice-entity-designer:Relation']);
   });
 
   it('节点文字颜色 / 字号可改，并随快照往返（回归：此前是写死的）', () => {
@@ -261,7 +270,7 @@ describe('FlowDesigner 快照', () => {
     });
 
     const first = designer.serialize();
-    const firstEdge = sceneNodes(first).find((item: any) => item.type === 'FlowEdge');
+    const firstEdge = sceneNodes(first).find((item: any) => item.type === 'ice-entity-designer:FlowEdge');
     expect(firstEdge.state.style.strokeStyle).toBe('#0284c7');
     expect(firstEdge.state.labelStyle.fillStyle).toBe('#b91c1c');
 
@@ -305,7 +314,16 @@ describe('FlowDesigner 快照', () => {
       version: 1,
       kind: 'flowchart',
       nodes: [
-        { id: 'n1', typeId: 'FlowNode', kind: 'decision', title: '旧格式', left: 10, top: 20, width: 200, height: 120 },
+        {
+          id: 'n1',
+          typeId: 'ice-entity-designer:FlowNode',
+          kind: 'decision',
+          title: '旧格式',
+          left: 10,
+          top: 20,
+          width: 200,
+          height: 120,
+        },
       ],
       edges: [],
     });

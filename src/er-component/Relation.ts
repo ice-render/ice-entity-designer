@@ -22,7 +22,7 @@ export default class Relation extends ICEVisioLink {
    * 稳定的类型标识。判型与序列化都用它，**不要用 `constructor.name`** ——
    * 下游打包会 mangle 类名（实测 webpack 生产构建下 Relation → `Br`），基于类名的判断会静默失效。
    */
-  public static readonly typeId = 'Relation';
+  public static readonly typeId = 'ice-entity-designer:Relation';
 
   /** 连线没有子组件；声明派生以保证引擎序列化只持久化自身 state */
   public hasDerivedChildren(): boolean {
