@@ -213,6 +213,11 @@ designer.undo();
 #### 5.1 项目快照契约
 
 - 快照带 `schemaVersion`（当前 `1`）与每个节点的 `typeId`；载入时**按 `typeId` 分派构造函数**（走 ICE 注册表，下游 `ice.registerType()` 注册的领域图元同样可载入）。旧快照没有 `typeId` 时，按所在数组归位（`entities[]` → `Entity`，`relations[]` → `Relation`）。
+- 快照带 `createTime`（ISO 8601 UTC，如 `2026-09-13T07:15:45.655Z`）= 这份项目**首次创建**的时刻：
+  首次写出即定下并记在 `ice.documentMeta` 上（因此同一会话反复 `serializeProject()` 结果稳定，undo/redo 的快照回放依赖这一点），
+  载入别人的快照时读回来，于是「打开 → 编辑 → 保存」不会被改写；缺失 / 脏值（例如旧的
+  `2022/1/1 00:00:00`）会归一化成 ISO 或回退到当前时刻。**没有 `lastModifyTime`**——每次写出都会变，
+  留着会破坏「两次序列化结果相同」的契约。
 - **`typeId` 一律是 `namespace:Type` 格式**（2026-09-13 起）：本包的领域图元统一用 `ice-entity-designer:*`
   （`ice-entity-designer:Entity`、`ice-entity-designer:FlowNode`、`ice-entity-designer:GanttTask`…），
   与引擎内置的 `ice-render:*`、图表的 `ice-chart:*` 分属不同命名空间，因此**跨包不会撞名**。
