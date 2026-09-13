@@ -101,6 +101,13 @@ export default class BpmnSimulator {
   private seq = 0;
   private lastFrameAt = 0;
   private frameHandler: any = null;
+  /**
+   * 运行前宿主对「常驻帧」的设置（`ice.setContinuousFrames`）。
+   *
+   * 仿真完全靠 `ICE_FRAME_EVENT` 推进，而引擎在「无脏帧、无动画」时会**停掉帧循环**，
+   * 所以运行期间必须显式申请常驻帧；`null` = 本次运行没有申请过（无需归还）。
+   */
+  private hostContinuousFrames: boolean | null = null;
 
   constructor(designer: any, options: BpmnSimulatorOptions = {}) {
     this.designer = designer;
@@ -150,6 +157,7 @@ export default class BpmnSimulator {
       this.finished = true;
     }
     this.running = true;
+    this.__acquireContinuousFrames();
     // 帧驱动：用引擎的帧事件，不自己起 rAF（Node 环境没有帧事件，测试用 step 手动推进）
     this.frameHandler = () => {
       const now = Date.now();
@@ -167,10 +175,31 @@ export default class BpmnSimulator {
       this.designer.ice.evtBus.off('ICE_FRAME_EVENT', this.frameHandler, this);
     }
     this.frameHandler = null;
+    this.__releaseContinuousFrames();
     this.tokens.forEach((token) => this.__removeComponent(token));
     this.tokens = [];
     this.running = false;
     this.lastFrameAt = 0;
+  }
+
+  /**
+   * 向引擎申请「常驻帧」——没有它，引擎的空闲停帧会让令牌停摆（真实浏览器故障，2026-09-13 修）。
+   * 记下宿主原来的设置，停止时原样归还（不侵占宿主自己的常驻帧诉求）。
+   */
+  private __acquireContinuousFrames(): void {
+    const ice: any = this.designer && this.designer.ice;
+    if (!ice || typeof ice.setContinuousFrames !== 'function') return;
+    if (this.hostContinuousFrames === null) {
+      this.hostContinuousFrames = typeof ice.isContinuousFrames === 'function' ? !!ice.isContinuousFrames() : false;
+    }
+    ice.setContinuousFrames(true);
+  }
+
+  private __releaseContinuousFrames(): void {
+    const ice: any = this.designer && this.designer.ice;
+    if (!ice || typeof ice.setContinuousFrames !== 'function' || this.hostContinuousFrames === null) return;
+    ice.setContinuousFrames(this.hostContinuousFrames);
+    this.hostContinuousFrames = null;
   }
 
   /** 清空令牌与访问记录（可重跑） */

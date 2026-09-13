@@ -189,12 +189,60 @@ describe('BPMN 令牌仿真 · 生命周期', () => {
 
     simulator.stop();
     expect(simulator.getTokens().length).toBe(0);
-    expect(ice.toolNodes.filter((node: any) => node.constructor.typeId === 'ice-entity-designer:SimToken').length).toBe(0);
+    expect(ice.toolNodes.filter((node: any) => node.constructor.typeId === 'ice-entity-designer:SimToken').length).toBe(
+      0
+    );
 
     simulator.reset();
     expect(simulator.getVisitedNodeIds().length).toBe(0);
     simulator.start();
     runUntilIdle(simulator);
     expect(simulator.isFinished()).toBe(true);
+  });
+});
+
+/**
+ * 帧驱动契约（2026-09-13）：
+ *
+ * 仿真的推进**完全**挂在引擎的 `ICE_FRAME_EVENT` 上（自己不另起 rAF），
+ * 而引擎从 2.2 起会在「没有脏帧、没有动画在推进」时**停掉帧循环**（省电，见引擎 18 §3.4）。
+ * 于是"挂上监听"不等于"帧还会来"—— 运行期间必须向引擎申请常驻帧，停止时归还，
+ * 否则令牌在真实浏览器里会停在原地（本用例就是这条真实故障的回归钉子）。
+ */
+describe('BPMN 令牌仿真 · 与引擎帧调度的契约', () => {
+  it('运行期间申请常驻帧，停止后归还', () => {
+    const { ice, designer } = makeDesigner();
+    simpleFlow(designer);
+    const simulator = new BpmnSimulator(designer);
+
+    expect(ice.isContinuousFrames()).toBe(false);
+    simulator.start();
+    expect(ice.isContinuousFrames()).toBe(true);
+    simulator.stop();
+    expect(ice.isContinuousFrames()).toBe(false);
+  });
+
+  it('宿主本来就要求常驻帧时，仿真停止不得把它关掉', () => {
+    const { ice, designer } = makeDesigner();
+    simpleFlow(designer);
+    ice.setContinuousFrames(true);
+    const simulator = new BpmnSimulator(designer);
+
+    simulator.start();
+    expect(ice.isContinuousFrames()).toBe(true);
+    simulator.stop();
+    expect(ice.isContinuousFrames()).toBe(true);
+  });
+
+  it('多次 start 不会把「常驻帧」的申请叠成计数泄漏（stop 一次即归还）', () => {
+    const { ice, designer } = makeDesigner();
+    simpleFlow(designer);
+    const simulator = new BpmnSimulator(designer);
+
+    simulator.start();
+    simulator.start();
+    expect(ice.isContinuousFrames()).toBe(true);
+    simulator.stop();
+    expect(ice.isContinuousFrames()).toBe(false);
   });
 });
