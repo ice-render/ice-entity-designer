@@ -225,10 +225,13 @@ export default class EntityDesigner {
       }
       return normalized;
     }
+    // 没有可用值（首次写出 / 数据里缺失或脏值）→ 用当前时刻，并**记住它**：
+    // 否则同一会话里每次 serializeProject() 都会取一次 now，结果不稳定。
+    const now = new Date().toISOString();
     if (ice && ice.documentMeta) {
-      delete ice.documentMeta.createTime;
+      ice.documentMeta.createTime = now;
     }
-    return new Date().toISOString();
+    return now;
   }
 
   /**

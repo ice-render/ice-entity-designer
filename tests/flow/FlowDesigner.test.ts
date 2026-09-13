@@ -314,6 +314,8 @@ describe('FlowDesigner 快照', () => {
     });
 
     it('快照带 ISO 的 createTime、不带每次都会变的 lastModifyTime', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-09-13T00:00:00.000Z'));
       const { designer } = makeDesigner();
       designer.createNode('process', { title: 'A' });
       const snapshot: any = JSON.parse(designer.serialize());
@@ -321,6 +323,10 @@ describe('FlowDesigner 快照', () => {
       expect(snapshot.createTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       expect(snapshot.lastModifyTime).toBeUndefined();
       expect(snapshot.scene.lastModifyTime).toBeUndefined();
+
+      // 推进时钟再写一次：createTime 必须稳定（否则 undo/redo 的快照回放会失效）
+      jest.setSystemTime(new Date('2026-09-13T00:10:00.000Z'));
+      expect(JSON.parse(designer.serialize()).createTime).toBe(snapshot.createTime);
     });
 
     it('「载入 → 再保存」保留 createTime（只有内容在变）', () => {
