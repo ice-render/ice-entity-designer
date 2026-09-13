@@ -25,3 +25,10 @@
 仿真 / 动画等应用层逐帧逻辑必须遵守引擎的帧调度契约：自行监听 `ICE_FRAME_EVENT` 做计算时，
 要 `ice.setContinuousFrames(true)`（用完归还），否则引擎空闲停帧会让逻辑停摆
 （见 `src/bpmn/BpmnSimulator.ts` 的 `__acquireContinuousFrames`）。
+
+**连线端点手柄（hook / slot）**：本仓所有域包的连线都是 `transformable: false`（记法不可变换，
+不给旋转/缩放手柄）—— 这**不影响**"点连线出现端点手柄、拖动端点改连接"的能力
+（引擎把端点手柄独立到 `linkEditable` 默认开；该修复在引擎 dev 上，随下一个补丁版发布）。
+回归：`e2e/link-hooks.spec.ts`（点线 → 手柄可见 →
+拖拽中出插槽 → 落在插槽上改接）。改 `Relation` / 各域包连线类时不要动 `transformable` 的语义，
+也不要往 `project_codec.ts` 之外新增 state 键（`tests/designer/codec-completeness.test.ts` 会拦）。
