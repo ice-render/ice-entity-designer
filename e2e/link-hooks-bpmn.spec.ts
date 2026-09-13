@@ -92,9 +92,13 @@ test('端点手柄居中在连线端点上，且拖动后插槽贴着悬停的�
     const canvas = document.querySelector('canvas') as HTMLCanvasElement;
     const rect = canvas.getBoundingClientRect();
     const found: any[] = [];
-    for (const c of ice.childNodes || []) {
-      if (c.state && c.state.linkable && !c.isLine && typeof c.state.title === 'string') found.push(c);
-    }
+    const walk = (nodes: any[]) => {
+      for (const c of nodes || []) {
+        if (c.state && c.state.linkable && !c.isLine && typeof c.state.title === 'string') found.push(c);
+        walk(c.childNodes);
+      }
+    };
+    walk(ice.childNodes || []);
     const task = found.find((c) => c.state.title === '身份核验') || found[0];
     const b = task.getMinBoundingBox(true);
     const [sx, sy] = ice.worldToScreen(b.center[0], b.center[1]);

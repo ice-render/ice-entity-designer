@@ -32,3 +32,20 @@
 回归：`e2e/link-hooks.spec.ts`（点线 → 手柄可见 →
 拖拽中出插槽 → 落在插槽上改接）。改 `Relation` / 各域包连线类时不要动 `transformable` 的语义，
 也不要往 `project_codec.ts` 之外新增 state 键（`tests/designer/codec-completeness.test.ts` 会拦）。
+
+## BPMN 可连接性（2026-09-13 确立）
+
+引擎的 `linkable` 是"能不能作为**任何**连线端点"的单一开关，本身不区分连线类型；本设计器目前只实现
+**顺序流（Sequence Flow）**，因此按顺序流语义取默认值（见 `src/flow/FlowNode.ts` 的 `NOT_LINKABLE_KINDS`）：
+
+| 图元 | 可作为顺序流端点 | 依据 |
+|---|---|---|
+| 事件 / 任务 / 网关 / 子流程 | ✅ | 流元素，顺序流的合法端点（起止事件的入边/出边限制属于流程校验，不在可连接性里表达） |
+| 池 Participant | ❌ | 顺序流**不得跨越池边界**；池只接受**消息流** —— 将来支持消息流时按**连线类型**判断，而不是放开这个开关 |
+| 泳道 Lane | ❌ | 组织分区，任何连线都不连它 |
+| 注释 Text Annotation | ❌ | 只能通过**关联 Association** 连到流元素 |
+| 数据对象 Data Object | ❌ | 只能通过**数据关联 Data Association** 连 |
+
+另外：FlowNode 的**内部装饰子组件**（形状 / 标签 / 角标）一律 `linkable: false` ——
+可连接性只由外层 FlowNode 按 kind 决定，否则泳道/池的内部形状会被插槽系统选中（插槽贴到它们身上，
+实测就是这样"错乱"的）。回归：`tests/bpmn/bpmn-linkable.test.ts`。
