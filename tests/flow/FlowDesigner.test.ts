@@ -308,6 +308,58 @@ describe('FlowDesigner 快照', () => {
     expect(designer.serialize()).toBe(json);
   });
 
+  describe('快照里的 createTime（文档出生时间）', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('快照带 ISO 的 createTime、不带每次都会变的 lastModifyTime', () => {
+      const { designer } = makeDesigner();
+      designer.createNode('process', { title: 'A' });
+      const snapshot: any = JSON.parse(designer.serialize());
+
+      expect(snapshot.createTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(snapshot.lastModifyTime).toBeUndefined();
+      expect(snapshot.scene.lastModifyTime).toBeUndefined();
+    });
+
+    it('「载入 → 再保存」保留 createTime（只有内容在变）', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-09-13T00:00:00.000Z'));
+
+      const { designer } = makeDesigner();
+      designer.createNode('process', { title: 'A' });
+      const first: any = JSON.parse(designer.serialize());
+      expect(first.createTime).toBe('2026-09-13T00:00:00.000Z');
+
+      jest.setSystemTime(new Date('2026-09-13T06:00:00.000Z'));
+      const { designer: other } = makeDesigner();
+      other.load(JSON.stringify(first));
+      other.createNode('decision', { title: 'B' });
+      const second: any = JSON.parse(other.serialize());
+
+      expect(second.createTime).toBe(first.createTime); // 出生时间不变
+      expect(second.scene.childNodes.length).toBeGreaterThan(first.scene.childNodes.length); // 内容确实变了
+    });
+
+    it('v1 历史文档没有 createTime：导出时取当前时刻', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-09-13T08:00:00.000Z'));
+
+      const { designer } = makeDesigner();
+      designer.load(
+        JSON.stringify({
+          version: 1,
+          kind: 'flowchart',
+          nodes: [{ id: 'n1', typeId: 'ice-entity-designer:FlowNode', kind: 'process', title: '旧' }],
+          edges: [],
+        })
+      );
+      const snapshot: any = JSON.parse(designer.serialize());
+      expect(snapshot.createTime).toBe('2026-09-13T08:00:00.000Z');
+    });
+  });
+
   it('兼容读取 v1（nodes/edges 数组）历史文档，再导出即为 v2', () => {
     const { designer } = makeDesigner();
     const legacy = JSON.stringify({
