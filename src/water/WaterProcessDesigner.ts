@@ -42,6 +42,19 @@ export type WaterFlowTrace = {
   blockedAt?: string;
 };
 
+/**
+ * 介质线型 → 虚线数组（点划线 = 长划 + 点）。
+ *
+ * 为什么不让引擎认 `'dashdot'`：`ICEPolyLine` 只把 `'dashed'` 映射成默认虚线，
+ * 其它取值会被当成实线 —— 那"信号线"就与水管画得一模一样了。
+ */
+export function dashPatternOf(lineType: 'solid' | 'dashed' | 'dashdot', lineWidth: number): number[] {
+  const w = Math.max(1, lineWidth);
+  if (lineType === 'dashed') return [w * 4, w * 4];
+  if (lineType === 'dashdot') return [w * 7, w * 3, w * 1.5, w * 3];
+  return [];
+}
+
 /** 管线标注：`DN400 污水` 这种「管径 + 介质」是给排水图纸的通行写法 */
 export function composePipeLabel(medium: WaterMedium, dn: string): string {
   const style = WATER_MEDIUM_STYLES[medium] || WATER_MEDIUM_STYLES.sewage;
@@ -66,7 +79,10 @@ export class WaterPipe extends FlowEdge {
         ? composePipeLabel(medium, this.state.dn)
         : this.state.label;
     this.setState({
-      lineType: style.lineType,
+      // 引擎（`ICEPolyLine`）只认 `solid` / `dashed` 两个值；**点划线靠 `lineDash` 表达**：
+      // 信号线与动力线是电气/信号回路的标准画法，用 'dashdot' 直接塞进 lineType 会被引擎静默忽略。
+      lineType: style.lineType === 'solid' ? 'solid' : 'dashed',
+      lineDash: dashPatternOf(style.lineType, Number((this.state.style || {}).lineWidth) || 1.4),
       label,
       style: { ...(this.state.style || {}), strokeStyle: style.color, fillStyle: style.color },
     } as any);
@@ -258,7 +274,9 @@ export default class WaterProcessDesigner extends FlowDesigner {
       if (!pipe.state.medium) {
         issues.push({ level: 'warning', code: 'pipe-missing-medium', message: '管线缺少介质标注', id: pipe.state.id });
       }
-      if (!String(pipe.state.dn || '').trim()) {
+      // 信号线与动力线不是管道：没有"管径"这个概念，不参与 DN 校验
+      const isCircuit = pipe.state.medium === 'signal' || pipe.state.medium === 'power';
+      if (!isCircuit && !String(pipe.state.dn || '').trim()) {
         issues.push({
           level: 'warning',
           code: 'pipe-missing-dn',
