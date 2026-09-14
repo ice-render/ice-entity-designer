@@ -77,6 +77,22 @@ export {
 export type { SecondarySymbolKind } from './secondary/secondary_shapes';
 export { parseDate, formatDate, addDays, diffDays, eachDay, tickLabel } from './gantt/gantt_date';
 
+// 给水排水工艺流程图（水厂 / 污水厂：AAO 主线 + 污泥线 + 在线监测）
+export { default as WaterProcessDesigner, WaterPipe, composePipeLabel } from './water/WaterProcessDesigner';
+export type { WaterIssue, WaterFlowTrace } from './water/WaterProcessDesigner';
+export {
+  default as WaterSymbol,
+  WATER_SYMBOL_KINDS,
+  WATER_SYMBOL_PRESETS,
+  WATER_MEDIUM_STYLES,
+  WATER_UNIT_KINDS,
+  WATER_EQUIPMENT_KINDS,
+  WATER_BOUNDARY_KINDS,
+  WATER_SLUDGE_KINDS,
+  WATER_STYLE,
+} from './water/water_shapes';
+export type { WaterSymbolKind, WaterMedium, WaterValveState, WaterSymbolPreset } from './water/water_shapes';
+
 // 文本互操作：PlantUML / Mermaid 类图语法子集（导入导出）
 export { toPlantUml, fromPlantUml, arrowOf, detectUmlDialect } from './uml/uml_text';
 export type { UmlTextImportResult } from './uml/uml_text';

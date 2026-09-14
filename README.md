@@ -4,12 +4,12 @@
 
 <h1 align="center">IED · ice entity designer</h1>
 
-<p align="center">基于 ice-render 的可视化建模工具集：一套引擎承载 8 个域包 —— ER、流程图、BPMN 2.0、UML 类图、状态机、甘特、电力一次、电力二次。</p>
+<p align="center">基于 ice-render 的可视化建模工具集：一套引擎承载 9 个域包 —— ER、流程图、BPMN 2.0、UML 类图、状态机、甘特、电力一次、电力二次、给水排水。</p>
 
 <p align="center">
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-047857.svg" /></a>
   <img alt="engine bundled" src="https://img.shields.io/badge/engine-bundled-047857.svg" />
-  <img alt="domain packs" src="https://img.shields.io/badge/domain%20packs-8-047857.svg" />
+  <img alt="domain packs" src="https://img.shields.io/badge/domain%20packs-9-047857.svg" />
   <img alt="tests" src="https://img.shields.io/badge/jest-295%20passed-047857.svg" />
   <img alt="typescript" src="https://img.shields.io/badge/TypeScript-4.6-3178c6.svg" />
 </p>
@@ -30,6 +30,7 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 | 甘特图 | 任务条 / 依赖线 / 关键路径 | Mermaid gantt 文本互操作 |
 | 电力一次系统图 | 单线图（23 种设备符号） | JB/T 5872-1991、GB/T 4728；电压一致 / 母线 T 接 / 五防校验 |
 | 电力二次回路 | 保护电流回路 + 端子排 | GB/T 4728.7、C37.2；回路编号 / 三相成组 / 端子号 / 接地校验 |
+| 给水排水工艺流程图 | 水厂 / 污水厂 AAO 主线 + 污泥线 | GB/T 50106 图例、GB 50014；工艺校验（进出线 / 介质管径 / 在线监测 / 污泥出路 / 内回流）+ 流径分析 |
 
 默认域包 ER 以「节点 = 实体，连线 = 关系」组织数据模型，把画布上的设计结果序列化为符合 TypeORM `EntitySchema` 规范的 Schema，从而将「结构设计」与「实体类 / CRUD 代码生成」直接衔接；其它域包复用同一套交互闭环（选择、创建、更新、删除、关系连接、校验与导出），只在**记法**与**语义校验**上做区分。
 
@@ -154,6 +155,13 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 <img src="./examples/assets/secondary-editor.png" alt="电力二次回路编辑器示例" />
 
+**给水排水工艺流程图**（`examples/water-editor.html`）—— 10 万 m³/d 市政污水厂 AAO 案例：
+进水 → 格栅 → 曝气沉砂池 → 初沉池 → 厌氧 / 缺氧 / 好氧 → 二沉池 → 混凝沉淀 → 滤池 → 消毒 → 在线监测 → 排放，
+再加混合液内回流、污泥回流与剩余污泥线（浓缩 → 脱水 → 外运）。管线按介质着色并标注管径，
+右侧「工艺校验」查进出线 / 介质管径 / 在线监测 / 污泥出路 / 内回流，「流径分析」看关阀之后通不通：
+
+<img src="./examples/assets/water-editor.png" alt="给水排水工艺流程图编辑器示例（市政污水厂 AAO 工艺）" />
+
 ## 4. 快速开始
 
 ```bash
@@ -172,6 +180,7 @@ npm run build
 | `examples/statechart-editor.html` | 状态机编辑器：伪状态 / 普通状态 / 复合状态容器、转移标签 `事件 [守卫] / 动作` |
 | `examples/gantt-editor.html` | 甘特编辑器：时间轴与按天吸附、依赖线、自动排程、关键路径、资源冲突校验、矢量导出 |
 | `examples/power-editor.html` | 电力一次系统图（单线图）编辑器：110kV 变电站案例（**110kV 双母线 + 10kV 单母线分段**两级电压，两回进线 / 两台主变 / 母联 / 母线 PT / 4 条 10kV 出线 / 电容器组 / 站用变，共 69 台设备），开关分合、带电分析与色标、五防相关校验 |
+| `examples/water-editor.html` | 给水排水工艺流程图：市政污水厂 AAO 工艺（19 个符号 / 21 条管线），介质 + 管径标注、工艺校验（进出线 / 在线监测 / 污泥出路 / 内回流）、流径分析与阀门工况、矢量导出 |
 | `examples/secondary-editor.html` | 电力**二次回路**（简化版）：110kV 线路保护电流回路 —— CT 三个二次绕组 → 三相电流回路（A411/B411/C411 + N411）→ 端子排（201～204）→ 线路保护装置，N 侧接地；二次校验（回路编号 / 三相成组 / 端子号唯一 / 必须接地） |
 | `examples/power-symbols.html` | 电力符号表：23 种一次设备符号（记法对齐 JB/T 5872-1991 与 GB/T 4728.1/3/4/6），可缩放平移、导出 SVG |
 | [`ice-entity-designer-react-demo`](../ice-entity-designer-react-demo) | 独立的 React 集成示例工程（webpack + TypeScript），涵盖 ref / hook / onChange / 受控模式 |
@@ -691,7 +700,7 @@ React 里可沿用 `createFlowSession` 的模式自建一层封装。
 ### 7.1 一个「域包（domain pack）」由什么组成
 
 域包 = **一个领域的记法 + 应用层 + 语义校验**，跑在同一套引擎与同一套应用层机制上。现已落地
-8 个域包：ER、流程图、BPMN 2.0、UML 类图、状态机、甘特、电力一次系统图、电力二次回路 —— 边际成本
+9 个域包：ER、流程图、BPMN 2.0、UML 类图、状态机、甘特、电力一次系统图、电力二次回路、给水排水工艺流程图 —— 边际成本
 主要在「记法本身」，不在编辑器：
 
 | 组成 | 复用什么 | 以 UML 为例 |
@@ -744,6 +753,9 @@ src/
 ├── secondary/                     # 电力二次回路（保护电流回路 + 端子排）
 │   ├── secondary_shapes.ts        # 10 种二次元件符号（GB/T 4728.7，文字符号用 C37.2 功能编号）
 │   └── SecondaryDesigner.ts       # 应用层：回路编号 / 端子排容器 / 二次语义校验
+├── water/                         # 给水排水工艺流程图（水厂 / 污水厂：AAO 主线 + 污泥线）
+│   ├── water_shapes.ts            # 21 种符号（GB/T 50106 图例；水线蓝 / 污泥线黄）
+│   └── WaterProcessDesigner.ts    # 应用层：介质 + 管径、工艺校验、流径分析（关阀断流）
 ├── er-component/
 │   ├── Entity.ts                  # 实体：表头 + 字段列表 + 约束标记 + TypeORM 序列化
 │   └── Relation.ts                # 关系：基数 / 箭头 / 标签语义 / 连接槽位
@@ -768,7 +780,7 @@ src/
 | `npm run build` | 清理并完整构建（类型声明 + JS 产物） |
 | `npm run types:check` | 仅做 TypeScript 类型检查 |
 | `npm test` | 运行单元测试（Jest） |
-| `npm run test:e2e` | 浏览器端到端回归（Playwright，先 `npm run build`；覆盖 9 个示例页：ER / 流程图 / BPMN / UML / 状态机 / 甘特 / 电力一次 / 电力符号表 / 电力二次，各自做交互断言与 console 零报错检查） |
+| `npm run test:e2e` | 浏览器端到端回归（Playwright，先 `npm run build`；覆盖 10 个示例页：ER / 流程图 / BPMN / UML / 状态机 / 甘特 / 电力一次 / 电力符号表 / 电力二次 / 给水排水，各自做交互断言与 console 零报错检查） |
 | `npm run pretty` | Prettier 格式化源码 |
 
 ## 9. 环境要求与依赖
