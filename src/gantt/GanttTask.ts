@@ -6,6 +6,7 @@
  *
  */
 import { ICEGroup, ICERect, ICEText } from 'ice-render';
+import { normalizeLabelStyle } from '../utils/label-style';
 import merge from 'lodash/merge';
 import { addDays, diffDays } from './gantt_date';
 
@@ -34,6 +35,8 @@ export default class GanttTask extends ICEGroup {
   }
 
   protected static arrangeParam(props: any = {}) {
+    // 老的顶层 labelStyle 单向并入规范位置 style.label（见 utils/label-style.ts）
+    props = normalizeLabelStyle(props);
     return merge(
       {
         title: '任务',
@@ -62,8 +65,8 @@ export default class GanttTask extends ICEGroup {
           progressFill: '#2563eb',
           strokeStyle: '#3b82f6',
           lineWidth: 1,
+          label: { textColor: '#ffffff', fontSize: 12 },
         },
-        labelStyle: { textColor: '#ffffff', fontSize: 12 },
         transformable: false,
       },
       props
@@ -82,8 +85,8 @@ export default class GanttTask extends ICEGroup {
     'labelColumnWidth',
     'rowHeight',
     'headerHeight',
+    // 标签外观已并入 style，重建判断只需盯 'style'
     'style',
-    'labelStyle',
   ];
 
   public setState(patch: any): void {
@@ -193,8 +196,8 @@ export default class GanttTask extends ICEGroup {
       interactive: false,
       linkable: false,
       style: {
-        fontSize: this.state.labelStyle.fontSize,
-        fillStyle: this.state.labelStyle.textColor,
+        fontSize: this.state.style.label.fontSize,
+        fillStyle: this.state.style.label.textColor,
         // 左对齐 + 内缩：短条上文字会自然向右溢出（仍可读），比居中裁掉两头好
         textAlign: 'left',
         textBaseline: 'middle',
