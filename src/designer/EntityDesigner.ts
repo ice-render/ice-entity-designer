@@ -1,4 +1,5 @@
 import { toIsoTime } from 'ice-render';
+import { applyDesignerChrome } from '../theme/designerTheme';
 import type { ICE } from 'ice-render';
 import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
@@ -60,6 +61,8 @@ export default class EntityDesigner {
 
   constructor(ice: ICE) {
     this.ice = ice;
+    // 画布外壳（选中框 / 手柄 / 插槽 / 引导线）对齐到设计器的配色 —— 见 theme/designerTheme.ts
+    applyDesignerChrome(this.ice);
     registerIEDType(this.ice, Entity);
     registerIEDType(this.ice, Relation);
     this.ice.evtBus.on('mousedown', this.__mousedownHandler, this);

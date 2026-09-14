@@ -62,15 +62,15 @@ describe('Relation 构造', () => {
     expect(relation.state.targetField).toBe('id');
     expect(relation.state.arrow).toBe('none');
     expect(relation.state.label).toBe('1 : 1');
-    expect(relation.state.labelStyle.fontSize).toBe(14);
-    expect(relation.state.labelStyle.fillStyle).toBe('#334155');
+    expect(relation.state.style.label.fontSize).toBe(14);
+    expect(relation.state.style.label.fillStyle).toBe('#334155');
   });
 
   it('用户传入的 labelStyle 与显式 label 优先', () => {
     const relation: any = new Relation({ relationType: 'one-to-many', label: 'FK', labelStyle: { fontSize: 20 } });
     expect(relation.state.label).toBe('FK');
-    expect(relation.state.labelStyle.fontSize).toBe(20);
-    expect(relation.state.labelStyle.fillStyle).toBe('#334155');
+    expect(relation.state.style.label.fontSize).toBe(20);
+    expect(relation.state.style.label.fillStyle).toBe('#334155');
     expect(relation.state.arrow).toBe('end');
   });
 

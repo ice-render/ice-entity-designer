@@ -398,7 +398,7 @@
         syncValue(panelControls.label, selected.state.label || '');
         syncValue(panelControls.lineColor, (selected.state.style && selected.state.style.strokeStyle) || '#475569');
         syncValue(panelControls.lineWidth, (selected.state.style && selected.state.style.lineWidth) || 1.6);
-        syncValue(panelControls.labelColor, (selected.state.labelStyle && selected.state.labelStyle.fillStyle) || '#334155');
+        syncValue(panelControls.labelColor, (selected.state.style && selected.state.style.label && selected.state.style.label.fillStyle) || '#334155');
         syncValue(panelControls.shape, selected.state.linkShape || 'visio');
       }
 
@@ -625,9 +625,10 @@
         const labelColorInput = document.createElement('input');
         labelColorInput.type = 'color';
         labelColorInput.dataset.field = 'labelColor';
-        labelColorInput.value = (selected.state.labelStyle && selected.state.labelStyle.fillStyle) || '#334155';
+        labelColorInput.value = (selected.state.style && selected.state.style.label && selected.state.style.label.fillStyle) || '#334155';
         labelColorInput.addEventListener('change', () => {
-          designer.updateEdge(selected.state.id, { labelStyle: { fillStyle: labelColorInput.value } });
+          // 标签外观的规范位置是 style.label（老 labelStyle 仍被收下，但新代码写规范位置）
+          designer.updateEdge(selected.state.id, { style: { label: { fillStyle: labelColorInput.value } } });
         });
         panelControls.labelColor = row('标签颜色', labelColorInput);
 

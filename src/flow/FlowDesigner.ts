@@ -6,6 +6,7 @@
  *
  */
 import { Deserializer, Serializer, exportSvg } from 'ice-render';
+import { applyDesignerChrome } from '../theme/designerTheme';
 import type { ICE, SvgExportOptions } from 'ice-render';
 import FlowEdge from './FlowEdge';
 import FlowNode from './FlowNode';
@@ -149,6 +150,8 @@ export default class FlowDesigner {
   private __mouseupHandler = () => this.__endMoveSession();
 
   constructor(ice: ICE) {
+    // 画布外壳配色（与 EntityDesigner 同一套，见 theme/designerTheme.ts）
+    applyDesignerChrome(ice);
     this.ice = ice;
     registerIEDType(this.ice, FlowNode);
     registerIEDType(this.ice, FlowEdge);
@@ -339,8 +342,7 @@ export default class FlowDesigner {
       flowType: props.flowType || 'sequence',
       condition: props.condition || '',
       isDefault: !!props.isDefault,
-      style: props.style,
-      labelStyle: props.labelStyle,
+      style: { ...(props.style || {}), ...(props.labelStyle ? { label: props.labelStyle } : {}) },
     });
     this.ice.addChild(edge);
     this.selectedId = edge.state.id;
