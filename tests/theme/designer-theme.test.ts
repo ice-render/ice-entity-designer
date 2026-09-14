@@ -9,6 +9,7 @@ import { ICE, EventBus } from 'ice-render';
 import EntityDesigner from '../../src/designer/EntityDesigner';
 import FlowDesigner from '../../src/flow/FlowDesigner';
 import { DESIGNER_CHROME, applyDesignerChrome } from '../../src/theme/designerTheme';
+import { resolveThemeValue } from 'ice-render';
 
 function makeIce(): any {
   const ice: any = new ICE();
@@ -71,5 +72,38 @@ describe('设计器画布外壳配色', () => {
     expect(ice.getTheme().semantic.chrome.selection.stroke).toBe('#7c3aed');
     // 没覆盖的仍然是设计器默认
     expect(ice.getTheme().semantic.chrome.slot.fill).toBe('#52c41a');
+  });
+
+  it('节点 / 连线样式可以引用主题 token —— 引擎在绘制那一刻解析（SKILL 里承诺的能力）', () => {
+    const ice = makeIce();
+    const designer: any = new FlowDesigner(ice);
+    const node: any = designer.createNode('process', {
+      left: 0,
+      top: 0,
+      title: 'A',
+      fillColor: '$primary',
+      strokeColor: '$border',
+    });
+    const edge: any = designer.createEdge({
+      sourceId: node.state.id,
+      targetId: designer.createNode('process', { left: 0, top: 200 }).state.id,
+      style: { strokeStyle: '$danger' },
+    });
+
+    // 模型字段最终落到**真正绘制的那个引擎图元**的 style 上：
+    // 节点是容器（自身透明），可见的方块/形状是派生出来的 shapeComponent；连线就是它自己。
+    expect(node.shapeComponent.state.style.fillStyle).toBe('$primary');
+    expect(node.shapeComponent.state.style.strokeStyle).toBe('$border');
+    expect(edge.state.style.strokeStyle).toBe('$danger');
+
+    // 宿主换主题 → 解析结果随之变化（不需要重建图元）
+    ice.setTheme({ primary: '#ff0000', border: '#00ff00', danger: '#0000ff' });
+    const theme = node.themeOf();
+    expect(resolveThemeValue(node.shapeComponent.state.style.fillStyle, theme)).toBe('#ff0000');
+    expect(resolveThemeValue(node.shapeComponent.state.style.strokeStyle, theme)).toBe('#00ff00');
+    expect(resolveThemeValue(edge.state.style.strokeStyle, theme)).toBe('#0000ff');
+
+    // 拼错的 token 名解析成 undefined（引擎跳过赋值；validateTheme / DSL 诊断负责提示）
+    expect(resolveThemeValue('$primry', theme)).toBeUndefined();
   });
 });
