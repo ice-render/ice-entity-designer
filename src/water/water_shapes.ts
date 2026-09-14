@@ -105,24 +105,41 @@ export const WATER_BOUNDARY_KINDS: WaterSymbolKind[] = ['inlet', 'outlet', 'slud
 /** 会产出剩余污泥的单元（校验「污泥有没有出路」用） */
 export const WATER_SLUDGE_SOURCE_KINDS: WaterSymbolKind[] = ['primaryClarifier', 'secondaryClarifier'];
 
-export type WaterMedium = 'sewage' | 'sludge' | 'returnSludge' | 'recycle' | 'air' | 'chemical' | 'effluent';
+export type WaterMedium =
+  | 'sewage'
+  | 'sludge'
+  | 'returnSludge'
+  | 'recycle'
+  | 'air'
+  | 'chemical'
+  | 'effluent'
+  /** 仪表信号线（点划线）：在线仪表 / 液位计 / 压力表与 PLC 的连线 */
+  | 'signal'
+  /** 动力线（点划线、更粗）：变频器等电气回路 */
+  | 'power';
 
 /**
  * 介质样式：**颜色与线型区分介质**，是给排水图纸的通行做法（具体色值各院略有差异，可覆盖）。
  * - 污水 / 出水 / 回流：实线，颜色区分；
  * - 剩余污泥 / 回流污泥：两个色阶的棕黄（一条是排泥、一条是回流，专业上是两回事）；
- * - 空气 / 药剂：虚线（不是水流）。
+ * - 空气 / 药剂：虚线（不是水流）；
+ * - 信号 / 动力：点划线（`lineType: 'dashdot'`）—— 这两条不是管道，是电气与信号回路，
+ *   画出来才能解释"仪表装在哪、变频器控的是哪台设备"。
  */
-export const WATER_MEDIUM_STYLES: Record<WaterMedium, { label: string; color: string; lineType: 'solid' | 'dashed' }> =
-  {
-    sewage: { label: '污水', color: '#475569', lineType: 'solid' },
-    effluent: { label: '出水', color: '#0d9488', lineType: 'solid' },
-    recycle: { label: '混合液回流', color: '#0369a1', lineType: 'solid' },
-    returnSludge: { label: '回流污泥', color: '#a16207', lineType: 'solid' },
-    sludge: { label: '剩余污泥', color: '#92400e', lineType: 'solid' },
-    air: { label: '空气', color: '#0891b2', lineType: 'dashed' },
-    chemical: { label: '药剂', color: '#7c3aed', lineType: 'dashed' },
-  };
+export const WATER_MEDIUM_STYLES: Record<
+  WaterMedium,
+  { label: string; color: string; lineType: 'solid' | 'dashed' | 'dashdot' }
+> = {
+  sewage: { label: '污水', color: '#475569', lineType: 'solid' },
+  effluent: { label: '出水', color: '#0d9488', lineType: 'solid' },
+  recycle: { label: '混合液回流', color: '#0369a1', lineType: 'solid' },
+  returnSludge: { label: '回流污泥', color: '#a16207', lineType: 'solid' },
+  sludge: { label: '剩余污泥', color: '#92400e', lineType: 'solid' },
+  air: { label: '空气', color: '#0891b2', lineType: 'dashed' },
+  chemical: { label: '药剂', color: '#7c3aed', lineType: 'dashed' },
+  signal: { label: '仪表信号', color: '#9333ea', lineType: 'dashdot' },
+  power: { label: '动力回路', color: '#b45309', lineType: 'dashdot' },
+};
 
 export type WaterSymbolPreset = {
   label: string;

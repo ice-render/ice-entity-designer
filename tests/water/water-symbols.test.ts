@@ -15,6 +15,7 @@ import WaterSymbol, {
   WATER_VALVE_KINDS,
   isWaterValveKind,
 } from '../../src/water/water_shapes';
+import { composePipeLabel, dashPatternOf } from '../../src/water/WaterProcessDesigner';
 
 describe('给水排水符号库 · 预设', () => {
   it('每个 kind 都有中文名、默认尺寸与文字符号，且覆盖主流 AAO 工艺链', () => {
@@ -113,13 +114,33 @@ describe('给水排水符号库 · 预设', () => {
     expect(isWaterValveKind('pump')).toBe(false);
   });
 
-  it('介质样式齐备：污水 / 污泥 / 空气 / 药剂 / 出水 / 回流', () => {
-    ['sewage', 'sludge', 'air', 'chemical', 'effluent', 'recycle'].forEach((medium) => {
-      const style = (WATER_MEDIUM_STYLES as any)[medium];
-      expect(style).toBeTruthy();
-      expect(style.color).toMatch(/^#/);
-      expect(['solid', 'dashed']).toContain(style.lineType);
-    });
+  it('介质样式齐备：污水 / 污泥 / 空气 / 药剂 / 出水 / 回流 / 信号 / 动力', () => {
+    ['sewage', 'sludge', 'air', 'chemical', 'effluent', 'recycle', 'returnSludge', 'signal', 'power'].forEach(
+      (medium) => {
+        const style = (WATER_MEDIUM_STYLES as any)[medium];
+        expect(style).toBeTruthy();
+        expect(style.color).toMatch(/^#/);
+        expect(['solid', 'dashed', 'dashdot']).toContain(style.lineType);
+      }
+    );
+    // 信号与动力是电气/信号回路：点划线，且颜色和水管明显区分
+    expect(WATER_MEDIUM_STYLES.signal.lineType).toBe('dashdot');
+    expect(WATER_MEDIUM_STYLES.power.lineType).toBe('dashdot');
+    expect(WATER_MEDIUM_STYLES.signal.color).not.toBe(WATER_MEDIUM_STYLES.sewage.color);
+  });
+
+  it('线型映射：点划线给的是「长划 + 点」，实线给空数组', () => {
+    expect(dashPatternOf('solid', 1.4)).toEqual([]);
+    expect(dashPatternOf('dashed', 2)).toEqual([8, 8]);
+    const dashdot = dashPatternOf('dashdot', 2);
+    expect(dashdot.length).toBe(4);
+    expect(dashdot[0]).toBeGreaterThan(dashdot[2]); // 长划比点长
+  });
+
+  it('信号 / 动力线不是管道：标注不带管径', () => {
+    expect(composePipeLabel('signal', '')).toBe('仪表信号');
+    expect(composePipeLabel('power', '')).toBe('动力回路');
+    expect(composePipeLabel('sewage', 'DN400')).toBe('DN400 污水');
   });
 });
 
