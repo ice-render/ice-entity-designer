@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <meta charset="utf-8" />
+  <title>IED-Water-editor</title>
+  <style>
+    body { margin: 0; font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; color: #0f172a; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+    button, select, input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font: inherit; }
+    .hint { color: #64748b; font-size: 12px; }
+    .layout { display: grid; grid-template-columns: 1fr 320px; height: calc(100vh - 53px); }
+    .canvas-wrap { overflow: hidden; background: #fff; }
+    canvas { display: block; }
+    aside { padding: 12px 14px; border-left: 1px solid #e2e8f0; background: #fff; overflow: auto; font-size: 13px; }
+    aside h3 { margin: 14px 0 6px; font-size: 13px; color: #64748b; }
+    .issue.error { color: #b91c1c; }
+    .issue.warning { color: #b45309; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .row label { width: 64px; color: #475569; font-size: 13px; }
+    .row input, .row select { flex: 1; }
+  </style>
+  <body>
+    <div class="toolbar">
+      <select id="in-kind" title="新增符号类型"></select>
+      <button id="btn-add">新增符号</button>
+      <button id="btn-delete">删除选中</button>
+      <button id="btn-undo">撤销</button>
+      <button id="btn-redo">重做</button>
+      <span class="hint">|</span>
+      <select id="in-medium" title="管线介质"></select>
+      <button id="btn-pipe">画管线</button>
+      <button id="btn-valve">阀门开 / 闭</button>
+      <button id="btn-flow">流径分析</button>
+      <button id="btn-fit">适应视图</button>
+      <button id="btn-reset">复位视图</button>
+      <button id="btn-validate">校验</button>
+      <button id="btn-export-svg">导出 SVG</button>
+      <button id="btn-export-json">导出 JSON</button>
+      <button id="btn-import-json">导入 JSON</button>
+      <span class="hint">案例：10 万 m³/d 市政污水厂 AAO 工艺（水线 + 污泥线 + 在线监测）</span>
+    </div>
+    <div class="layout">
+      <div class="canvas-wrap"><canvas id="canvas-1" width="1700" height="1000"></canvas></div>
+      <aside>
+        <h3>属性</h3>
+        <div id="panel" class="hint">点击符号 / 管线进行编辑</div>
+        <h3>工艺校验</h3>
+        <div id="validate-output" class="hint">点击「校验」运行工艺检查</div>
+        <h3>流径分析</h3>
+        <div id="flow-output" class="hint">点击「流径分析」看进水到出水通不通</div>
+        <h3>案例说明</h3>
+        <div class="hint">
+          AAO 主线：进水 → 格栅 → 曝气沉砂池 → 初沉池 → 厌氧 → 缺氧 → 好氧 → 二沉池 →
+          混凝沉淀 → 滤池 → 消毒 → 在线监测 → 排放。<br />
+          回流：混合液内回流（好氧 → 缺氧）、污泥回流（二沉池 → 厌氧）。<br />
+          污泥线：剩余污泥 → 浓缩 → 脱水 → 外运。
+        </div>
+      </aside>
+    </div>
+
+    <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+    <script src="../dist/index.umd.js"></script>
+    <script src="./canvas-interactions.js"></script>
+    <script type="text/javascript">
+      const { ICE, WaterProcessDesigner, WATER_SYMBOL_PRESETS, WATER_MEDIUM_STYLES } = IED;
+      const ice = new ICE().init('canvas-1');
+      const designer = new WaterProcessDesigner(ice);
+      const canvasEl = document.getElementById('canvas-1');
+      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
+      window.__ice = ice;
+      window.__designer = designer;
+
+      const panel = document.getElementById('panel');
+      const validateOutput = document.getElementById('validate-output');
+      const flowOutput = document.getElementById('flow-output');
+
+      /* ---------------- 下拉框：直接由符号库 / 介质表生成，永不脱节 ---------------- */
+      const kindSelect = document.getElementById('in-kind');
+      Object.keys(WATER_SYMBOL_PRESETS).forEach((kind) => {
+        const option = document.createElement('option');
+        option.value = kind;
+        option.textContent = WATER_SYMBOL_PRESETS[kind].label;
+        kindSelect.appendChild(option);
+      });
+      kindSelect.value = 'pump';
+
+      const mediumSelect = document.getElementById('in-medium');
+      Object.keys(WATER_MEDIUM_STYLES).forEach((medium) => {
+        const option = document.createElement('option');
+        option.value = medium;
+        option.textContent = WATER_MEDIUM_STYLES[medium].label;
+        mediumSelect.appendChild(option);
+      });
+      mediumSelect.value = 'sewage';
+
+      /* ---------------- 案例：AAO 市政污水厂 ---------------- */
+      function buildCase() {
+        const add = (kind, props) => designer.createSymbol(kind, props);
+        const pipe = (sourceId, targetId, medium, dn, ports) =>
+          designer.createPipe({
+            sourceId,
+            targetId,
+            medium,
+            dn,
+            sourcePort: (ports && ports[0]) || 'R',
+            targetPort: (ports && ports[1]) || 'L',
+          });
+
+        // 第一行：预处理 + 生化 + 二沉池
+        const inlet = add('inlet', { id: 'inlet', name: '厂外进水', tag: 'IN', left: 30, top: 120 });
+        const screen = add('barScreen', { id: 'screen', name: '细格栅', tag: 'GR-101', left: 180, top: 120 });
+        const grit = add('gritChamber', { id: 'grit', name: '曝气沉砂池', tag: 'GC-101', left: 340, top: 120 });
+        const primary = add('primaryClarifier', { id: 'primary', name: '初沉池', tag: 'PC-101', left: 540, top: 120 });
+        const ana = add('anaerobicTank', { id: 'ana', name: '厌氧池', tag: 'AT-101', left: 730, top: 120 });
+        const anx = add('anoxicTank', { id: 'anx', name: '缺氧池', tag: 'AX-101', left: 890, top: 120 });
+        const aer = add('aerobicTank', { id: 'aer', name: '好氧池', tag: 'AE-101', left: 1070, top: 120 });
+        const sec = add('secondaryClarifier', { id: 'sec', name: '二沉池', tag: 'SC-101', left: 1280, top: 120 });
+
+        // 第二行：深度处理 + 出水
+        const coag = add('coagulationTank', { id: 'coag', name: '混凝沉淀池', tag: 'CO-101', left: 340, top: 400 });
+        const filter = add('filterBed', { id: 'filter', name: '滤布滤池', tag: 'FL-101', left: 560, top: 400 });
+        const disinfect = add('disinfectionTank', { id: 'disinfect', name: '消毒接触池', tag: 'DT-101', left: 760, top: 400 });
+        const analyzer = add('analyzer', { id: 'analyzer', name: '在线监测', tag: 'AIT-101', left: 950, top: 400 });
+        const meter = add('flowMeter', { id: 'meter', name: '出水计量', tag: 'FIT-101', left: 1050, top: 400 });
+        const outletValve = add('valve', { id: 'outletValve', name: '出水阀', tag: 'V-101', left: 1150, top: 400 });
+        const outlet = add('outlet', { id: 'outlet', name: '排放口', tag: 'OUT', left: 1260, top: 400 });
+
+        // 第三行：污泥线
+        const thickener = add('sludgeThickener', { id: 'thickener', name: '污泥浓缩池', tag: 'ST-101', left: 380, top: 660 });
+        const dewater = add('dewateringMachine', { id: 'dewater', name: '污泥脱水机', tag: 'DW-101', left: 600, top: 660 });
+        const sludgeOut = add('sludgeOut', { id: 'sludgeOut', name: '污泥外运', tag: 'SO-101', left: 800, top: 660 });
+
+        // 辅助设备
+        const blower = add('blower', { id: 'blower', name: '鼓风机', tag: 'B-201', left: 1070, top: -60 });
+        const dosing = add('dosingUnit', { id: 'dosing', name: '加药装置', tag: 'DU-101', left: 150, top: 400 });
+
+        // 水线主线
+        pipe('inlet', 'screen', 'sewage', 'DN800');
+        pipe('screen', 'grit', 'sewage', 'DN800');
+        pipe('grit', 'primary', 'sewage', 'DN700');
+        pipe('primary', 'ana', 'sewage', 'DN600');
+        pipe('ana', 'anx', 'sewage', 'DN600');
+        pipe('anx', 'aer', 'sewage', 'DN600');
+        pipe('aer', 'sec', 'sewage', 'DN600');
+        // 深度处理（二沉池出水 → 混凝 → 滤池 → 消毒 → 监测 → 排放）
+        pipe('sec', 'coag', 'effluent', 'DN500', ['B', 'T']);
+        pipe('coag', 'filter', 'effluent', 'DN500');
+        pipe('filter', 'disinfect', 'effluent', 'DN500');
+        pipe('disinfect', 'analyzer', 'effluent', 'DN500');
+        pipe('analyzer', 'meter', 'effluent', 'DN500');
+        pipe('meter', 'outletValve', 'effluent', 'DN500');
+        pipe('outletValve', 'outlet', 'effluent', 'DN500');
+        // 回流
+        pipe('aer', 'anx', 'recycle', 'DN300', ['T', 'T']);
+        pipe('sec', 'ana', 'returnSludge', 'DN200', ['B', 'B']);
+        // 污泥线
+        pipe('sec', 'thickener', 'sludge', 'DN200', ['B', 'T']);
+        pipe('thickener', 'dewater', 'sludge', 'DN200');
+        pipe('dewater', 'sludgeOut', 'sludge', 'DN150');
+        // 辅助管线
+        pipe('blower', 'aer', 'air', 'DN100', ['B', 'T']);
+        pipe('dosing', 'coag', 'chemical', 'DN25');
+
+        void inlet;
+        void outletValve;
+        void outlet;
+        void sludgeOut;
+        void blower;
+        designer.select(null);
+        designer.resetHistory();
+      }
+
+      /* ---------------- 属性面板 ---------------- */
+      function renderPanel() {
+        const node = designer.nodes.find((item) => item.state.id === designer.selectedId);
+        const edge = designer.edges.find((item) => item.state.id === designer.selectedId);
+        panel.innerHTML = '';
+        const row = (label, control) => {
+          const div = document.createElement('div');
+          div.className = 'row';
+          const span = document.createElement('label');
+          span.textContent = label;
+          div.appendChild(span);
+          div.appendChild(control);
+          panel.appendChild(div);
+        };
+
+        if (edge) {
+          const mediumSelectInPanel = document.createElement('select');
+          Object.keys(WATER_MEDIUM_STYLES).forEach((medium) => {
+            const option = document.createElement('option');
+            option.value = medium;
+            option.textContent = WATER_MEDIUM_STYLES[medium].label;
+            mediumSelectInPanel.appendChild(option);
+          });
+          mediumSelectInPanel.value = edge.state.medium || 'sewage';
+          mediumSelectInPanel.addEventListener('change', () => edge.setMedium(mediumSelectInPanel.value));
+          row('介质', mediumSelectInPanel);
+          const dnInput = document.createElement('input');
+          dnInput.value = edge.state.dn || '';
+          dnInput.addEventListener('change', () => {
+            edge.setState({ dn: dnInput.value, label: '' });
+            edge.applyMediumStyle();
+          });
+          row('管径', dnInput);
+          row('标注', Object.assign(document.createElement('span'), { textContent: edge.state.label || '' }));
+          return;
+        }
+
+        if (!node) {
+          panel.textContent = '点击符号 / 管线进行编辑';
+          return;
+        }
+        const preset = WATER_SYMBOL_PRESETS[node.state.kind];
+        row('类型', Object.assign(document.createElement('span'), { textContent: preset ? preset.label : node.state.kind }));
+        const nameInput = document.createElement('input');
+        nameInput.value = node.state.name || '';
+        nameInput.addEventListener('change', () => node.applyPatch({ name: nameInput.value }));
+        row('名称', nameInput);
+        const tagInput = document.createElement('input');
+        tagInput.value = node.state.tag || '';
+        tagInput.addEventListener('change', () => node.applyPatch({ tag: tagInput.value }));
+        row('位号', tagInput);
+        if (node.state.kind === 'valve') {
+          const valveSelect = document.createElement('select');
+          [
+            ['open', '开'],
+            ['closed', '闭'],
+          ].forEach(([value, label]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            valveSelect.appendChild(option);
+          });
+          valveSelect.value = node.state.valveState || 'open';
+          valveSelect.addEventListener('change', () => designer.setValveState(node.state.id, valveSelect.value));
+          row('阀门', valveSelect);
+        }
+      }
+
+      /* ---------------- 工具栏 ---------------- */
+      let pipeSource = null;
+      document.getElementById('btn-add').addEventListener('click', () => {
+        const kind = kindSelect.value;
+        const preset = WATER_SYMBOL_PRESETS[kind];
+        designer.createSymbol(kind, { name: preset.label, tag: preset.tag });
+        renderPanel();
+      });
+      document.getElementById('btn-delete').addEventListener('click', () => {
+        if (designer.selectedId) {
+          designer.remove(designer.selectedId);
+          renderPanel();
+        }
+      });
+      document.getElementById('btn-undo').addEventListener('click', () => {
+        designer.undo();
+        renderPanel();
+      });
+      document.getElementById('btn-redo').addEventListener('click', () => {
+        designer.redo();
+        renderPanel();
+      });
+      document.getElementById('btn-pipe').addEventListener('click', () => {
+        const selected = designer.selectedId;
+        if (!selected) {
+          flowOutput.className = 'hint';
+          flowOutput.textContent = '先选中起点符号，再点「画管线」';
+          return;
+        }
+        if (!pipeSource) {
+          pipeSource = selected;
+          flowOutput.className = 'hint';
+          flowOutput.textContent = '已选起点，再选中终点符号并点「画管线」完成连线';
+          return;
+        }
+        if (pipeSource !== selected) {
+          designer.createPipe({ sourceId: pipeSource, targetId: selected, medium: mediumSelect.value, dn: 'DN100' });
+        }
+        pipeSource = null;
+        renderPanel();
+      });
+      document.getElementById('btn-valve').addEventListener('click', () => {
+        const node = designer.nodes.find((item) => item.state.id === designer.selectedId);
+        if (!node || node.state.kind !== 'valve') {
+          flowOutput.className = 'hint';
+          flowOutput.textContent = '先选中一个阀门';
+          return;
+        }
+        designer.setValveState(node.state.id, node.state.valveState === 'closed' ? 'open' : 'closed');
+        renderPanel();
+      });
+      document.getElementById('btn-flow').addEventListener('click', () => {
+        const trace = designer.traceFlow();
+        window.__trace = trace;
+        flowOutput.className = trace.connected ? 'hint' : 'issue error';
+        flowOutput.textContent = trace.connected
+          ? `✅ 进水可到出水（途经 ${trace.path.length} 个符号）`
+          : `❌ 断流${trace.blockedAt ? '：卡在关断的阀门 ' + trace.blockedAt : ''}`;
+      });
+      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
+      document.getElementById('btn-validate').addEventListener('click', () => {
+        const issues = designer.validateWater();
+        window.__issues = issues;
+        validateOutput.innerHTML = '';
+        validateOutput.className = issues.length ? '' : 'hint';
+        if (!issues.length) {
+          validateOutput.textContent = '✅ 未发现问题';
+          return;
+        }
+        issues.forEach((issue) => {
+          const div = document.createElement('div');
+          div.className = `issue ${issue.level}`;
+          div.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
+          validateOutput.appendChild(div);
+        });
+      });
+      document.getElementById('btn-export-svg').addEventListener('click', () => {
+        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
+        window.__exportedSvg = svg;
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'wastewater-aao-process.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+      document.getElementById('btn-export-json').addEventListener('click', () => {
+        window.__exportedJson = designer.serialize();
+        const blob = new Blob([window.__exportedJson], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'wastewater-aao-process.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+      document.getElementById('btn-import-json').addEventListener('click', () => {
+        if (!window.__exportedJson) {
+          return;
+        }
+        const report = designer.load(window.__exportedJson);
+        designer.fitViewport();
+        validateOutput.className = 'hint';
+        validateOutput.textContent = `✅ 已导入 ${report.nodes} 个符号 / ${report.edges} 段管线`;
+        renderPanel();
+      });
+
+      buildCase();
+      viewport.fitViewport();
+      renderPanel();
+    </script>
+  </body>
+</html>
