@@ -6,6 +6,7 @@
  *
  */
 import { ICECircle, ICEGroup, ICERect, ICEText } from 'ice-render';
+import { normalizeLabelStyle } from '../utils/label-style';
 import merge from 'lodash/merge';
 
 export const STATECHART_NODE_KINDS = ['initial', 'final', 'state', 'composite'] as const;
@@ -40,6 +41,8 @@ export default class StateNode extends ICEGroup {
   }
 
   protected static arrangeParam(props: any = {}) {
+    // 老的顶层 labelStyle 单向并入规范位置 style.label（见 utils/label-style.ts）
+    props = normalizeLabelStyle(props);
     const kind: StatechartNodeKind = (props.kind || 'state') as StatechartNodeKind;
     const pseudo = kind === 'initial' || kind === 'final';
     return merge(
@@ -53,13 +56,19 @@ export default class StateNode extends ICEGroup {
         // 框/圆一律由派生形状绘制。
         fill: false,
         stroke: false,
-        style: { strokeStyle: '#94a3b8', fillStyle: '#ffffff', lineWidth: 1.25, shadow: 'sm' },
-        labelStyle: {
-          textColor: '#1e293b',
-          fontSize: 13.5,
-          fontWeight: 'normal',
-          paddingLeft: 12,
-          paddingTop: 10,
+        style: {
+          strokeStyle: '#94a3b8',
+          fillStyle: '#ffffff',
+          lineWidth: 1.25,
+          shadow: 'sm',
+          // 标签外观归 style.label（规范位置；老的顶层 labelStyle 由 normalizeLabelStyle 并入）
+          label: {
+            textColor: '#1e293b',
+            fontSize: 13.5,
+            fontWeight: 'normal',
+            paddingLeft: 12,
+            paddingTop: 10,
+          },
         },
       },
       props,
@@ -68,7 +77,8 @@ export default class StateNode extends ICEGroup {
   }
 
   /** 只有这些键变化才需要重建内部形状（拖动位置、选中态都不该重建） */
-  private static readonly __shapeKeys = ['kind', 'title', 'width', 'height', 'style', 'labelStyle'];
+  // 注意：标签外观已并入 style，所以这里只需要盯 'style'（不用再单列 labelStyle）
+  private static readonly __shapeKeys = ['kind', 'title', 'width', 'height', 'style'];
 
   public setState(patch: any): void {
     const needsRebuild =
@@ -177,20 +187,22 @@ export default class StateNode extends ICEGroup {
       left: 0,
       top: 0,
       width,
-      height: composite ? Math.max(this.state.labelStyle.fontSize + this.state.labelStyle.paddingTop * 2, 28) : height,
+      height: composite
+        ? Math.max(this.state.style.label.fontSize + this.state.style.label.paddingTop * 2, 28)
+        : height,
       text: String(this.state.title || ''),
       stroke: false,
       interactive: false,
       linkable: false,
       style: {
-        fontSize: this.state.labelStyle.fontSize,
-        fontWeight: this.state.labelStyle.fontWeight,
-        fillStyle: this.state.labelStyle.textColor,
+        fontSize: this.state.style.label.fontSize,
+        fontWeight: this.state.style.label.fontWeight,
+        fillStyle: this.state.style.label.textColor,
         // 复合状态的名字靠左上（框里要留给子状态），普通状态居中
         textAlign: composite ? 'left' : 'center',
         textBaseline: composite ? 'top' : 'middle',
-        paddingLeft: composite ? this.state.labelStyle.paddingLeft : 0,
-        paddingTop: composite ? this.state.labelStyle.paddingTop : 0,
+        paddingLeft: composite ? this.state.style.label.paddingLeft : 0,
+        paddingTop: composite ? this.state.style.label.paddingTop : 0,
       },
     });
     this.addChild(this.labelComponent);

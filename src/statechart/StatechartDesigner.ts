@@ -78,8 +78,7 @@ export default class StatechartDesigner extends FlowDesigner {
       action: props.action || '',
       label: props.label,
       linkShape: props.linkShape || 'visio',
-      style: props.style,
-      labelStyle: props.labelStyle,
+      style: { ...(props.style || {}), ...(props.labelStyle ? { label: props.labelStyle } : {}) },
     });
     this.ice.addChild(edge);
     this.selectedId = edge.state.id;

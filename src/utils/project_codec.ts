@@ -119,7 +119,7 @@ export const RELATION_FIELDS: CodecField[] = [
   { key: 'sourceCardinality', type: 'string' },
   { key: 'targetCardinality', type: 'string' },
   { key: 'label', type: 'string' },
-  { key: 'labelStyle', type: 'object' },
+  { key: 'style.label', type: 'object', doc: '标签外观（引擎 2.4 起归到 style.label）' },
   { key: 'style', type: 'object' },
   { key: 'arrow', type: 'string' },
   { key: 'lineType', type: 'string' },
