@@ -16,6 +16,7 @@
  * 记法与范围见 `docs/power-secondary-spec.md`。
  */
 import FlowDesigner from '../flow/FlowDesigner';
+import { normalizeLabelStyle } from '../utils/label-style';
 import { registerIEDType } from '../utils/type-registry';
 import FlowEdge from '../flow/FlowEdge';
 import SecondarySymbol, { SECONDARY_SYMBOL_PRESETS, TerminalStrip } from './secondary_shapes';
@@ -90,6 +91,8 @@ export default class SecondaryDesigner extends FlowDesigner {
 
   /** 建一条二次导线：`circuitNo` 是回路编号（写在线上），`cableNo` 是电缆编号（数据字段） */
   public createWire(props: any = {}): any {
+    // 老的顶层 labelStyle 单向并入规范位置 style.label
+    props = normalizeLabelStyle(props);
     const source = props.sourceId ? this.ice.findComponent(props.sourceId) : null;
     const target = props.targetId ? this.ice.findComponent(props.targetId) : null;
     if (!source || !target) {
@@ -111,8 +114,14 @@ export default class SecondaryDesigner extends FlowDesigner {
       label: props.circuitNo || '',
       circuitNo: props.circuitNo || '',
       cableNo: props.cableNo || '',
-      style: { strokeStyle: '#475569', fillStyle: '#475569', lineWidth: 1.4 },
-      labelStyle: { fontSize: 11, fillStyle: '#1f2937', backgroundColor: '#ffffff' },
+      style: {
+        strokeStyle: '#475569',
+        fillStyle: '#475569',
+        lineWidth: 1.4,
+        ...(props.style || {}),
+        // 标签外观归 style.label（规范位置；老 labelStyle 由 normalizeLabelStyle 并入）
+        label: { fontSize: 11, fillStyle: '#1f2937', backgroundColor: '#ffffff', ...((props.style || {}).label || {}) },
+      },
     });
     this.ice.addChild(edge);
     this.selectedId = edge.state.id;

@@ -6,6 +6,7 @@
  *
  */
 import { ICEPolyLine } from 'ice-render';
+import { normalizeLabelStyle } from '../utils/label-style';
 import merge from 'lodash/merge';
 
 /**
@@ -25,6 +26,8 @@ export default class StateTransition extends ICEPolyLine {
   }
 
   protected static arrangeParam(props: any = {}) {
+    // 老的顶层 labelStyle 单向并入规范位置 style.label（见 utils/label-style.ts）
+    props = normalizeLabelStyle(props);
     const param = merge(
       {
         // 记法不可变换：转移线不给缩放/旋转手柄
@@ -36,8 +39,13 @@ export default class StateTransition extends ICEPolyLine {
         arrowStyle: 'filled',
         fill: false,
         arrowLength: 12,
-        style: { strokeStyle: '#64748b', fillStyle: '#64748b', lineWidth: 1.4 },
-        labelStyle: { fontSize: 12.5, fillStyle: '#334155', backgroundColor: '#ffffff' },
+        style: {
+          strokeStyle: '#64748b',
+          fillStyle: '#64748b',
+          lineWidth: 1.4,
+          // 标签外观归 style.label（规范位置）
+          label: { fontSize: 12.5, fillStyle: '#334155', backgroundColor: '#ffffff' },
+        },
       },
       props
     );
