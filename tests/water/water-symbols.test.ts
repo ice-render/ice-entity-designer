@@ -92,4 +92,19 @@ describe('给水排水符号库 · 组件契约', () => {
     expect(symbol.state.kind).toBe('blower');
     expect(typeof before).toBe('number');
   });
+
+  it('派生部件一律不可连接、不可交互 —— 只有符号本体能作为连线端点', () => {
+    WATER_SYMBOL_KINDS.forEach((kind) => {
+      const symbol: any = new WaterSymbol({ kind, name: '测试', tag: 'T-101' });
+      expect(symbol.parts.length).toBeGreaterThan(0);
+      symbol.parts.forEach(({ role, component }: any) => {
+        // 引擎的 ICELinkSlotManager 会拉平整棵树找 linkable 组件：派生部件不标 false，
+        // 拖连线时就会吸附到文字标签或内部形状上（位号、名称、气泡、栅条都会被吸附）。
+        expect({ kind, role, linkable: component.state.linkable }).toEqual({ kind, role, linkable: false });
+        expect(component.state.interactive).toBe(false);
+      });
+      // 符号本体仍然可以连线（管线端点就是它）
+      expect(symbol.state.linkable).toBe(true);
+    });
+  });
 });

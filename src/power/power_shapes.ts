@@ -276,6 +276,7 @@ export default class PowerSymbol extends ICEGroup {
           zIndex: baseZ + 2,
           points,
           interactive: false,
+          linkable: false,
           style: { strokeStyle, fillStyle: strokeStyle, lineWidth: width },
         })
       );
@@ -299,6 +300,7 @@ export default class PowerSymbol extends ICEGroup {
           radius,
           stroke: true,
           interactive: false,
+          linkable: false,
           // 空心元件用白色填充（不能用 'none'：引擎按 canvas 颜色解析，非法值会退回上一次的填充色）
           style: { fillStyle: filled ? strokeStyle : '#ffffff', strokeStyle, lineWidth: lw },
         })
@@ -313,6 +315,7 @@ export default class PowerSymbol extends ICEGroup {
           radius,
           stroke: true,
           interactive: false,
+          linkable: false,
           style: { fillStyle: '#ffffff', strokeStyle, lineWidth: lw },
         })
       );
@@ -336,6 +339,7 @@ export default class PowerSymbol extends ICEGroup {
           text: value,
           stroke: false,
           interactive: false,
+          linkable: false,
           style: {
             fontSize: size,
             fillStyle: strokeStyle,
@@ -411,6 +415,7 @@ export default class PowerSymbol extends ICEGroup {
             radius: 5,
             stroke: true,
             interactive: false,
+            linkable: false,
             style: { fillStyle: '#ffffff', strokeStyle, lineWidth: lw },
           })
         );
@@ -698,6 +703,7 @@ export default class PowerSymbol extends ICEGroup {
           text: String(tag),
           stroke: false,
           interactive: false,
+          linkable: false,
           style: {
             fontSize: (this.state.tagStyle && this.state.tagStyle.fontSize) || POWER_STYLE.tagFontSize,
             fillStyle: (this.state.tagStyle && this.state.tagStyle.textColor) || POWER_STYLE.tagColor,
@@ -721,6 +727,7 @@ export default class PowerSymbol extends ICEGroup {
           text: String(this.state.name),
           stroke: false,
           interactive: false,
+          linkable: false,
           style: {
             fontSize: POWER_STYLE.nameFontSize,
             fillStyle: POWER_STYLE.nameColor,
@@ -744,6 +751,7 @@ export default class PowerSymbol extends ICEGroup {
           text: closed ? '合' : '分',
           stroke: false,
           interactive: false,
+          linkable: false,
           style: {
             fontSize: POWER_STYLE.stateFontSize,
             fillStyle: strokeStyle,
@@ -769,6 +777,7 @@ export default class PowerSymbol extends ICEGroup {
             [cx + half, top + index * gap],
           ],
           interactive: false,
+          linkable: false,
           style: { strokeStyle, fillStyle: strokeStyle, lineWidth },
         })
       );

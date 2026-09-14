@@ -169,6 +169,21 @@ describe('电力符号库 · 其余一次设备', () => {
   });
 });
 
+describe('电力符号库 · 派生部件不可连接', () => {
+  it('位号 / 名称 / 内部形状都不能作为连线端点（只有符号本体能接线）', () => {
+    POWER_SYMBOL_KINDS.forEach((kind: any) => {
+      const symbol: any = new PowerSymbol({ kind, name: '测试', tag: 'T' });
+      expect(symbol.parts.length).toBeGreaterThan(0);
+      symbol.parts.forEach(({ role, component }: any) => {
+        // 引擎的 ICELinkSlotManager 会拉平整棵树找 linkable 组件：派生部件不标 false，
+        // 拖连线时就会吸附到位号 / 名称 / 内部形状上。
+        expect({ kind, role, linkable: component.state.linkable }).toEqual({ kind, role, linkable: false });
+      });
+      expect(symbol.state.linkable).toBe(true);
+    });
+  });
+});
+
 describe('电力符号库 · 外观统一与文档形态', () => {
   it('所有线性部件共用同一套描边色与线宽（外观统一是硬要求）', () => {
     POWER_SYMBOL_KINDS.forEach((kind: any) => {

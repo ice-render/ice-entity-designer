@@ -487,6 +487,9 @@ export default class WaterSymbol extends ICEGroup {
         radius: 3,
         zIndex,
         interactive: false,
+        // 派生部件不是连线端点：只有符号本体（WaterSymbol）能接线。
+        // 引擎的 ICELinkSlotManager 会拉平整棵树找 linkable 组件，不标就会吸附到文字/形状上。
+        linkable: false,
         style: { fillStyle, strokeStyle, lineWidth },
       })
     );
@@ -509,6 +512,7 @@ export default class WaterSymbol extends ICEGroup {
         radius,
         zIndex,
         interactive: false,
+        linkable: false,
         style: { fillStyle: fillStyle === 'none' ? WATER_STYLE.hollowFill : fillStyle, strokeStyle, lineWidth },
       })
     );
@@ -561,6 +565,7 @@ export default class WaterSymbol extends ICEGroup {
           height,
           zIndex,
           interactive: false,
+          linkable: false,
           style: { fillStyle: strokeStyle, strokeStyle, lineWidth: 0 },
         })
       );
@@ -571,6 +576,7 @@ export default class WaterSymbol extends ICEGroup {
         points: dots,
         zIndex,
         interactive: false,
+        linkable: false,
         arrow: 'none',
         lineType: 'solid',
         style: { strokeStyle, lineWidth },
@@ -603,6 +609,7 @@ export default class WaterSymbol extends ICEGroup {
         text,
         stroke: false,
         interactive: false,
+        linkable: false,
         zIndex: (this.state.zIndex || 0) + 4,
         style: { fontSize, fillStyle: color, textAlign, textBaseline: 'middle' },
       })
