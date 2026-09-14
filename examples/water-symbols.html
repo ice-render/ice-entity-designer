@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <meta charset="utf-8" />
+  <title>IED-Water-symbols</title>
+  <style>
+    body { margin: 0; font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; color: #0f172a; }
+    .toolbar { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+    button { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font: inherit; }
+    .hint { color: #64748b; font-size: 12px; }
+    .wrap { padding: 10px; background: #fff; }
+    canvas { display: block; }
+  </style>
+  <body>
+    <div class="toolbar">
+      <button id="btn-export">导出 SVG</button>
+      <button id="btn-fit">适应视图</button>
+      <span class="hint">
+        符号图例：每格按「位号在上、名称在下、图形居中」排。网格线是排版参考，不属于符号本身。
+      </span>
+    </div>
+    <div class="wrap"><canvas id="canvas-1" width="1520" height="1180"></canvas></div>
+
+    <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+    <script src="../dist/index.umd.js"></script>
+    <script type="text/javascript">
+      const { ICE, WaterProcessDesigner, WATER_SYMBOL_PRESETS, ICERect, ICEText } = IED;
+      const ice = new ICE().init('canvas-1');
+      const designer = new WaterProcessDesigner(ice);
+      window.__ice = ice;
+      window.__designer = designer;
+
+      const COLUMNS = 5;
+      const CELL_W = 290;
+      const CELL_H = 230;
+      const PAD_X = 20;
+      const PAD_Y = 30;
+
+      const kinds = Object.keys(WATER_SYMBOL_PRESETS);
+      kinds.forEach((kind, index) => {
+        const column = index % COLUMNS;
+        const row = Math.floor(index / COLUMNS);
+        const cellLeft = PAD_X + column * CELL_W;
+        const cellTop = PAD_Y + row * CELL_H;
+
+        // 单元格参考框（不属于符号：导出 SVG 前会删掉）
+        ice.addChild(
+          new ICERect({
+            left: cellLeft,
+            top: cellTop,
+            width: CELL_W - 16,
+            height: CELL_H - 16,
+            radius: 8,
+            interactive: false,
+            style: { fillStyle: '#ffffff', strokeStyle: '#e2e8f0', lineWidth: 1 },
+          })
+        );
+        const caption = new ICEText({
+          left: cellLeft + 12,
+          top: cellTop + 8,
+          text: `${index + 1}. ${kind}`,
+          interactive: false,
+          style: { fontSize: 11, fillStyle: '#94a3b8' },
+        });
+        ice.addChild(caption);
+
+        const preset = WATER_SYMBOL_PRESETS[kind];
+        const symbolLeft = cellLeft + (CELL_W - 16 - preset.width) / 2;
+        const symbolTop = cellTop + 58;
+        designer.createSymbol(kind, {
+          name: preset.label,
+          tag: preset.tag + '-101',
+          left: symbolLeft,
+          top: symbolTop,
+        });
+      });
+      designer.select(null);
+      designer.resetHistory();
+
+      document.getElementById('btn-export').addEventListener('click', () => {
+        // 导出前把「单元格参考框 + 编号」这些辅助件摘掉，只留符号
+        ice.childNodes
+          .slice()
+          .filter((child) => child.constructor.typeId !== 'ice-entity-designer:WaterSymbol')
+          .forEach((child) => ice.removeChild(child));
+        window.__exportedSvg = designer.toSvg({ padding: 16, background: '#ffffff' });
+      });
+      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport(20));
+
+      designer.fitViewport(20);
+    </script>
+  </body>
+</html>

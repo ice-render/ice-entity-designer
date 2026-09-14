@@ -397,11 +397,27 @@ export default class WaterSymbol extends ICEGroup {
         break;
       case 'flowMeter':
         this.__circle(0, 0, Math.min(w, h) / 2, 'none', strokeStyle, lw, baseZ);
-        this.__text(0, 0, 'F', { fontSize: WATER_STYLE.letterFontSize }, strokeStyle, baseZ);
+        this.__text(
+          cx - 7,
+          cy - WATER_STYLE.letterFontSize * 0.7,
+          14,
+          'F',
+          WATER_STYLE.letterFontSize,
+          strokeStyle,
+          'center'
+        );
         break;
       case 'analyzer':
         this.__circle(0, 0, Math.min(w, h) / 2, 'none', strokeStyle, lw, baseZ);
-        this.__text(0, 0, 'A', { fontSize: WATER_STYLE.letterFontSize }, strokeStyle, baseZ);
+        this.__text(
+          cx - 7,
+          cy - WATER_STYLE.letterFontSize * 0.7,
+          14,
+          'A',
+          WATER_STYLE.letterFontSize,
+          strokeStyle,
+          'center'
+        );
         break;
       case 'inlet':
         // 箭头指向下游
@@ -424,30 +440,28 @@ export default class WaterSymbol extends ICEGroup {
         break;
     }
 
-    // 文字：位号在左上角，名称按形状分组放（矩形/圆形单元放中心，小设备放下方）
+    /**
+     * 文字排版（全库统一，保证不与图形内部元素打架）：
+     * - **位号在上**：符号顶边外侧居中；
+     * - **名称在下**：符号底边外侧居中。
+     * 图形内部只保留符号自身的构成要素（流量计的 F、在线仪表的 A 之类）。
+     */
+    const labelWidth = Math.max(w + 24, 90);
+    const labelLeft = cx - labelWidth / 2;
     if (this.state.tag) {
       this.__text(
-        -cx + 2,
-        -cy + 7,
+        labelLeft,
+        -18,
+        labelWidth,
         String(this.state.tag),
-        { fontSize: WATER_STYLE.tagFontSize, textColor: WATER_STYLE.tagColor },
-        undefined,
-        baseZ + 2,
-        'left'
+        WATER_STYLE.tagFontSize,
+        WATER_STYLE.tagColor,
+        'center'
       );
     }
     const name = String(this.state.name || '');
     if (name) {
-      const inCenter = preset.shape === 'tank' || preset.shape === 'round' || preset.shape === 'boundary';
-      const textY = inCenter ? 0 : cy + 14;
-      this.__text(
-        0,
-        textY,
-        name,
-        { fontSize: WATER_STYLE.nameFontSize, textColor: WATER_STYLE.nameColor },
-        undefined,
-        baseZ + 2
-      );
+      this.__text(labelLeft, h + 14, labelWidth, name, WATER_STYLE.nameFontSize, WATER_STYLE.nameColor, 'center');
     }
   }
 
@@ -564,29 +578,35 @@ export default class WaterSymbol extends ICEGroup {
     );
   }
 
+  /**
+   * 文本部件：**显式给文字盒（width/height）+ textAlign/textBaseline 居中**。
+   *
+   * 这是电力域包验证过的写法：不给盒、靠自己估算宽度去挪 left，实测会又偏又挤。
+   */
   private __text(
-    cx: number,
-    cy: number,
+    boxLeft: number,
+    boxTop: number,
+    boxWidth: number,
     text: string,
-    style: any,
-    textColor: string | undefined,
-    zIndex: number,
-    align: 'center' | 'left' = 'center'
+    fontSize: number,
+    color: string,
+    textAlign: 'left' | 'center' = 'center'
   ): any {
-    const fontSize = style.fontSize || WATER_STYLE.nameFontSize;
-    const component: any = new ICEText({
-      left: this.__originX + cx,
-      top: this.__originY + cy - fontSize / 2,
-      text,
-      zIndex,
-      interactive: false,
-      style: { fontSize, fillStyle: style.textColor || textColor || WATER_STYLE.nameColor, textAlign: 'left' },
-    });
-    // 居中用**实测宽度**（构造时已经量过），不做宽度估算
-    if (align === 'center') {
-      component.setState({ left: this.__originX + cx - component.state.width / 2 });
-    }
-    return this.__add('text:' + text, component);
+    const boxHeight = Math.round(fontSize * 1.4);
+    return this.__add(
+      'text:' + text,
+      new ICEText({
+        left: boxLeft,
+        top: boxTop,
+        width: boxWidth,
+        height: boxHeight,
+        text,
+        stroke: false,
+        interactive: false,
+        zIndex: (this.state.zIndex || 0) + 4,
+        style: { fontSize, fillStyle: color, textAlign, textBaseline: 'middle' },
+      })
+    );
   }
 
   private __add(role: string, component: any): any {
