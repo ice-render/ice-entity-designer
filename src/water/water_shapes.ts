@@ -35,15 +35,25 @@ export const WATER_SYMBOL_KINDS = [
   'coagulationTank',
   'filterBed',
   'disinfectionTank',
+  'storageTank',
+  'deodorizer',
   // ---- 处理单元（污泥线）----
   'sludgeThickener',
   'dewateringMachine',
+  'sludgeSilo',
   // ---- 设备与仪表 ----
   'pump',
+  'submersiblePump',
+  'screwPump',
   'blower',
+  'vfd',
   'dosingUnit',
   'valve',
+  'motorValve',
+  'checkValve',
   'flowMeter',
+  'levelGauge',
+  'pressureGauge',
   'analyzer',
   // ---- 边界 ----
   'inlet',
@@ -67,15 +77,25 @@ export const WATER_UNIT_KINDS: WaterSymbolKind[] = [
   'disinfectionTank',
   'sludgeThickener',
   'dewateringMachine',
+  'sludgeSilo',
+  'storageTank',
+  'deodorizer',
 ];
 
 /** 设备与仪表：只参与连接，不要求"进出各一条" */
 export const WATER_EQUIPMENT_KINDS: WaterSymbolKind[] = [
   'pump',
+  'submersiblePump',
+  'screwPump',
   'blower',
+  'vfd',
   'dosingUnit',
   'valve',
+  'motorValve',
+  'checkValve',
   'flowMeter',
+  'levelGauge',
+  'pressureGauge',
   'analyzer',
 ];
 
@@ -127,13 +147,23 @@ export const WATER_SYMBOL_PRESETS: Record<WaterSymbolKind, WaterSymbolPreset> = 
   coagulationTank: { label: '混凝沉淀池', tag: 'CO', width: 110, height: 70, shape: 'tank', inline: false },
   filterBed: { label: '滤池', tag: 'FL', width: 120, height: 60, shape: 'tank', inline: false },
   disinfectionTank: { label: '消毒接触池', tag: 'DT', width: 130, height: 60, shape: 'tank', inline: false },
+  storageTank: { label: '调节 / 事故池', tag: 'EQ', width: 130, height: 70, shape: 'tank', inline: false },
+  deodorizer: { label: '除臭装置', tag: 'OD', width: 120, height: 60, shape: 'tank', inline: false },
   sludgeThickener: { label: '污泥浓缩池', tag: 'ST', width: 100, height: 100, shape: 'round', inline: false },
   dewateringMachine: { label: '污泥脱水机', tag: 'DW', width: 110, height: 60, shape: 'tank', inline: false },
+  sludgeSilo: { label: '污泥料仓', tag: 'SIL', width: 90, height: 80, shape: 'tank', inline: false },
   pump: { label: '水泵', tag: 'P', width: 44, height: 44, shape: 'device', inline: false },
+  submersiblePump: { label: '潜污泵', tag: 'P-SB', width: 44, height: 44, shape: 'device', inline: false },
+  screwPump: { label: '螺杆泵', tag: 'P-SC', width: 64, height: 44, shape: 'device', inline: false },
   blower: { label: '鼓风机', tag: 'B', width: 48, height: 48, shape: 'device', inline: false },
+  vfd: { label: '变频器', tag: 'VFD', width: 56, height: 40, shape: 'device', inline: false },
   dosingUnit: { label: '加药装置', tag: 'DU', width: 60, height: 70, shape: 'device', inline: false },
   valve: { label: '阀门', tag: 'V', width: 32, height: 32, shape: 'device', inline: true },
+  motorValve: { label: '电动阀', tag: 'MOV', width: 34, height: 46, shape: 'device', inline: true },
+  checkValve: { label: '止回阀', tag: 'CV', width: 32, height: 32, shape: 'device', inline: true },
   flowMeter: { label: '流量计', tag: 'FIT', width: 36, height: 36, shape: 'device', inline: true },
+  levelGauge: { label: '液位计', tag: 'LT', width: 32, height: 32, shape: 'device', inline: false },
+  pressureGauge: { label: '压力表', tag: 'PT', width: 32, height: 32, shape: 'device', inline: false },
   analyzer: { label: '在线水质分析仪', tag: 'AIT', width: 36, height: 36, shape: 'device', inline: false },
   inlet: { label: '进水', tag: 'IN', width: 80, height: 36, shape: 'boundary', inline: false },
   outlet: { label: '出水 / 排放', tag: 'OUT', width: 80, height: 36, shape: 'boundary', inline: false },
@@ -163,7 +193,13 @@ export const WATER_STYLE = {
 };
 
 /** 污泥线单元（配色与校验都要用） */
-export const WATER_SLUDGE_KINDS: WaterSymbolKind[] = ['sludgeThickener', 'dewateringMachine', 'sludgeOut'];
+export const WATER_SLUDGE_KINDS: WaterSymbolKind[] = [
+  'sludgeThickener',
+  'dewateringMachine',
+  'sludgeSilo',
+  'screwPump',
+  'sludgeOut',
+];
 
 export type WaterValveState = 'open' | 'closed';
 
@@ -419,6 +455,115 @@ export default class WaterSymbol extends ICEGroup {
           'center'
         );
         break;
+      case 'storageTank':
+        // 调节 / 事故池：池体 + 水位线 + 液面波纹
+        this.__box(0, 0, w, h, fillStyle, strokeStyle, lw, baseZ);
+        this.__poly([-w / 2 + 6, h / 4, w / 2 - 6, h / 4], '#93c5fd', WATER_STYLE.detailLineWidth, baseZ);
+        this.__poly(
+          [-w / 4, -h / 6, -w / 8, -h / 3, 0, -h / 6, w / 8, -h / 3, w / 4, -h / 6],
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
+        break;
+      case 'deodorizer':
+        // 除臭装置：箱体 + 生物滤料点阵 + 进气管
+        this.__box(0, 0, w, h, fillStyle, strokeStyle, lw, baseZ);
+        for (let row = 0; row < 2; row++) {
+          for (let col = 0; col < 4; col++) {
+            this.__circle(
+              -w / 4 + col * (w / 6),
+              -h / 8 + row * (h / 4),
+              3,
+              'none',
+              strokeStyle,
+              WATER_STYLE.detailLineWidth,
+              baseZ
+            );
+          }
+        }
+        this.__poly([-w / 2, -h / 2, -w / 2, -h / 4], strokeStyle, lw, baseZ);
+        break;
+      case 'sludgeSilo':
+        // 污泥料仓：仓体 + 锥斗 + 卸料口 + 顶部进料
+        this.__box(0, -h / 8, w - 20, h * 0.6, fillStyle, strokeStyle, lw, baseZ);
+        this.__poly([-w / 2 + 10, h * 0.175, 0, h * 0.42, w / 2 - 10, h * 0.175], strokeStyle, lw, baseZ);
+        this.__poly([0, h * 0.42, 0, h / 2 - 2], strokeStyle, lw, baseZ);
+        this.__poly([-8, -h / 8 - h * 0.3, 8, -h / 8 - h * 0.3], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        break;
+      case 'submersiblePump': {
+        // 潜污泵：圆（叶轮）+ 底座横线（整机可沉入池底）
+        const r = Math.min(w, h) / 2 - 3;
+        this.__circle(0, -2, r, 'none', strokeStyle, lw, baseZ);
+        for (let i = 0; i < 3; i++) {
+          const angle = (Math.PI * 2 * i) / 3 - Math.PI / 2;
+          this.__poly(
+            [0, -2, r * 0.8 * Math.cos(angle), -2 + r * 0.8 * Math.sin(angle)],
+            strokeStyle,
+            WATER_STYLE.detailLineWidth,
+            baseZ
+          );
+        }
+        this.__poly([-r, r + 1, r, r + 1], strokeStyle, lw, baseZ);
+        break;
+      }
+      case 'screwPump':
+        // 螺杆泵：泵壳 + 螺旋 + 底座
+        this.__box(0, -3, w, h - 14, fillStyle, strokeStyle, lw, baseZ);
+        for (let i = 1; i <= 4; i++) {
+          const x = -w / 2 + (w / 5) * i;
+          this.__poly([x - 5, -h / 2 + 5, x + 5, h / 2 - 11], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        }
+        this.__poly([-w / 3, h / 2 - 4, w / 3, h / 2 - 4], strokeStyle, lw, baseZ);
+        break;
+      case 'vfd':
+        // 变频器：机箱 + 输出波形（调速 → 电耗）
+        this.__box(0, 0, w, h, fillStyle, strokeStyle, lw, baseZ);
+        this.__poly(
+          [-w / 4, 4, -w / 8, -5, 0, 4, w / 8, -5, w / 4, 4],
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
+        break;
+      case 'motorValve':
+        // 电动阀：蝶形阀体 + 上方执行器（矩形）+ 连杆
+        this.__closedPoly([-9, 8, -9, 24, 0, 16], strokeStyle, lw, baseZ);
+        this.__closedPoly([9, 8, 9, 24, 0, 16], strokeStyle, lw, baseZ);
+        this.__poly([0, 8, 0, 2], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__box(0, -6, 22, 16, 'none', strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        if (this.state.valveState === 'closed') {
+          this.__poly([0, 6, 0, 26], '#dc2626', 2, baseZ);
+        }
+        break;
+      case 'checkValve':
+        // 止回阀：阀体 + 单向三角 + 通过线（只能往一个方向过水）
+        this.__box(0, 0, w - 6, h - 14, 'none', strokeStyle, lw, baseZ);
+        this.__closedPoly([-5, -6, 6, 0, -5, 6], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__poly([-w / 2 + 3, 0, w / 2 - 3, 0], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        break;
+      case 'levelGauge': {
+        // 液位计：圆 + 液面波纹 + 字母 L
+        const r = Math.min(w, h) / 2;
+        this.__circle(0, 0, r, 'none', strokeStyle, lw, baseZ);
+        this.__poly(
+          [-r * 0.62, 6, -r * 0.2, 0, r * 0.2, 10, r * 0.62, 4],
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
+        this.__text(cx - 5, cy - 1, 12, 'L', WATER_STYLE.tagFontSize, strokeStyle, 'center');
+        break;
+      }
+      case 'pressureGauge': {
+        // 压力表：圆 + 指针 + 字母 P
+        const r = Math.min(w, h) / 2;
+        this.__circle(0, 0, r, 'none', strokeStyle, lw, baseZ);
+        this.__poly([0, 6, r * 0.5, -r * 0.45], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__circle(0, 6, 2, strokeStyle, strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__text(cx - 5, cy - 1, 12, 'P', WATER_STYLE.tagFontSize, strokeStyle, 'center');
+        break;
+      }
       case 'inlet':
         // 箭头指向下游
         this.__box(10, 0, w - 20, h - 12, fillStyle, strokeStyle, lw, baseZ);

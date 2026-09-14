@@ -38,6 +38,64 @@ describe('给水排水符号库 · 预设', () => {
     ['sludgeThickener', 'dewateringMachine', 'sludgeOut'].forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
   });
 
+  it('自控与仪表的补充图元齐备（电动阀 / 止回阀 / 液位计 / 压力表 / 变频器 / 潜污泵 / 螺杆泵）', () => {
+    const extra = [
+      'submersiblePump',
+      'screwPump',
+      'motorValve',
+      'checkValve',
+      'levelGauge',
+      'pressureGauge',
+      'vfd',
+      'storageTank',
+      'sludgeSilo',
+      'deodorizer',
+    ];
+    extra.forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
+    // 串联在管线上的要标 inline（画法与端口都用它）：电动阀 / 止回阀是通路上的元件
+    expect(WATER_SYMBOL_PRESETS.motorValve.inline).toBe(true);
+    expect(WATER_SYMBOL_PRESETS.checkValve.inline).toBe(true);
+    // 仪表与在线设备不占据管线（挂在池体 / 管道旁）
+    expect(WATER_SYMBOL_PRESETS.levelGauge.inline).toBe(false);
+    expect(WATER_SYMBOL_PRESETS.pressureGauge.inline).toBe(false);
+    // 位号代号按行业习惯
+    expect(WATER_SYMBOL_PRESETS.motorValve.tag).toBe('MOV');
+    expect(WATER_SYMBOL_PRESETS.checkValve.tag).toBe('CV');
+    expect(WATER_SYMBOL_PRESETS.levelGauge.tag).toBe('LT');
+    expect(WATER_SYMBOL_PRESETS.pressureGauge.tag).toBe('PT');
+    expect(WATER_SYMBOL_PRESETS.vfd.tag).toBe('VFD');
+  });
+
+  it('新增图元都画得出来（派生形状 ≥ 2 个），且泥线单元走污泥配色', () => {
+    const ice: any = new ICE();
+    const bus = new EventBus();
+    ice.evtBus = bus;
+    const extra = [
+      'submersiblePump',
+      'screwPump',
+      'motorValve',
+      'checkValve',
+      'levelGauge',
+      'pressureGauge',
+      'vfd',
+      'storageTank',
+      'sludgeSilo',
+      'deodorizer',
+    ];
+    extra.forEach((kind) => {
+      const symbol: any = new WaterSymbol({ kind, left: 0, top: 0 });
+      ice.addChild(symbol);
+      expect(symbol.parts.length).toBeGreaterThanOrEqual(2);
+    });
+    // 料仓与螺杆泵属于泥线（浅黄填充）
+    const silo: any = new WaterSymbol({ kind: 'sludgeSilo', left: 0, top: 0 });
+    ice.addChild(silo);
+    const filled = (silo.parts || []).map(
+      (item: any) => item.component && item.component.state && item.component.state.style
+    );
+    expect(JSON.stringify(filled)).toContain('fef3c7');
+  });
+
   it('处理单元 / 设备 / 边界三类分得开（校验规则要用）', () => {
     WATER_UNIT_KINDS.forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
     WATER_EQUIPMENT_KINDS.forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
