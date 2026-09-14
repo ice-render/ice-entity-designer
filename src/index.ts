@@ -99,6 +99,14 @@ export type { WaterSymbolKind, WaterMedium, WaterValveState, WaterSymbolPreset }
 export { toPlantUml, fromPlantUml, arrowOf, detectUmlDialect } from './uml/uml_text';
 export type { UmlTextImportResult } from './uml/uml_text';
 
+// 画布外壳配色：默认从引擎主题派生；`DESIGNER_CHROME_ANTD` 是固定旧观感的那一套
+export {
+  DESIGNER_CHROME,
+  DESIGNER_CHROME_ANTD,
+  designerChromeFromTheme,
+  applyDesignerChrome,
+} from './theme/designerTheme';
+
 /**
  * ice-render 是 peer 依赖，不再内联进本包。
  *
