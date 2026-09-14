@@ -272,12 +272,12 @@ describe('FlowDesigner 快照', () => {
     const first = designer.serialize();
     const firstEdge = sceneNodes(first).find((item: any) => item.type === 'ice-entity-designer:FlowEdge');
     expect(firstEdge.state.style.strokeStyle).toBe('#0284c7');
-    expect(firstEdge.state.labelStyle.fillStyle).toBe('#b91c1c');
+    expect(firstEdge.state.style.label.fillStyle).toBe('#b91c1c');
 
     designer.load(first);
     expect(designer.edges[0].state.style.strokeStyle).toBe('#0284c7');
     expect(designer.edges[0].state.style.lineWidth).toBe(3);
-    expect(designer.edges[0].state.labelStyle.fillStyle).toBe('#b91c1c');
+    expect(designer.edges[0].state.style.label.fillStyle).toBe('#b91c1c');
     expect(designer.serialize()).toBe(first);
   });
 

@@ -472,12 +472,12 @@ test('属性面板：文字颜色/字号/连线颜色/线宽/标签颜色可改�
       return {
         stroke: edge.state.style.strokeStyle,
         width: edge.state.style.lineWidth,
-        label: edge.state.labelStyle.fillStyle,
+        label: edge.state.style.label.fillStyle,
       };
     });
   expect(await edgeState()).toEqual({ stroke: '#0284c7', width: 3, label: '#b91c1c' });
 
-  // 往返：保存 → 清空 → 加载后样式仍在（回归：连线 style/labelStyle 此前根本不进快照）
+  // 往返：保存 → 清空 → 加载后样式仍在（回归：连线 style / style.label 此前根本不进快照）
   await page.click('#btn-save');
   await page.waitForTimeout(250);
   await page.click('#btn-clear');

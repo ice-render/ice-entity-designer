@@ -39,14 +39,21 @@ export default class FlowEdge extends ICEVisioLink {
       endPoint: [10, 10],
       label: '',
       ...props,
-      style: { strokeStyle: '#64748b', fillStyle: '#64748b', lineWidth: 1.4, ...(props.style || {}) },
-      labelStyle: {
-        fontSize: 12,
-        fillStyle: '#334155',
-        backgroundColor: '#ffffff',
-        paddingLeft: 4,
-        paddingRight: 4,
-        ...(props.labelStyle || {}),
+      style: {
+        strokeStyle: '#64748b',
+        fillStyle: '#64748b',
+        lineWidth: 1.4,
+        ...(props.style || {}),
+        // 标签外观归 style.label（老 props.labelStyle 仍收，单向并入）
+        label: {
+          fontSize: 12,
+          fillStyle: '#334155',
+          backgroundColor: '#ffffff',
+          paddingLeft: 4,
+          paddingRight: 4,
+          ...(props.labelStyle || {}),
+          ...((props.style || {}).label || {}),
+        },
       },
     });
     // BPMN 连线类型（sequence / message / association）决定虚线、箭头样式与语义属性；
@@ -66,6 +73,19 @@ export default class FlowEdge extends ICEVisioLink {
    * - association：点线 + 无箭头
    */
   public applyPatch(patch: Record<string, any> = {}): this {
+    // 归一化：老的 `labelStyle` 单向并入规范位置 `style.label`（与引擎侧的归一化同一规则）——
+    // 运行时改属性（updateEdge）不会走构造函数，所以这里也要收一次，否则标签外观会被写回旧位置。
+    if (patch && patch.labelStyle) {
+      patch = {
+        ...patch,
+        style: {
+          ...(this.state.style || {}),
+          ...(patch.style || {}),
+          label: { ...(patch.labelStyle || {}), ...((patch.style || {}).label || {}) },
+        },
+      };
+      delete (patch as any).labelStyle;
+    }
     const next = { ...this.state, ...patch };
     const flowType = next.flowType || 'sequence';
     const derived =

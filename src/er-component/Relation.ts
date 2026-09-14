@@ -45,11 +45,16 @@ export default class Relation extends ICEVisioLink {
       arrow,
       ...normalizedProps,
       label,
-      labelStyle: {
-        fontSize: 14,
-        fillStyle: '#334155',
-        backgroundColor: '#ffffff',
-        ...(normalizedProps.labelStyle || {}),
+      // 标签外观归 style.label（引擎 2.4 起的规范位置；老的 props.labelStyle 仍然收，单向并入）
+      style: {
+        ...(normalizedProps.style || {}),
+        label: {
+          fontSize: 14,
+          fillStyle: '#334155',
+          backgroundColor: '#ffffff',
+          ...(normalizedProps.labelStyle || {}),
+          ...((normalizedProps.style || {}).label || {}),
+        },
       },
     });
   }

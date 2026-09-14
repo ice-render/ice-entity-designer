@@ -80,8 +80,7 @@ export default class UmlDesigner extends FlowDesigner {
       relationKind: props.relationKind || 'association',
       label: props.label || '',
       linkShape: props.linkShape || 'visio',
-      style: props.style,
-      labelStyle: props.labelStyle,
+      style: { ...(props.style || {}), ...(props.labelStyle ? { label: props.labelStyle } : {}) },
     });
     this.ice.addChild(relation);
     this.selectedId = relation.state.id;

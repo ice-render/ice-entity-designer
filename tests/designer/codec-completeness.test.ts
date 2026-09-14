@@ -2,7 +2,7 @@
  * 项目快照 codec 的**完整性约束**。
  *
  * 目的：消灭「新增了 state 字段，却忘了写进快照」这类静默丢数据 bug
- * （历史上已经发生过两次：连线 style/labelStyle、FlowNode 文字颜色）。
+ * （历史上已经发生过两次：连线 style / style.label、FlowNode 文字颜色）。
  *
  * 两条约束：
  * 1. 每个 state 键必须被 codec 覆盖，或明确登记为「运行时派生 / 构造默认」；
@@ -74,7 +74,7 @@ function relationProps(sourceId: string, targetId: string) {
     onUpdate: 'CASCADE',
     joinTableName: 'user_roles',
     label: '1 : N  (ON DELETE CASCADE)',
-    labelStyle: { fontSize: 14, backgroundColor: '#ffffff' },
+    style: { label: { fontSize: 14, backgroundColor: '#ffffff' } },
     style: { strokeStyle: '#334155', lineWidth: 2 },
     routeType: 'orthogonal',
     routeOffset: 24,
