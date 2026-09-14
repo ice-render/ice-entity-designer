@@ -109,6 +109,7 @@ export default class StateNode extends ICEGroup {
         radius: Math.min(width, height) / 2,
         stroke: false,
         interactive: false,
+        linkable: false,
         // 伪状态用固定的深色：UML 里初始态是**实心黑点**，跟着状态的边框色（浅石板）变淡就不成记法了
         style: { fillStyle: this.state.style.pseudoColor || '#334155' },
       });
@@ -126,6 +127,7 @@ export default class StateNode extends ICEGroup {
         radius,
         stroke: true,
         interactive: false,
+        linkable: false,
         style: {
           fillStyle: this.state.style.fillStyle || '#ffffff',
           strokeStyle: this.state.style.pseudoColor || '#334155',
@@ -140,6 +142,7 @@ export default class StateNode extends ICEGroup {
         radius: radius * 0.6,
         stroke: false,
         interactive: false,
+        linkable: false,
         style: { fillStyle: this.state.style.pseudoColor || '#334155' },
       });
       this.addChild(this.shapeComponent);
@@ -157,6 +160,7 @@ export default class StateNode extends ICEGroup {
       radius: kind === 'composite' ? 14 : 12,
       stroke: true,
       interactive: false,
+      linkable: false,
       style: {
         fillStyle: this.state.style.fillStyle || '#ffffff',
         strokeStyle: this.state.style.strokeStyle || '#334155',
@@ -177,6 +181,7 @@ export default class StateNode extends ICEGroup {
       text: String(this.state.title || ''),
       stroke: false,
       interactive: false,
+      linkable: false,
       style: {
         fontSize: this.state.labelStyle.fontSize,
         fontWeight: this.state.labelStyle.fontWeight,

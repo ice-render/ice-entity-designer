@@ -155,6 +155,7 @@ export default class Entity extends ICEGroup {
           paddingBottom: this.state.headerStyle.paddingBottom,
         },
         interactive: false,
+        linkable: false,
         stroke: false,
         showMinBoundingBox: false,
         showMaxBoundingBox: false,
@@ -176,6 +177,7 @@ export default class Entity extends ICEGroup {
             lineWidth: 0,
           },
           interactive: false,
+          linkable: false,
           stroke: false,
           showMinBoundingBox: false,
           showMaxBoundingBox: false,
@@ -197,6 +199,7 @@ export default class Entity extends ICEGroup {
           lineWidth: this.state.dividerStyle.lineWidth,
         },
         interactive: false,
+        linkable: false,
       });
       this.addChild(this.deviderLine);
     }
@@ -221,6 +224,7 @@ export default class Entity extends ICEGroup {
             paddingBottom: i === len - 1 ? 12 : 0,
           },
           interactive: false,
+          linkable: false,
           stroke: false,
           showMinBoundingBox: false,
           showMaxBoundingBox: false,

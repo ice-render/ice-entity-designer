@@ -157,6 +157,7 @@ export default class GanttTask extends ICEGroup {
       radius: Math.min(4, height / 2),
       stroke: true,
       interactive: false,
+      linkable: false,
       style: { fillStyle: style.barFill, strokeStyle: style.strokeStyle, lineWidth: style.lineWidth },
     });
     this.addChild(this.barComponent);
@@ -172,6 +173,7 @@ export default class GanttTask extends ICEGroup {
         radius: Math.min(4, height / 2),
         stroke: false,
         interactive: false,
+        linkable: false,
         style: { fillStyle: style.progressFill },
       });
       this.addChild(this.progressComponent);
@@ -189,6 +191,7 @@ export default class GanttTask extends ICEGroup {
       }`,
       stroke: false,
       interactive: false,
+      linkable: false,
       style: {
         fontSize: this.state.labelStyle.fontSize,
         fillStyle: this.state.labelStyle.textColor,

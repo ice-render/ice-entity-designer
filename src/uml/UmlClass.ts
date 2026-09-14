@@ -182,6 +182,7 @@ export default class UmlClass extends ICEGroup {
         text: stereotype,
         stroke: false,
         interactive: false,
+        linkable: false,
         style: {
           fontSize: stereotypeFontSize,
           fillStyle: headerStyle.stereotypeColor || headerStyle.textColor,
@@ -208,6 +209,7 @@ export default class UmlClass extends ICEGroup {
       text: String(this.state.className || ''),
       stroke: false,
       interactive: false,
+      linkable: false,
       style: {
         fontSize: headerStyle.fontSize,
         fillStyle: headerStyle.textColor,
@@ -233,6 +235,7 @@ export default class UmlClass extends ICEGroup {
         radius: Math.max((this.state.style.radius || 0) - headerInset, 0),
         stroke: false,
         interactive: false,
+        linkable: false,
         style: { fillStyle: headerStyle.backgroundColor, lineWidth: 0 },
       });
       this.addChild(this.headerBackgroundComponent);
@@ -253,6 +256,7 @@ export default class UmlClass extends ICEGroup {
         ],
         stroke: true,
         interactive: false,
+        linkable: false,
         style: {
           strokeStyle: this.state.dividerStyle.strokeStyle,
           fillStyle: this.state.dividerStyle.fillStyle,
@@ -278,6 +282,7 @@ export default class UmlClass extends ICEGroup {
           text: String(text),
           stroke: false,
           interactive: false,
+          linkable: false,
           style: {
             fontSize: memberStyle.fontSize,
             fillStyle: memberStyle.textColor,
