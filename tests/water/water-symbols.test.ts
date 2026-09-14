@@ -12,6 +12,8 @@ import WaterSymbol, {
   WATER_MEDIUM_STYLES,
   WATER_UNIT_KINDS,
   WATER_EQUIPMENT_KINDS,
+  WATER_VALVE_KINDS,
+  isWaterValveKind,
 } from '../../src/water/water_shapes';
 
 describe('给水排水符号库 · 预设', () => {
@@ -101,6 +103,14 @@ describe('给水排水符号库 · 预设', () => {
     WATER_EQUIPMENT_KINDS.forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
     expect(WATER_UNIT_KINDS).not.toContain('pump');
     expect(WATER_EQUIPMENT_KINDS).toContain('pump');
+  });
+
+  it('阀门类图元：手动阀与电动阀在"通不通"上等价（流径分析与开闭都按它判）', () => {
+    expect(WATER_VALVE_KINDS).toEqual(['valve', 'motorValve']);
+    expect(isWaterValveKind('valve')).toBe(true);
+    expect(isWaterValveKind('motorValve')).toBe(true);
+    expect(isWaterValveKind('checkValve')).toBe(false); // 止回阀不可开闭（只有单向）
+    expect(isWaterValveKind('pump')).toBe(false);
   });
 
   it('介质样式齐备：污水 / 污泥 / 空气 / 药剂 / 出水 / 回流', () => {

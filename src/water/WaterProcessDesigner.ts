@@ -20,7 +20,7 @@
  */
 import FlowDesigner from '../flow/FlowDesigner';
 import FlowEdge from '../flow/FlowEdge';
-import WaterSymbol, { WATER_MEDIUM_STYLES, WATER_SYMBOL_PRESETS } from './water_shapes';
+import WaterSymbol, { isWaterValveKind, WATER_MEDIUM_STYLES, WATER_SYMBOL_PRESETS } from './water_shapes';
 import type { WaterMedium, WaterSymbolKind, WaterValveState } from './water_shapes';
 import { registerIEDType } from '../utils/type-registry';
 
@@ -149,8 +149,8 @@ export default class WaterProcessDesigner extends FlowDesigner {
     if (!node) {
       throw new Error('找不到该符号：' + id);
     }
-    if (node.state.kind !== 'valve') {
-      throw new Error('只有阀门能改开 / 闭状态');
+    if (!isWaterValveKind(node.state.kind)) {
+      throw new Error('只有阀门（手动阀 / 电动阀）能改开 / 闭状态');
     }
     node.applyPatch({ valveState });
     this.ice.dirty = true;
@@ -177,14 +177,14 @@ export default class WaterProcessDesigner extends FlowDesigner {
       const node = this.__symbolById(current);
       if (!node) continue;
       // 关断的阀门：不往下游扩散
-      if (node.state.kind === 'valve' && node.state.valveState === 'closed') continue;
+      if (isWaterValveKind(node.state.kind) && node.state.valveState === 'closed') continue;
       if (node.state.kind === 'outlet') {
         outletId = current;
         break;
       }
       (adjacency.get(current) || []).forEach((item) => {
         const next = this.__symbolById(item.to);
-        if (next && next.state.kind === 'valve' && next.state.valveState === 'closed') {
+        if (next && isWaterValveKind(next.state.kind) && next.state.valveState === 'closed') {
           if (!blockedAt) blockedAt = item.to;
           return;
         }

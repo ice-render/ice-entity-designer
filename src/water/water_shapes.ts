@@ -204,6 +204,19 @@ export const WATER_SLUDGE_KINDS: WaterSymbolKind[] = [
 export type WaterValveState = 'open' | 'closed';
 
 /**
+ * **可开闭的阀门类图元**：手动阀与电动阀。
+ *
+ * 流径分析（关阀即断流）与开 / 闭操作都按这个集合判 —— 电动阀只是驱动方式不同，
+ * 在"通不通"这件事上和手动阀完全等价；漏了它就会出现"电动阀关着，流径却报通"。
+ * 图纸上要表达"能远程联锁的阀"就用 `motorValve`，不要因为它长得不一样就当成设备。
+ */
+export const WATER_VALVE_KINDS: WaterSymbolKind[] = ['valve', 'motorValve'];
+
+export function isWaterValveKind(kind: string): boolean {
+  return WATER_VALVE_KINDS.indexOf(kind as WaterSymbolKind) !== -1;
+}
+
+/**
  * @class WaterSymbol 给水排水工艺流程图图元（复合组件）
  *
  * 与其它域包同一套做法：内部形状按 `kind` 派生（`hasDerivedChildren() === true`），
