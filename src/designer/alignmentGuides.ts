@@ -11,6 +11,13 @@
  * 之前每个示例各写一行 `ice.alignmentGuide.enable(...)`，于是新页面很容易漏掉
  * （流程图与水务示例就漏了），现在统一收在这里。
  *
+ * **阈值取 2（比引擎默认的 3 更紧）**（2026-09-15 实测）：阈值就是吸附半径，它必须明显小于
+ * "候选线沿拖动路径的间距"。本仓的领域图都是**密集版面**（水务工艺图 34 个单元，候选线沿路径
+ * 间距约 14 世界 px），而此前示例里用的 `threshold: 6` 在 0.5× 缩放下是 12 世界 px ——
+ * 等于指针处处都在吸附带里：拖动时图元被一颗颗"钉子"挨个吸住（实测 24 步里 19 步在吸附、
+ * 相邻步位移变化最大 18px，肉眼就是"引导线和图元乱跳"）。收到 2 之后：11/24 步吸附、
+ * 单步位移变化 ≤6 世界 px（≈3 屏幕 px），且命中期间锁在同一条线不再改主意。
+ *
  * 宿主想改阈值或关掉：
  * ```ts
  * const designer = new EntityDesigner(ice);
@@ -22,6 +29,8 @@ export function enableDesignerAlignmentGuides(ice: any): any {
   if (!ice || !ice.alignmentGuide || typeof ice.alignmentGuide.enable !== 'function') {
     return ice;
   }
-  ice.alignmentGuide.enable({ threshold: 6 });
+  // 阈值 2：比引擎默认（3）更紧，理由见上面的实测。刻意不写 `{ threshold: 6 }`——
+  // 那个值对"几十个图元的密集版面"太大（把吸附概率从 11/24 抬到 19/24，单步位移变化从 6px 抬到 18px）。
+  ice.alignmentGuide.enable({ threshold: 2 });
   return ice;
 }
