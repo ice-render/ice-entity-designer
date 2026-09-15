@@ -256,6 +256,7 @@
 
       const ice = new ICE().init('canvas-1');
       const designer = new FlowDesigner(ice);
+      ice.alignmentGuide.enable({ threshold: 6 });
       window.__ice = ice;
       window.__designer = designer;
       window.__flow = designer;

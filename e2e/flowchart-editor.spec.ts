@@ -86,6 +86,86 @@ async function clickCanvasAt(page: Page, point: { x: number; y: number }) {
   return pagePoint;
 }
 
+/** 工具层里**正在显示**的对齐提示线（颜色走 `chrome.guide.color` 主题引用，按引用或解析值判） */
+async function visibleGuides(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const ice = (window as any).__ice;
+    return ice.toolNodes.filter((item: any) => {
+      const state = item.state || {};
+      if (state.display === false) {
+        return false;
+      }
+      const value = state.style && state.style.fillStyle;
+      return !!value && (value.$token === 'chrome.guide.color' || value === '#EC4899');
+    }).length;
+  });
+}
+
+test('对齐引导线：拖动节点时出现提示线并吸附，松手后清除（回归）', async ({ page }) => {
+  // 本示例必须启用对齐引导线 —— 与其它 7 个域包示例保持同一套拖拽体验
+  expect(await page.evaluate(() => (window as any).__ice.alignmentGuide.isEnabled())).toBe(true);
+
+  // 挑一对「左边缘真的错开、纵向也错开」的节点：拖 A 去对齐 B 的左边缘
+  const plan = await page.evaluate(() => {
+    const ice = (window as any).__ice;
+    const nodes = (window as any).__designer.nodes.filter((node: any) => node.state.display !== false);
+    let a: any = null;
+    let b: any = null;
+    // 取「横向错开、纵向也错开」的一对里横向距离**最小**的：拖拽距离短，不会拖出可视区
+    let bestDx = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = 0; j < nodes.length; j++) {
+        if (i === j) {
+          continue;
+        }
+        const dx = Math.abs(nodes[j].state.left - nodes[i].state.left);
+        const dy = Math.abs(nodes[j].state.top - nodes[i].state.top);
+        if (dx >= 40 && dy >= 40 && dx < bestDx) {
+          bestDx = dx;
+          a = nodes[i];
+          b = nodes[j];
+        }
+      }
+    }
+    if (!a) {
+      // 兜底：真找不到满足条件的组合时，用节点 0 与最后一个（仍在阈值内会被吸附）
+      a = nodes[0];
+      b = nodes[nodes.length - 1];
+    }
+    const center = { x: a.state.left + a.state.width / 2, y: a.state.top + a.state.height / 2 };
+    const [sx, sy] = ice.worldToScreen(center.x, center.y);
+    return {
+      from: { x: Math.round(sx), y: Math.round(sy) },
+      // 故意少拖 4px：这样「对齐」只可能来自吸附，而不是拖拽算术本身
+      shortWorld: 4,
+      dxWorld: b.state.left - a.state.left,
+      scale: ice.viewport ? ice.viewport.scale : 1,
+      beforeLeft: a.state.left,
+      targetLeft: b.state.left,
+      id: a.state.id,
+    };
+  });
+
+  // 注意：worldToScreen 给的是**画布内坐标**，鼠标要的是页面坐标 —— 起点由 helper 换算，
+  // 终点按「起点 + 世界位移 × scale」推（两者同处页面坐标系）。
+  const start = await moveToCanvasPoint(page, plan.from);
+  await page.mouse.down();
+  await page.mouse.move(start.x + (plan.dxWorld - plan.shortWorld) * plan.scale, start.y, { steps: 12 });
+  await page.waitForTimeout(250);
+  expect(await visibleGuides(page), '拖拽过程中应出现对齐提示线').toBeGreaterThan(0);
+
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  expect(await visibleGuides(page), '松手后提示线必须清除').toBe(0);
+
+  const finalLeft = await page.evaluate((id) => {
+    const node = (window as any).__designer.nodes.find((item: any) => item.state.id === id);
+    return node ? node.state.left : null;
+  }, plan.id);
+  expect(Math.abs(finalLeft - plan.beforeLeft), '节点应真的被拖动过').toBeGreaterThan(30);
+  expect(Math.abs(finalLeft - plan.targetLeft), '少拖 4px 后仍应吸附到目标左边缘').toBeLessThanOrEqual(1);
+});
+
 test('加载：示例流程就绪、画布有落墨、零控制台报错', async ({ page }) => {
   expect(await counts(page)).toEqual({ nodes: 13, edges: 12 });
   await expect(page.locator('#flow-stats')).toContainText('13 个节点 / 12 条连线');
