@@ -8,6 +8,7 @@
 import FlowDesigner from '../flow/FlowDesigner';
 import StateNode from './StateNode';
 import StateTransition from './StateTransition';
+import { autoPorts } from '../designer/autoPorts';
 import { registerIEDType } from '../utils/type-registry';
 
 export type StatechartIssue = { level: 'error' | 'warning'; message: string; id?: string };
@@ -65,8 +66,11 @@ export default class StatechartDesigner extends FlowDesigner {
       throw new Error('转移两端必须是已存在的状态');
     }
     this.__captureHistory();
-    const sourcePort = props.sourcePort || 'R';
-    const targetPort = props.targetPort || 'L';
+    // 端口默认按两个状态的相对方位自动选：写死 R→L 时，目标在左侧的转移会从右端口出发再折回来，
+    // 折线横穿源状态自身（观感 + 命中都出问题）。显式传 sourcePort/targetPort 仍然优先。
+    const auto = autoPorts(source, target, { sourcePort: 'R', targetPort: 'L' });
+    const sourcePort = props.sourcePort || auto.sourcePort;
+    const targetPort = props.targetPort || auto.targetPort;
     const edge = new StateTransition({
       // id 由调用方决定（DSL 往返要用它引用这条转移）
       id: props.id,

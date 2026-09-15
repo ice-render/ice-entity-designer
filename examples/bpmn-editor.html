@@ -215,11 +215,13 @@
       function buildCase() {
         designer.clear();
         // 池的名称带占 32px：泳道从「内容区」开始，避免盖住池标题
-        const bank = designer.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 1180, height: 340 });
-        designer.createNode('bpmnLane', { title: '受理岗', left: 60, top: 92, width: 1180, height: 150 });
-        designer.createNode('bpmnLane', { title: '风控岗', left: 60, top: 242, width: 1180, height: 150 });
-        const customer = designer.createNode('bpmnPool', { title: '客户', left: 60, top: 450, width: 1180, height: 190 });
-        designer.createNode('bpmnLane', { title: '申请人', left: 60, top: 482, width: 1180, height: 150 });
+        // 池宽 1300（右边界 1360）：任务排到 x=1180，结束事件要落在任务**右侧**而不是压在任务身上
+        // （原布局池宽 1180、事件放 x=1120 → 事件与「发卡 / 通知客户」重叠，连线只能绕回来横穿任务）
+        const bank = designer.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 1300, height: 340 });
+        designer.createNode('bpmnLane', { title: '受理岗', left: 60, top: 92, width: 1300, height: 150 });
+        designer.createNode('bpmnLane', { title: '风控岗', left: 60, top: 242, width: 1300, height: 150 });
+        const customer = designer.createNode('bpmnPool', { title: '客户', left: 60, top: 450, width: 1300, height: 190 });
+        designer.createNode('bpmnLane', { title: '申请人', left: 60, top: 482, width: 1300, height: 150 });
 
         // 客户池也要有自己的开始事件（BPMN 语义：每个 process 至少一个开始事件）
         const need = designer.createNode('bpmnEvent', { title: '产生用卡需求', eventKind: 'start', left: 120, top: 520 });
@@ -232,8 +234,8 @@
         const gateway = designer.createNode('bpmnGateway', { title: '是否通过', gatewayType: 'exclusive', left: 880, top: 255 });
         const approve = designer.createNode('bpmnTask', { title: '发卡', taskType: 'service', left: 1000, top: 130 });
         const inform = designer.createNode('bpmnTask', { title: '通知客户', taskType: 'send', left: 1000, top: 250 });
-        const rejected = designer.createNode('bpmnEvent', { title: '申请结束', eventKind: 'end', left: 1120, top: 120 });
-        const done = designer.createNode('bpmnEvent', { title: '流程结束', eventKind: 'end', left: 1120, top: 250 });
+        const rejected = designer.createNode('bpmnEvent', { title: '申请结束', eventKind: 'end', left: 1250, top: 147 });
+        const done = designer.createNode('bpmnEvent', { title: '流程结束', eventKind: 'end', left: 1250, top: 267 });
         const data = designer.createNode('bpmnDataObject', { title: '征信报告', left: 1080, top: 380 });
         designer.createNode('bpmnAnnotation', { title: '额度 < 6000 时转人工复核', left: 600, top: 480, width: 320, height: 60 });
 
@@ -257,8 +259,9 @@
         designer.select(null);
         designer.resetHistory();
         designer.fitViewport();
-        // 池/泳道垫底
-        [bank, customer].forEach((pool) => pool.setState({ zIndex: -10 }));
+        // 池/泳道垫底：层级由 `BpmnDesigner` 的 __nestByGeometry 统一给（池 -30000 < 泳道 -20000 < 业务图元），
+        // 示例**不要**再自己抬池子的 zIndex —— 曾经这里写 `-10`，把池子抬到了泳道（-20000）之上，
+        // 结果是"点泳道中心选中的是池子"，整个泳道拖不动（2026-09-15 修）。
       }
 
       /* ---------------- 属性面板 ---------------- */

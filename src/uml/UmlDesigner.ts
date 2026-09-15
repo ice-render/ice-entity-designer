@@ -9,6 +9,7 @@ import FlowDesigner from '../flow/FlowDesigner';
 import UmlClass from './UmlClass';
 import UmlRelation, { UML_RELATION_STYLE, UML_RELATION_KINDS } from './UmlRelation';
 import type { UmlRelationKind } from './UmlRelation';
+import { autoPorts } from '../designer/autoPorts';
 import { registerIEDType } from '../utils/type-registry';
 
 export type UmlIssue = { level: 'error' | 'warning'; message: string; id?: string };
@@ -69,8 +70,10 @@ export default class UmlDesigner extends FlowDesigner {
       throw new Error('关系两端必须是已存在的类');
     }
     this.__captureHistory();
-    const sourcePort = props.sourcePort || 'R';
-    const targetPort = props.targetPort || 'L';
+    // 端口默认按相对方位自动选（写死 R→L 时目标在左的类会横穿自己）；显式传参优先
+    const auto = autoPorts(source, target, { sourcePort: 'R', targetPort: 'L' });
+    const sourcePort = props.sourcePort || auto.sourcePort;
+    const targetPort = props.targetPort || auto.targetPort;
     const relation = new UmlRelation({
       // id 由调用方决定（DSL 往返要用它引用这条关系）
       id: props.id,
