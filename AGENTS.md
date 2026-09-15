@@ -98,18 +98,17 @@
 
 - **画布上的图元继续用绝对坐标**：这是设计器语义 —— 用户在拖，位置就是数据
   （`left/top` 随快照走）。不要给画布节点套布局器。
-- **派生位置的结构才用机制**：一个明确候选是 `createTerminalStrip`（`src/secondary/SecondaryDesigner.ts`）——
-  端子是"纵向等距 + 横向居中"的派生排列（`top: 24 + index*rowHeight`、`left: (width-28)/2`），
-  语义上是箱式布局 + 交叉轴居中。**但不要直接把布局挂到 `TerminalStrip` 上**：它自己还有一个
-  标题 `ICEText` 子节点（`secondary_shapes.ts` 构造期加在 `top: -20`），引擎布局会把**所有**子节点
-  当内容摆 —— 标题会被摆到端子的位置。
-  做法（与 `ICETabs` / `ICEScrollPane` 的自持策略同一条路）：
-  ① `TerminalStrip` 内建一个"端子宿主"子容器（只装端子），宿主持
-  `ICEBoxLayout({ axis: 'y', gap: 0, align: 'center' })` + `padding: { top: 24 }`；
-  ② `createTerminalStrip` 改为把端子加进宿主（对外仍是 `strip.addChild(node)` 语义，由 strip 转发）；
-  ③ 顺带获得"增删端子自动重排 / 高度按内容"（现在高度是构造期算一次的）。
-  风险点：端子从"strip 的直接子节点"变成"宿主的子节点"——要同步检查**选中态**（按 id 找节点）、
-  **父级推导**（拖动端子排时端子跟随 ✓ 仍成立）与**快照往返**（序列化是递归的 ✓ 但
-  `hasDerivedChildren` 那条坑要再确认一次）。
+- **端子排（`TerminalStrip`）复核结论：保留手写坐标**（2026-09-15 第二轮逐点审计，推翻上一轮的"待迁"结论）。
+  上一轮把它当成"纵向等距"的候选，复核后发现**引擎布局接管与它的语义冲突**：
+  `ICEGroup.setLayout()` 会（默认）对整棵子树 `transformable=false / draggable=false`
+  （见 `ICEGroup.__disableTransformRecursively`：位置由布局决定，用户不能再拖）——
+  而二次图里的**端子是可拖的实体**（位置是数据，随快照走），端子排只是个"让端子一起动的容器"。
+  一旦挂上布局器，端子就再也拖不动了；用 `setLayout(manager, { disableTransform: false })`
+  只是打了折（拖完下一次重排又会被拉回去）。
+  另外端子必须是 `strip` 的**直接子节点**（`terminal.parentNode === strip` 是既有语义，
+  本仓单测与 e2e 都按这条断言）。
+  高度按内容自适应确实是缺口，但那是**组件级策略**（新建/删除端子时重算 `state.height`），
+  不需要把位置交给布局器 —— 与 `ICETable` 的"行几何"同一条口径（见 `ice-web-components`
+  `docs/guides/layout.md` 第四节的 canvas 类）。
 - **图表几何不是布局**：`ice-chart` 的漏斗/饼图/桑基/仪表等是系列自身的几何（已复核，见该仓），
   `force` 布局是图论物理，两者都不该塞进容器布局器。
