@@ -10,6 +10,7 @@ import GanttTask from './GanttTask';
 import GanttDependency from './GanttDependency';
 import GanttRuler from './GanttRuler';
 import { addDays, diffDays } from './gantt_date';
+import { autoPorts } from '../designer/autoPorts';
 import { registerIEDType } from '../utils/type-registry';
 
 export type GanttIssue = { level: 'error' | 'warning'; message: string; id?: string };
@@ -103,12 +104,17 @@ export default class GanttDesigner extends FlowDesigner {
       throw new Error('依赖两端必须是已存在的任务');
     }
     this.__captureHistory();
-    const startPoint = this.__anchor(source, 'R');
-    const endPoint = this.__anchor(target, 'L');
+    // 端口默认按相对方位自动选：甘特里两条任务条常常只错开半个身位，写死 R→L 会"端口倒挂"
+    // （源 R 在目标 L 右边），正交路由只好先向右逃逸再折回来，线就横穿了源任务条自己。
+    const auto = autoPorts(source, target, { sourcePort: 'R', targetPort: 'L' });
+    const sourcePort = props.sourcePort || auto.sourcePort;
+    const targetPort = props.targetPort || auto.targetPort;
+    const startPoint = this.__anchor(source, sourcePort);
+    const endPoint = this.__anchor(target, targetPort);
     const link = new GanttDependency({
       // id 由调用方决定（DSL 往返要用它引用这条依赖）
       id: props.id,
-      links: { start: { id: props.sourceId, position: 'R' }, end: { id: props.targetId, position: 'L' } },
+      links: { start: { id: props.sourceId, position: sourcePort }, end: { id: props.targetId, position: targetPort } },
       // 折线的构造期不会把 startPoint/endPoint 落到 points（那是 setState 的行为），
       // 所以这里直接给 points，保证首次渲染就接在两条任务条上。
       points: [startPoint, endPoint],

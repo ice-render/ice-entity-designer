@@ -13,6 +13,7 @@ import FlowEdge from './FlowEdge';
 import FlowNode from './FlowNode';
 import type { FlowNodeKind } from './FlowNode';
 import type { FlowPort } from './FlowEdge';
+import { autoPorts } from '../designer/autoPorts';
 import { registerIEDType } from '../utils/type-registry';
 
 /**
@@ -331,8 +332,11 @@ export default class FlowDesigner {
       throw new Error('连接两端必须是已存在的节点');
     }
     this.__captureHistory();
-    const sourcePort: FlowPort = props.sourcePort || 'B';
-    const targetPort: FlowPort = props.targetPort || 'T';
+    // 端口默认按两个节点的相对方位自动选（原来写死 B→T：横向相邻的节点会"下绕再上穿"，
+    // 实测 BPMN 示例 12 条连线里有 6 条穿过自己的端点节点）。显式传 sourcePort/targetPort 仍然优先。
+    const auto = autoPorts(source, target, { sourcePort: 'B', targetPort: 'T' });
+    const sourcePort: FlowPort = props.sourcePort || auto.sourcePort;
+    const targetPort: FlowPort = props.targetPort || auto.targetPort;
     const edge = new FlowEdge({
       // id 由调用方决定（DSL / 快照要用它引用这条线）；不传时引擎照旧自动生成
       id: props.id,

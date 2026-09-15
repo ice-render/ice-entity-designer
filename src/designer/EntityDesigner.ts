@@ -1,5 +1,6 @@
 import { toIsoTime } from 'ice-render';
 import { applyDesignerChrome } from '../theme/designerTheme';
+import { autoPorts } from './autoPorts';
 import { enableDesignerAlignmentGuides } from './alignmentGuides';
 import type { ICE } from 'ice-render';
 import Entity from '../er-component/Entity';
@@ -109,16 +110,21 @@ export default class EntityDesigner {
 
   public createRelation(props: any = {}): any {
     this.captureHistory();
-    const links = props.links || {
-      start: { id: props.sourceId || props.fromId, position: props.startPosition || 'R' },
-      end: { id: props.targetId || props.toId, position: props.endPosition || 'L' },
-    };
-    const sourceId = props.sourceId || props.fromId || (links.start && links.start.id);
-    const targetId = props.targetId || props.toId || (links.end && links.end.id);
-    const startPosition = (links.start && links.start.position) || props.startPosition || 'R';
-    const endPosition = (links.end && links.end.position) || props.endPosition || 'L';
+    const sourceId = props.sourceId || props.fromId || (props.links && props.links.start && props.links.start.id);
+    const targetId = props.targetId || props.toId || (props.links && props.links.end && props.links.end.id);
     const source = sourceId ? this.ice.findComponent(sourceId) : null;
     const target = targetId ? this.ice.findComponent(targetId) : null;
+    // 端口默认按两个实体的相对方位自动选：写死 R→L 时，目标在左侧的关系会从右端口出发再折回来，
+    // 折线横穿源实体自身（观感 + 命中都出问题）。显式传 links / startPosition / endPosition 仍然优先。
+    const auto = autoPorts(source, target, { sourcePort: 'R', targetPort: 'L' });
+    const startPosition =
+      (props.links && props.links.start && props.links.start.position) || props.startPosition || auto.sourcePort;
+    const endPosition =
+      (props.links && props.links.end && props.links.end.position) || props.endPosition || auto.targetPort;
+    const links = props.links || {
+      start: { id: sourceId, position: startPosition },
+      end: { id: targetId, position: endPosition },
+    };
     const startPoint = source ? this.__slotPoint(source, startPosition) : null;
     const endPoint = target ? this.__slotPoint(target, endPosition) : null;
 
