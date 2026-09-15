@@ -101,7 +101,7 @@
     "eslint-plugin-react-hooks": "4.6.0",
     "http-server": "14.1.1",
     "husky": "8.0.3",
-    "ice-render": "^2.11.1",
+    "ice-render": "^2.11.2",
     "jest": "29.7.0",
     "jest-environment-jsdom": "29.7.0",
     "lint-staged": "15.5.2",
