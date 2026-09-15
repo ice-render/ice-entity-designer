@@ -7,6 +7,7 @@
  */
 import { Deserializer, Serializer, exportSvg } from 'ice-render';
 import { applyDesignerChrome } from '../theme/designerTheme';
+import { enableDesignerAlignmentGuides } from '../designer/alignmentGuides';
 import type { ICE, SvgExportOptions } from 'ice-render';
 import FlowEdge from './FlowEdge';
 import FlowNode from './FlowNode';
@@ -152,6 +153,8 @@ export default class FlowDesigner {
   constructor(ice: ICE) {
     // 画布外壳配色（与 EntityDesigner 同一套，见 theme/designerTheme.ts）
     applyDesignerChrome(ice);
+    // 拖拽对齐引导线：图元位置就是数据、没有布局约束，编辑器默认就该有（见 designer/alignmentGuides.ts）
+    enableDesignerAlignmentGuides(ice);
     this.ice = ice;
     registerIEDType(this.ice, FlowNode);
     registerIEDType(this.ice, FlowEdge);

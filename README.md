@@ -78,7 +78,10 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
   不提供缩放/旋转/斜切手柄（尺寸与朝向是记法的一部分）；需要变尺寸的元素（母线长度、BPMN 池/泳道、
   柜体宽高、流程图节点尺寸…）在属性面板里用数值改，甘特条宽度则由「天数 × 每日像素」推出。
   图纸整体缩放走滚轮（视图缩放），与图元缩放严格分开。
-- 拖拽对齐辅助线与磁吸效果。
+- **拖拽对齐引导线与磁吸（默认开启）**：图元位置**就是数据**、没有布局能约束它，缺了引导必然越拖越乱
+  （"看着对齐了、其实差 3px"），所以设计器在构造时就调用 `ice.alignmentGuide.enable({ threshold: 6 })`：
+  拖动时出对齐提示线，并按**边缘 / 中心 / 等间距**三类候选吸附。想调阈值或关掉：
+  `ice.alignmentGuide.setOptions({ threshold: 10 })` / `ice.alignmentGuide.disable()`。
 - Undo / Redo（基于项目快照，最多 100 步）。
 - 项目级保存 / 加载（`serializeProject()` / `loadProject()`）。
 

@@ -1,5 +1,6 @@
 import { toIsoTime } from 'ice-render';
 import { applyDesignerChrome } from '../theme/designerTheme';
+import { enableDesignerAlignmentGuides } from './alignmentGuides';
 import type { ICE } from 'ice-render';
 import Entity from '../er-component/Entity';
 import Relation from '../er-component/Relation';
@@ -63,6 +64,8 @@ export default class EntityDesigner {
     this.ice = ice;
     // 画布外壳（选中框 / 手柄 / 插槽 / 引导线）对齐到设计器的配色 —— 见 theme/designerTheme.ts
     applyDesignerChrome(this.ice);
+    // 拖拽对齐引导线：图元位置就是数据、没有布局约束，编辑器默认就该有（见 designer/alignmentGuides.ts）
+    enableDesignerAlignmentGuides(this.ice);
     registerIEDType(this.ice, Entity);
     registerIEDType(this.ice, Relation);
     this.ice.evtBus.on('mousedown', this.__mousedownHandler, this);
