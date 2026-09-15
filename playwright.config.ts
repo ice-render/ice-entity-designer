@@ -20,7 +20,7 @@ export default defineConfig({
   webServer: {
     command: 'npx http-server . -p 8091 -c-1 --silent',
     port: 8091,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 30_000,
   },
   use: {
