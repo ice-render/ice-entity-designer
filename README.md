@@ -10,7 +10,7 @@
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-047857.svg" /></a>
   <img alt="engine bundled" src="https://img.shields.io/badge/engine-bundled-047857.svg" />
   <img alt="domain packs" src="https://img.shields.io/badge/domain%20packs-9-047857.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/jest-295%20passed-047857.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/jest-364%20passed-047857.svg" />
   <img alt="typescript" src="https://img.shields.io/badge/TypeScript-4.6-3178c6.svg" />
 </p>
 
@@ -18,7 +18,7 @@
 
 IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render/ice-render) 构建的**可视化建模工具集**：同一套引擎、同一套应用层机制（选择 / 增删改 / 连线 / 撤销重做 / 快照 / 语义校验 / 矢量导出）之上承载多个「域包」，每个域包 = **一个领域的记法 + 应用层 + 语义校验**。
 
-现已落地 8 个域包：
+现已落地 9 个域包：
 
 | 域包 | 图种 | 标准依据 / 互操作 |
 |---|---|---|
