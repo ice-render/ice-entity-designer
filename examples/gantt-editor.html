@@ -60,25 +60,20 @@
     <script src="../dist/index.umd.js"></script>
     <script src="./canvas-interactions.js"></script>
     <script type="text/javascript">
+      /**
+       * 甘特图编辑器（示例页）。
+       *
+       * 页面写法与 flowchart-editor / ice-smart-water 一致：**一页 = 一个类**，构造期把引擎、
+       * DOM 引用、交互态与事件一次建好；`onUpdate()` 是**唯一**刷新入口 —— 选中变化 / 拖拽 /
+       * 撤销 / 改属性 / 换案例都由它统一重画属性面板。
+       */
       const { ICE, GanttDesigner } = IED;
-      const ice = new ICE().init('canvas-1');
-      const designer = new GanttDesigner(ice);
-      const canvasEl = document.getElementById('canvas-1');
-      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
-      ice.alignmentGuide.enable({ threshold: 6 });
-      window.__ice = ice;
-      window.__designer = designer;
 
-      const panel = document.getElementById('panel');
-      const validateOutput = document.getElementById('validate-output');
-      let linking = false;
-      let linkSource = null;
+      class GanttEditorPage {
+        static CASE_TITLE = '移动端 2.0 发布排期';
 
-      /* ---------------- 案例：移动端 2.0 发布排期 ---------------- */
-      function buildCase() {
-        designer.clear();
-        const tasks = [
-          // resource = 负责人/团队：用于资源冲突校验，也对应 Mermaid gantt 的 section
+        /** 内置案例：移动端 2.0 发布排期。resource = 负责人/团队，用于资源冲突校验 */
+        static TASKS = [
           { title: '需求评审', start: '2026-03-02', days: 4, progress: 1, resource: '产品' },
           { title: '交互设计', start: '2026-03-05', days: 6, progress: 0.8, resource: '设计' },
           { title: '前端开发', start: '2026-03-10', days: 12, progress: 0.35, resource: '前端' },
@@ -86,176 +81,263 @@
           { title: '联调测试', start: '2026-03-24', days: 6, progress: 0, resource: '测试' },
           { title: '灰度发布', start: '2026-03-30', days: 4, progress: 0, resource: '运维' },
         ];
-        const created = tasks.map((task, row) => designer.createTask({ ...task, row }));
-        designer.createDependency({ sourceId: created[0].state.id, targetId: created[1].state.id });
-        designer.createDependency({ sourceId: created[1].state.id, targetId: created[2].state.id });
-        designer.createDependency({ sourceId: created[0].state.id, targetId: created[3].state.id });
-        designer.createDependency({ sourceId: created[2].state.id, targetId: created[4].state.id });
-        designer.createDependency({ sourceId: created[3].state.id, targetId: created[4].state.id });
-        designer.createDependency({ sourceId: created[4].state.id, targetId: created[5].state.id });
-        designer.select(null);
-        designer.fitViewport();
-      }
 
-      /* ---------------- 工具栏 ---------------- */
-      function nextStart() {
-        const last = designer.nodes[designer.nodes.length - 1];
-        return last ? IED.addDays(last.state.start, last.state.days + 1) : '2026-03-02';
-      }
-      document.getElementById('btn-add').addEventListener('click', () => {
-        designer.createTask({ title: `任务 ${designer.nodes.length + 1}`, start: nextStart(), days: 5, row: designer.nodes.length });
-        renderPanel();
-      });
-      document.getElementById('btn-delete').addEventListener('click', () => {
-        if (designer.selectedId) { designer.remove(designer.selectedId); renderPanel(); }
-      });
-      document.getElementById('btn-undo').addEventListener('click', () => { designer.undo(); renderPanel(); });
-      document.getElementById('btn-redo').addEventListener('click', () => { designer.redo(); renderPanel(); });
-      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
-      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
+        constructor() {
+          this.ice = new ICE().init('canvas-1');
+          this.designer = new GanttDesigner(this.ice);
+          this.canvasEl = document.getElementById('canvas-1');
+          this.viewport = IedCanvasViewport.install({ ice: this.ice, canvas: this.canvasEl, designer: this.designer });
+          this.ice.alignmentGuide.enable({ threshold: 6 });
+          window.__ice = this.ice;
+          window.__designer = this.designer;
 
-      // 自动排程：按依赖把任务推到「前置结束之后」（只推后、不提前）
-      document.getElementById('btn-schedule').addEventListener('click', () => {
-        designer.autoSchedule();
-        designer.fitViewport();
-        renderPanel();
-        validateOutput.className = 'hint';
-        validateOutput.textContent = '✅ 已按依赖自动排程（完成 → 开始）';
-      });
-      // 关键路径：浮时为 0 的任务高亮（用选中态标出，便于在画布上找到）
-      document.getElementById('btn-critical').addEventListener('click', () => {
-        const critical = designer.criticalPath();
-        validateOutput.className = critical.length ? '' : 'hint';
-        validateOutput.innerHTML =
-          critical.length === 0
-            ? '没有关键路径（依赖成环或没有任务）'
-            : `关键路径：${critical.map((task) => task.state.title).join(' → ')}`;
-      });
-      document.getElementById('in-daywidth').addEventListener('change', (evt) => {
-        designer.setDayWidth(Number(evt.target.value) || 28);
-        designer.fitViewport();
-      });
-      document.getElementById('btn-link').addEventListener('click', () => {
-        linking = !linking;
-        linkSource = null;
-        document.getElementById('btn-link').classList.toggle('active', linking);
-      });
-      document.getElementById('btn-validate').addEventListener('click', () => {
-        const issues = designer.validateGantt();
-        validateOutput.innerHTML = '';
-        validateOutput.className = issues.length ? '' : 'hint';
-        if (!issues.length) { validateOutput.textContent = '✅ 未发现问题'; return; }
-        issues.forEach((issue) => {
+          this.panel = document.getElementById('panel');
+          this.validateOutput = document.getElementById('validate-output');
+          this.linking = false;
+          this.linkSource = null;
+
+          this.__wireToolbar();
+          this.__wireCanvasInteraction();
+
+          // 「构造结束即画好」
+          this.buildCase();
+          this.onUpdate();
+        }
+
+        /* ---------------- 案例：移动端 2.0 发布排期 ---------------- */
+        buildCase() {
+          this.designer.clear();
+          const created = GanttEditorPage.TASKS.map((task, row) => this.designer.createTask({ ...task, row }));
+          this.designer.createDependency({ sourceId: created[0].state.id, targetId: created[1].state.id });
+          this.designer.createDependency({ sourceId: created[1].state.id, targetId: created[2].state.id });
+          this.designer.createDependency({ sourceId: created[0].state.id, targetId: created[3].state.id });
+          this.designer.createDependency({ sourceId: created[2].state.id, targetId: created[4].state.id });
+          this.designer.createDependency({ sourceId: created[3].state.id, targetId: created[4].state.id });
+          this.designer.createDependency({ sourceId: created[4].state.id, targetId: created[5].state.id });
+          this.designer.select(null);
+          this.designer.fitViewport();
+        }
+
+        /** 下一个任务的默认开始日（最后一个任务结束的次日） */
+        nextStart() {
+          const last = this.designer.nodes[this.designer.nodes.length - 1];
+          return last ? IED.addDays(last.state.start, last.state.days + 1) : '2026-03-02';
+        }
+
+        /* ---------------- 工具栏 ---------------- */
+        __wireToolbar() {
+          document.getElementById('btn-add').addEventListener('click', () => {
+            this.designer.createTask({
+              title: `任务 ${this.designer.nodes.length + 1}`,
+              start: this.nextStart(),
+              days: 5,
+              row: this.designer.nodes.length,
+            });
+            this.onUpdate();
+          });
+          document.getElementById('btn-delete').addEventListener('click', () => {
+            if (this.designer.selectedId) {
+              this.designer.remove(this.designer.selectedId);
+              this.onUpdate();
+            }
+          });
+          document.getElementById('btn-undo').addEventListener('click', () => {
+            this.designer.undo();
+            this.onUpdate();
+          });
+          document.getElementById('btn-redo').addEventListener('click', () => {
+            this.designer.redo();
+            this.onUpdate();
+          });
+          document.getElementById('btn-fit').addEventListener('click', () => this.viewport.fitViewport());
+          document.getElementById('btn-reset').addEventListener('click', () => this.viewport.reset());
+
+          // 自动排程：按依赖把任务推到「前置结束之后」（只推后、不提前）
+          document.getElementById('btn-schedule').addEventListener('click', () => {
+            this.designer.autoSchedule();
+            this.designer.fitViewport();
+            this.onUpdate();
+            this.validateOutput.className = 'hint';
+            this.validateOutput.textContent = '✅ 已按依赖自动排程（完成 → 开始）';
+          });
+          // 关键路径：浮时为 0 的任务高亮（用选中态标出，便于在画布上找到）
+          document.getElementById('btn-critical').addEventListener('click', () => {
+            const critical = this.designer.criticalPath();
+            this.validateOutput.className = critical.length ? '' : 'hint';
+            this.validateOutput.innerHTML =
+              critical.length === 0
+                ? '没有关键路径（依赖成环或没有任务）'
+                : `关键路径：${critical.map((task) => task.state.title).join(' → ')}`;
+          });
+          document.getElementById('in-daywidth').addEventListener('change', (evt) => {
+            this.designer.setDayWidth(Number(evt.target.value) || 28);
+            this.designer.fitViewport();
+          });
+          document.getElementById('btn-link').addEventListener('click', () => {
+            this.linking = !this.linking;
+            this.linkSource = null;
+            document.getElementById('btn-link').classList.toggle('active', this.linking);
+          });
+          document.getElementById('btn-validate').addEventListener('click', () => {
+            const issues = this.designer.validateGantt();
+            this.validateOutput.innerHTML = '';
+            this.validateOutput.className = issues.length ? '' : 'hint';
+            if (!issues.length) {
+              this.validateOutput.textContent = '✅ 未发现问题';
+              return;
+            }
+            issues.forEach((issue) => {
+              const div = document.createElement('div');
+              div.className = `issue ${issue.level}`;
+              div.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
+              this.validateOutput.appendChild(div);
+            });
+          });
+          document.getElementById('btn-export-svg').addEventListener('click', () => {
+            const svg = this.designer.toSvg({ padding: 16, background: '#ffffff' });
+            window.__exportedSvg = svg;
+            const blob = new Blob([svg], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'release-gantt.svg';
+            a.click();
+            URL.revokeObjectURL(url);
+            this.validateOutput.className = 'hint';
+            this.validateOutput.textContent = `✅ 已导出 SVG（${svg.length} 字节）`;
+          });
+
+          // Mermaid gantt 文本互操作：导出可直接贴进 Markdown/PR，导入可搬别人的排期
+          document.getElementById('btn-export-text').addEventListener('click', () => {
+            const text = IED.toMermaidGantt(this.designer, { title: GanttEditorPage.CASE_TITLE });
+            document.getElementById('text-output').value = text;
+            window.__exportedText = text;
+          });
+          document.getElementById('btn-import-text').addEventListener('click', () => {
+            try {
+              const result = IED.fromMermaidGantt(document.getElementById('text-output').value, this.designer);
+              this.designer.fitViewport();
+              this.validateOutput.className = result.warnings.length ? '' : 'hint';
+              this.validateOutput.textContent = `✅ 已导入 ${result.tasks} 个任务 / ${result.dependencies} 条依赖${
+                result.warnings.length ? `（${result.warnings.length} 条提示）` : ''
+              }`;
+            } catch (error) {
+              this.validateOutput.className = 'issue error';
+              this.validateOutput.textContent = `❌ 导入失败：${error.message}`;
+            }
+            this.onUpdate();
+          });
+        }
+
+        /* ---------------- 画布交互：命中 / 拖拽 / 依赖 ---------------- */
+        __wireCanvasInteraction() {
+          this.ice.evtBus.on('mousedown', (evt) => {
+            const target = evt.target;
+            if (!target) {
+              return;
+            }
+            const domain = this.designer.nodes
+              .concat(this.designer.edges)
+              .filter((item) => {
+                let node = target;
+                while (node) {
+                  if (node === item) {
+                    return true;
+                  }
+                  node = node.parentNode;
+                }
+                return false;
+              })[0];
+            if (!domain) {
+              return;
+            }
+            if (this.linking) {
+              if (!this.linkSource) {
+                this.linkSource = domain;
+              } else if (this.linkSource !== domain) {
+                this.designer.createDependency({ sourceId: this.linkSource.state.id, targetId: domain.state.id });
+                this.linkSource = null;
+              }
+              this.designer.select(domain.state.id);
+              this.onUpdate();
+              return;
+            }
+            this.designer.select(domain.state.id);
+            this.onUpdate();
+          });
+          this.ice.evtBus.on('mouseup', () => this.onUpdate());
+        }
+
+        /* ---------------- 属性面板 ---------------- */
+        row(label, control) {
           const div = document.createElement('div');
-          div.className = `issue ${issue.level}`;
-          div.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
-          validateOutput.appendChild(div);
-        });
-      });
-      document.getElementById('btn-export-svg').addEventListener('click', () => {
-        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
-        window.__exportedSvg = svg;
-        const blob = new Blob([svg], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'release-gantt.svg';
-        a.click();
-        URL.revokeObjectURL(url);
-        validateOutput.className = 'hint';
-        validateOutput.textContent = `✅ 已导出 SVG（${svg.length} 字节）`;
-      });
-
-      // Mermaid gantt 文本互操作：导出可直接贴进 Markdown/PR，导入可搬别人的排期
-      document.getElementById('btn-export-text').addEventListener('click', () => {
-        const text = IED.toMermaidGantt(designer, { title: '移动端 2.0 发布排期' });
-        document.getElementById('text-output').value = text;
-        window.__exportedText = text;
-      });
-      document.getElementById('btn-import-text').addEventListener('click', () => {
-        try {
-          const result = IED.fromMermaidGantt(document.getElementById('text-output').value, designer);
-          designer.fitViewport();
-          validateOutput.className = result.warnings.length ? '' : 'hint';
-          validateOutput.textContent = `✅ 已导入 ${result.tasks} 个任务 / ${result.dependencies} 条依赖${
-            result.warnings.length ? `（${result.warnings.length} 条提示）` : ''
-          }`;
-        } catch (error) {
-          validateOutput.className = 'issue error';
-          validateOutput.textContent = `❌ 导入失败：${error.message}`;
+          div.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+          const span = document.createElement('label');
+          span.textContent = label;
+          span.style.cssText = 'width:64px;color:#475569;font-size:13px';
+          div.appendChild(span);
+          div.appendChild(control);
+          return div;
         }
-        renderPanel();
-      });
 
-      /* ---------------- 画布交互：命中 / 拖拽 / 依赖 ---------------- */
-      ice.evtBus.on('mousedown', (evt) => {
-        const target = evt.target;
-        if (!target) { return; }
-        const domain = designer.nodes.concat(designer.edges).filter((item) => {
-          let node = target;
-          while (node) { if (node === item) { return true; } node = node.parentNode; }
-          return false;
-        })[0];
-        if (!domain) { return; }
-        if (linking) {
-          if (!linkSource) { linkSource = domain; }
-          else if (linkSource !== domain) {
-            designer.createDependency({ sourceId: linkSource.state.id, targetId: domain.state.id });
-            linkSource = null;
+        input(value, onChange, type) {
+          const el = document.createElement('input');
+          el.type = type || 'text';
+          el.value = value;
+          el.step = type === 'number' ? '0.1' : '';
+          el.style.cssText = 'flex:1;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font:inherit';
+          el.addEventListener('change', () => onChange(el.value));
+          return el;
+        }
+
+        applyAndRender(action) {
+          action();
+          this.designer.captureHistory();
+          this.onUpdate();
+        }
+
+        /** 唯一刷新入口：按当前选中对象重画面板。 */
+        onUpdate() {
+          this.panel.innerHTML = '';
+          const selected = this.designer.selected;
+          if (!selected) {
+            this.panel.className = 'hint';
+            this.panel.textContent = '点击任务条 / 依赖线进行编辑';
+            return;
           }
-          designer.select(domain.state.id);
-          renderPanel();
-          return;
+          this.panel.className = '';
+          if (this.designer.nodes.indexOf(selected) !== -1) {
+            this.panel.appendChild(
+              this.row('名称', this.input(selected.state.title, (v) => this.applyAndRender(() => selected.applyPatch({ title: v }))))
+            );
+            this.panel.appendChild(
+              this.row('开始', this.input(selected.state.start, (v) => this.applyAndRender(() => selected.applyPatch({ start: v }))))
+            );
+            this.panel.appendChild(
+              this.row(
+                '天数',
+                this.input(selected.state.days, (v) => this.applyAndRender(() => selected.applyPatch({ days: Number(v) || 1 })), 'number')
+              )
+            );
+            this.panel.appendChild(
+              this.row(
+                '进度',
+                this.input(selected.state.progress, (v) => this.applyAndRender(() => selected.applyPatch({ progress: Number(v) || 0 })), 'number')
+              )
+            );
+            this.panel.appendChild(
+              this.row(
+                '负责人',
+                this.input(selected.state.resource || '', (v) => this.applyAndRender(() => selected.applyPatch({ resource: v })))
+              )
+            );
+            return;
+          }
+          this.panel.textContent = '依赖线（完成 → 开始）';
         }
-        designer.select(domain.state.id);
-        renderPanel();
-      });
-      ice.evtBus.on('mouseup', () => renderPanel());
-
-      /* ---------------- 属性面板 ---------------- */
-      function row(label, control) {
-        const div = document.createElement('div');
-        div.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
-        const span = document.createElement('label');
-        span.textContent = label;
-        span.style.cssText = 'width:64px;color:#475569;font-size:13px';
-        div.appendChild(span);
-        div.appendChild(control);
-        return div;
-      }
-      function input(value, onChange, type) {
-        const el = document.createElement('input');
-        el.type = type || 'text';
-        el.value = value;
-        el.step = type === 'number' ? '0.1' : '';
-        el.style.cssText = 'flex:1;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font:inherit';
-        el.addEventListener('change', () => onChange(el.value));
-        return el;
-      }
-      function applyAndRender(action) { action(); designer.captureHistory(); renderPanel(); }
-      function renderPanel() {
-        panel.innerHTML = '';
-        const selected = designer.selected;
-        if (!selected) { panel.className = 'hint'; panel.textContent = '点击任务条 / 依赖线进行编辑'; return; }
-        panel.className = '';
-        if (designer.nodes.indexOf(selected) !== -1) {
-          panel.appendChild(row('名称', input(selected.state.title, (v) => applyAndRender(() => selected.applyPatch({ title: v })))));
-          panel.appendChild(row('开始', input(selected.state.start, (v) => applyAndRender(() => selected.applyPatch({ start: v })))));
-          panel.appendChild(row('天数', input(selected.state.days, (v) => applyAndRender(() => selected.applyPatch({ days: Number(v) || 1 })), 'number')));
-          panel.appendChild(row('进度', input(selected.state.progress, (v) => applyAndRender(() => selected.applyPatch({ progress: Number(v) || 0 })), 'number')));
-          panel.appendChild(
-            row(
-              '负责人',
-              input(selected.state.resource || '', (v) => applyAndRender(() => selected.applyPatch({ resource: v })))
-            )
-          );
-          return;
-        }
-        panel.textContent = '依赖线（完成 → 开始）';
       }
 
-      buildCase();
-      renderPanel();
+      new GanttEditorPage();
     </script>
   </body>
 </html>
