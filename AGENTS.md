@@ -20,6 +20,39 @@
 - `npm run lint`（eslint，0 error 起步）/ `npm run types:check` / `npm test`（jest 315 用例）/ `npm run build`
 - `npm run test:e2e`：Playwright，覆盖 9 个编辑器示例页（含 BPMN 令牌仿真）
 
+## 示例页写法（2026-09-17 确立，11 个示例页已全部统一）
+
+`examples/*.html` 是"可直接打开的完整编辑器"，脚本仍然是内联的（**不拆文件、不套构建**），
+但内部一律是**一页 = 一个类**：
+
+- 类名按页面取（`FlowchartEditorPage` / `EntityEditorPage` / `WaterSymbolsPage` …）；
+- **构造期建好**：引擎实例、DOM 引用、第三方绑定（如 antd）、交互态、事件一次到位；
+- `onUpdate()` 是**唯一**刷新入口（选中变化 / 增删 / 撤销 / 改属性 / 布局都走它）；
+  纯静态目录页（`power-symbols` / `water-symbols`）没有 `onUpdate()` —— 页面没有随数据变化的部分；
+- 事件按职责分组：`__wireCanvas()`（滚轮缩放）/ `__wireCanvasInteraction()`（指针）/ `__wireToolbar()`（按钮）/ `__wireGlobalEvents()`（全局键）；
+- 内置案例坐标写死（保证 e2e / 截图可复现），收进 `buildCase()`，配套的小工厂（`makeEntity` / `rel` / `put`）
+  是它的**局部箭头函数**。
+
+### 改造时踩过的坑（改示例页前先看）
+
+1. **嵌套函数声明不继承 `this`**：把 `function helper()` 写进方法里，里面的 `this.designer` 会落到 `window` 上
+   （电力示例因此只建出 10 个设备就中断）。要么改成箭头函数，要么让它只吃参数。
+2. **当作 React 组件传的方法要 `bind`**：`React.createElement(this.PropertyPanel, …)` 会丢 `this` ——
+   在构造期 `this.PropertyPanel = this.PropertyPanel.bind(this)`（**bind 一次**，不要每次 render 新建，否则整棵重挂）。
+3. **别把方法直接当回调传**：`addEventListener('click', this.applyForceLayout)` 里 `this` 是元素，不是页面实例 ——
+   统一写成 `() => this.applyForceLayout()`。
+4. **方法定义不能嵌套**：`__wireCanvasInteraction()` 里再写 `rootNodeAt(...) {}` 是语法错误，方法要平铺在类上。
+5. **机械替换会误伤字符串**：用脚本把裸 `designer` 换成 `this.designer` 时，`'ice-entity-designer:TerminalStrip'`
+   这类 typeId 常量也会被改（二次回路示例因此有个分支永远走不到，e2e 恰好没覆盖）。
+
+### 改造的验收口径（每个示例页都按这个走）
+
+- 自己的 spec 全绿；
+- **画布截图 0 像素差异** + 结构快照逐字段一致；
+  例外：`entity-editor` 内置**力导布局**每次运行结果本来就不同（改造前后各自连跑两次都是不同视口），
+  该页改比"确定性部分"——实体数 / 关系数 / 全部实体名 / 全部关系标签 / 每张表字段数 / 面板 HTML 长度 / 控制台零错误；
+- **裸方法调用扫描为 0**（`class` 方法被当成函数裸调 = 漏了 `this.`，运行期才炸）。
+
 ## 引擎契约
 
 仿真 / 动画等应用层逐帧逻辑必须遵守引擎的帧调度契约：自行监听 `ICE_FRAME_EVENT` 做计算时，
