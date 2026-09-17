@@ -49,61 +49,82 @@
     <script src="../dist/index.umd.js"></script>
     <script src="./canvas-interactions.js"></script>
     <script type="text/javascript">
+      /**
+       * 电力符号目录页。
+       *
+       * 页面写法与各编辑器示例一致：**一页 = 一个类**，构造期把引擎、目录内容与事件一次建好。
+       * 目录是静态内容，所以没有 `onUpdate()`（页面没有"随数据变化"的部分）。
+       */
       const { ICE, ICEText, PowerSymbol, POWER_SYMBOL_KINDS, POWER_SYMBOL_PRESETS } = IED;
-      const ice = new ICE().init('canvas-1');
-      const canvasEl = document.getElementById('canvas-1');
-      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl });
-      window.__ice = ice;
 
-      const columns = 5;
-      const cellWidth = 210;
-      const cellHeight = 150;
+      class PowerSymbolsPage {
+        static COLUMNS = 5;
+        static CELL_WIDTH = 210;
+        static CELL_HEIGHT = 150;
 
-      POWER_SYMBOL_KINDS.forEach((kind, index) => {
-        const preset = POWER_SYMBOL_PRESETS[kind];
-        const col = index % columns;
-        const row = Math.floor(index / columns);
-        const left = 60 + col * cellWidth;
-        const top = 90 + row * cellHeight;
-        // 图例格子：名称 + 文字符号（符号本体自带 tag，这里再补一条中文名）
-        ice.addChild(
-          new ICEText({
-            left,
-            top: top - 34,
-            width: cellWidth - 40,
-            height: 20,
-            text: `${preset.label}（${preset.tag}）`,
-            stroke: false,
-            interactive: false,
-            style: { fontSize: 12, fillStyle: '#334155', textAlign: 'left', textBaseline: 'middle' },
-          })
-        );
-        ice.addChild(
-          new PowerSymbol({
-            kind,
-            left: left + 60,
-            top: top + 10,
-            width: preset.width,
-            height: preset.height,
-          })
-        );
-      });
+        constructor() {
+          this.ice = new ICE().init('canvas-1');
+          this.canvasEl = document.getElementById('canvas-1');
+          this.viewport = IedCanvasViewport.install({ ice: this.ice, canvas: this.canvasEl });
+          window.__ice = this.ice;
 
-      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
-      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
-      document.getElementById('btn-export-svg').addEventListener('click', () => {
-        const svg = ice.toSvg({ padding: 16, background: '#ffffff' });
-        window.__exportedSvg = svg;
-        const blob = new Blob([svg], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'power-symbols.svg';
-        a.click();
-        URL.revokeObjectURL(url);
-      });
+          this.__buildCatalog();
+          this.__wireToolbar();
 
-      viewport.fitViewport();
+          // 「构造结束即画好」
+          this.viewport.fitViewport();
+        }
+
+        __buildCatalog() {
+          POWER_SYMBOL_KINDS.forEach((kind, index) => {
+            const preset = POWER_SYMBOL_PRESETS[kind];
+            const col = index % PowerSymbolsPage.COLUMNS;
+            const row = Math.floor(index / PowerSymbolsPage.COLUMNS);
+            const left = 60 + col * PowerSymbolsPage.CELL_WIDTH;
+            const top = 90 + row * PowerSymbolsPage.CELL_HEIGHT;
+            // 图例格子：名称 + 文字符号（符号本体自带 tag，这里再补一条中文名）
+            this.ice.addChild(
+              new ICEText({
+                left,
+                top: top - 34,
+                width: PowerSymbolsPage.CELL_WIDTH - 40,
+                height: 20,
+                text: `${preset.label}（${preset.tag}）`,
+                stroke: false,
+                interactive: false,
+                style: { fontSize: 12, fillStyle: '#334155', textAlign: 'left', textBaseline: 'middle' },
+              })
+            );
+            this.ice.addChild(
+              new PowerSymbol({
+                kind,
+                left: left + 60,
+                top: top + 10,
+                width: preset.width,
+                height: preset.height,
+              })
+            );
+          });
+        }
+
+        __wireToolbar() {
+          document.getElementById('btn-fit').addEventListener('click', () => this.viewport.fitViewport());
+          document.getElementById('btn-reset').addEventListener('click', () => this.viewport.reset());
+          document.getElementById('btn-export-svg').addEventListener('click', () => {
+            const svg = this.ice.toSvg({ padding: 16, background: '#ffffff' });
+            window.__exportedSvg = svg;
+            const blob = new Blob([svg], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'power-symbols.svg';
+            a.click();
+            URL.revokeObjectURL(url);
+          });
+        }
+      }
+
+      new PowerSymbolsPage();
     </script>
   </body>
 </html>
