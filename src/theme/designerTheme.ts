@@ -67,13 +67,48 @@ export function designerChromeFromTheme(theme?: ICETheme | null): Partial<ICEChr
  * 调用位置：`BaseDesigner` 的构造里（所有编辑器子类都会走），所以无论应用层是直接
  * `new ICE()` 还是走 React 的 `createDesignerSession()`，外壳都是同一套。
  *
- * 宿主换过主题（`ice.setTheme(...)` / `ice.setChrome(...)`）之后再调一次即可重新对齐。
+ * 引擎 2.14 起写的是**命名补丁**（`ice.setThemePatch('ice-designer', …)`），并且本函数会订阅
+ * `ice.onThemeChange`：宿主换主题（基座变了）之后**自动重算**一次外壳，不需要调用方再调一遍。
+ * 老引擎（<2.14）退回 `ice.setChrome()`，行为与之前一致。
  */
 export function applyDesignerChrome(ice: any): any {
-  if (!ice || typeof ice.setChrome !== 'function') return ice;
+  if (!ice) return ice;
+  if (typeof ice.setThemePatch !== 'function' && typeof ice.setChrome !== 'function') return ice;
   const theme = typeof ice.getTheme === 'function' ? ice.getTheme() : null;
-  ice.setChrome(designerChromeFromTheme(theme));
+  const chrome = designerChromeFromTheme(theme);
+  if (typeof ice.setThemePatch === 'function') {
+    /**
+     * 引擎 ≥ 2.14：走**命名补丁层**，不要走 `setChrome`。
+     *
+     * 设计器的外壳是**从基座派生**的（primary → 选中框 / 手柄 / 引导线…）。以前用 `setChrome` 写基座，
+     * 于是它和 UI 主题互相覆盖、胜负取决于调用顺序；现在写成补丁，两层互不干扰。
+     * 派生值会在基座变化时由下面的订阅**重新算一遍**（补丁本身不会自己变）。
+     */
+    ice.setThemePatch('ice-designer', { semantic: { chrome } });
+    subscribeDesignerChrome(ice);
+  } else {
+    // 老引擎兜底：没有补丁层，只能写基座（语义与 2.14 之前一致）
+    ice.setChrome(chrome);
+  }
   return ice;
+}
+
+/**
+ * 订阅实例主题变更：**基座**换了就按新主题重算一遍设计器外壳补丁。
+ *
+ * 为什么必须订阅：外壳是**派生值**（不是用户直接指定的），基座一变它就过期了 ——
+ * 不重算的表现是"换了 UI 主题，设计器的选中框 / 手柄还是旧主色"。
+ * 只认 `kind === 'theme'`：`'patch'` 是自己写的，`'chrome'` 是应用直接改外壳（尊重调用方）。
+ * 每个实例只订阅一次（挂在实例上做标记），重复 `applyDesignerChrome` 不会叠加监听。
+ */
+function subscribeDesignerChrome(ice: any): void {
+  if (ice.__designerChromeSubscribed || typeof ice.onThemeChange !== 'function') return;
+  ice.__designerChromeSubscribed = true;
+  ice.onThemeChange((info: any) => {
+    if (info && info.kind !== 'theme') return;
+    const theme = typeof ice.getTheme === 'function' ? ice.getTheme() : null;
+    ice.setThemePatch('ice-designer', { semantic: { chrome: designerChromeFromTheme(theme) } });
+  });
 }
 
 /** 给颜色压上透明度（`#rgb` / `#rrggbb` / `rgb()`；认不出来的写法原样返回）。 */
