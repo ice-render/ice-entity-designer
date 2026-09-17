@@ -259,6 +259,39 @@
       const { ICE, FlowDesigner, FlowNode, FlowEdge, FLOW_NODE_KINDS } = IED;
 
       class FlowchartEditorPage {
+        /* 内置示例：一个下单流程，坐标写死（不跑随机布局，保证 e2e/截图可复现） */
+        static SEED_FLOW = {
+          nodes: [
+            { kind: 'terminator', title: '开始', left: 610, top: 60, width: 180, height: 60 },
+            { kind: 'process', title: '浏览商品', left: 590, top: 190, width: 220, height: 80 },
+            { kind: 'process', title: '加入购物车', left: 590, top: 320, width: 220, height: 80 },
+            { kind: 'process', title: '提交订单', left: 590, top: 450, width: 220, height: 80 },
+            { kind: 'decision', title: '库存充足？', left: 600, top: 590, width: 200, height: 120 },
+            { kind: 'process', title: '创建支付单', left: 590, top: 780, width: 220, height: 80 },
+            { kind: 'decision', title: '支付成功？', left: 600, top: 920, width: 200, height: 120 },
+            { kind: 'process', title: '安排发货', left: 590, top: 1110, width: 220, height: 80 },
+            { kind: 'terminator', title: '结束', left: 610, top: 1250, width: 180, height: 60 },
+            { kind: 'io', title: '通知补货', left: 990, top: 590, width: 220, height: 80 },
+            { kind: 'terminator', title: '结束（缺货）', left: 1010, top: 760, width: 180, height: 60 },
+            { kind: 'process', title: '关闭订单', left: 990, top: 920, width: 220, height: 80 },
+            { kind: 'terminator', title: '结束（未成交）', left: 1010, top: 1090, width: 180, height: 60 },
+          ],
+          edges: [
+            { sourceIndex: 0, targetIndex: 1, sourcePort: 'B', targetPort: 'T' },
+            { sourceIndex: 1, targetIndex: 2, sourcePort: 'B', targetPort: 'T' },
+            { sourceIndex: 2, targetIndex: 3, sourcePort: 'B', targetPort: 'T' },
+            { sourceIndex: 3, targetIndex: 4, sourcePort: 'B', targetPort: 'T' },
+            { sourceIndex: 4, targetIndex: 5, sourcePort: 'B', targetPort: 'T', label: '是' },
+            { sourceIndex: 4, targetIndex: 9, sourcePort: 'R', targetPort: 'L', label: '否' },
+            { sourceIndex: 9, targetIndex: 10, sourcePort: 'B', targetPort: 'T' },
+            { sourceIndex: 5, targetIndex: 6, sourcePort: 'B', targetPort: 'T' },
+            { sourceIndex: 6, targetIndex: 7, sourcePort: 'B', targetPort: 'T', label: '是' },
+            { sourceIndex: 6, targetIndex: 11, sourcePort: 'R', targetPort: 'L', label: '否' },
+            { sourceIndex: 11, targetIndex: 12, sourcePort: 'B', targetPort: 'T' },
+            { sourceIndex: 7, targetIndex: 8, sourcePort: 'B', targetPort: 'T' },
+          ],
+        };
+
         constructor() {
           this.ice = new ICE().init('canvas-1');
           this.designer = new FlowDesigner(this.ice);
@@ -324,39 +357,6 @@
             { passive: false }
           );
         }
-
-      /* 内置示例：一个下单流程，坐标写死（不跑随机布局，保证 e2e/截图可复现） */
-        static SEED_FLOW = {
-        nodes: [
-          { kind: 'terminator', title: '开始', left: 610, top: 60, width: 180, height: 60 },
-          { kind: 'process', title: '浏览商品', left: 590, top: 190, width: 220, height: 80 },
-          { kind: 'process', title: '加入购物车', left: 590, top: 320, width: 220, height: 80 },
-          { kind: 'process', title: '提交订单', left: 590, top: 450, width: 220, height: 80 },
-          { kind: 'decision', title: '库存充足？', left: 600, top: 590, width: 200, height: 120 },
-          { kind: 'process', title: '创建支付单', left: 590, top: 780, width: 220, height: 80 },
-          { kind: 'decision', title: '支付成功？', left: 600, top: 920, width: 200, height: 120 },
-          { kind: 'process', title: '安排发货', left: 590, top: 1110, width: 220, height: 80 },
-          { kind: 'terminator', title: '结束', left: 610, top: 1250, width: 180, height: 60 },
-          { kind: 'io', title: '通知补货', left: 990, top: 590, width: 220, height: 80 },
-          { kind: 'terminator', title: '结束（缺货）', left: 1010, top: 760, width: 180, height: 60 },
-          { kind: 'process', title: '关闭订单', left: 990, top: 920, width: 220, height: 80 },
-          { kind: 'terminator', title: '结束（未成交）', left: 1010, top: 1090, width: 180, height: 60 },
-        ],
-        edges: [
-          { sourceIndex: 0, targetIndex: 1, sourcePort: 'B', targetPort: 'T' },
-          { sourceIndex: 1, targetIndex: 2, sourcePort: 'B', targetPort: 'T' },
-          { sourceIndex: 2, targetIndex: 3, sourcePort: 'B', targetPort: 'T' },
-          { sourceIndex: 3, targetIndex: 4, sourcePort: 'B', targetPort: 'T' },
-          { sourceIndex: 4, targetIndex: 5, sourcePort: 'B', targetPort: 'T', label: '是' },
-          { sourceIndex: 4, targetIndex: 9, sourcePort: 'R', targetPort: 'L', label: '否' },
-          { sourceIndex: 9, targetIndex: 10, sourcePort: 'B', targetPort: 'T' },
-          { sourceIndex: 5, targetIndex: 6, sourcePort: 'B', targetPort: 'T' },
-          { sourceIndex: 6, targetIndex: 7, sourcePort: 'B', targetPort: 'T', label: '是' },
-          { sourceIndex: 6, targetIndex: 11, sourcePort: 'R', targetPort: 'L', label: '否' },
-          { sourceIndex: 11, targetIndex: 12, sourcePort: 'B', targetPort: 'T' },
-          { sourceIndex: 7, targetIndex: 8, sourcePort: 'B', targetPort: 'T' },
-        ],
-      };
 
         /** 恢复内置示例流程（不占用撤销栈） */
         buildSeed() {
