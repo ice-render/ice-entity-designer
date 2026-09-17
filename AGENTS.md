@@ -177,3 +177,22 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
   `docs/guides/layout.md` 第四节的 canvas 类）。
 - **图表几何不是布局**：`ice-chart` 的漏斗/饼图/桑基/仪表等是系列自身的几何（已复核，见该仓），
   `force` 布局是图论物理，两者都不该塞进容器布局器。
+
+
+## 主题写入契约（引擎 2.14 起，2026-09-17）
+
+本仓写引擎主题一律走**命名补丁** `ice.setThemePatch('ice-designer', { semantic: { chrome } })`，
+**不要**调 `ice.setTheme()` / `ice.setChrome()` —— 那是"基座"（UI 主题的地盘），两边都写基座就是
+"后写的赢"：应用切 UI 主题会把设计器外壳抹掉，设计器推外壳会把 UI 主题抹掉。
+
+优先级：**基座 < 命名补丁**（按注册顺序）。所以宿主想改设计器的外壳颜色，要用**自己的补丁**
+（`ice.setThemePatch('host', { semantic: { chrome: … } })`，注册在设计器之后）——`setChrome` 压不住补丁；
+要整个回到引擎默认外壳用 `clearThemePatch('ice-designer')`。
+
+两条纪律：
+
+- **派生值要跟着基座重算**：设计器外壳是从 `semantic.primary/success/warning` 派生的
+  （见 `src/theme/designerTheme.ts`），补丁本身不会自己变 —— 所以 `applyDesignerChrome()` 会
+  订阅 `ice.onThemeChange`，基座一变就重算补丁（只认 `kind === 'theme'`，避免自己触发自己）。
+- **写死色值有预算棘轮**：`tests/theme/color-budget.test.ts`（只减不增）。写死色值不是一律禁止
+  （图形本身有领域配色），但新增必须登记，不能顺手写。

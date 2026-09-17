@@ -58,14 +58,27 @@ describe('设计器画布外壳配色', () => {
     expect(chrome.slot.fill).toBe('#00aa55');
   });
 
-  it('想要旧观感的宿主可以显式换成固定那一套', () => {
+  it('想要旧观感的宿主可以显式换成固定那一套（走**宿主自己的补丁**）', () => {
     const ice = makeIce();
     applyDesignerChrome(ice);
-    ice.setChrome(DESIGNER_CHROME_ANTD);
+    /**
+     * ⚠️ 主题分两层：**基座**（`setTheme` / `setChrome`）与**命名补丁**（`setThemePatch`）。
+     * 合成顺序是「基座 → 命名补丁」，所以设计器写在补丁层的东西，宿主用 `setChrome` 是压不住的 ——
+     * 要覆盖它，宿主也得写补丁（`id` 用自己的名字），注册在设计器之后即可。
+     */
+    ice.setThemePatch('host', { semantic: { chrome: DESIGNER_CHROME_ANTD } });
     const chrome = ice.getTheme().semantic.chrome;
     expect(chrome.selection.stroke).toBe('#1677ff');
     expect(chrome.slot.fill).toBe('#52c41a');
     expect(chrome.handle.activeFill).toBe('#faad14');
+  });
+
+  it('宿主也可以整个撤掉设计器的外壳补丁（clearThemePatch）', () => {
+    const ice = makeIce();
+    new EntityDesigner(ice);
+    const derived = ice.getTheme().semantic.chrome.selection.stroke;
+    ice.clearThemePatch('ice-designer');
+    expect(ice.getTheme().semantic.chrome.selection.stroke).not.toBe(derived);
   });
 
   it('只碰外壳：引擎的语义色与调色板不受影响', () => {
@@ -94,11 +107,15 @@ describe('设计器画布外壳配色', () => {
     expect(semantic.chrome.slot.hoverFill).toBe(semantic.warning);
   });
 
-  it('宿主可以覆盖：设计器只管默认值，不是"锁死"', () => {
+  it('宿主可以覆盖：设计器只管默认值，不是"锁死"（用自己的补丁压在设计器之上）', () => {
     const ice = makeIce();
     new EntityDesigner(ice);
-    // 宿主换成自己的品牌色（在应用外壳之后设置，后设的赢）
-    ice.setChrome({ selection: { stroke: '#7c3aed', fill: 'rgba(124,58,237,0.12)', lineWidth: 1, lineDash: [] } });
+    // 宿主换成自己的品牌色 —— 写补丁层（写在设计器之后 = 后注册的赢）
+    ice.setThemePatch('host', {
+      semantic: {
+        chrome: { selection: { stroke: '#7c3aed', fill: 'rgba(124,58,237,0.12)', lineWidth: 1, lineDash: [] } },
+      },
+    });
     expect(ice.getTheme().semantic.chrome.selection.stroke).toBe('#7c3aed');
     // 没覆盖的仍然是设计器默认
     expect(ice.getTheme().semantic.chrome.slot.fill).toBe(ice.getTheme().semantic.success);
