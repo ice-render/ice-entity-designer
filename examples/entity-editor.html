@@ -284,42 +284,86 @@
     <script src="../node_modules/ice-render/dist/index.umd.js"></script>
     <script src="../dist/index.umd.js"></script>
     <script type="text/javascript">
-      const ice = new IED.ICE().init('canvas-1');
-      const designer = new IED.EntityDesigner(ice);
-      window.__ice = ice;
-      window.__designer = designer;
-      ice.alignmentGuide.enable({ threshold: 6 });
+      /**
+       * ER 实体关系设计器（示例页）。
+       *
+       * 页面写法与其它示例一致：**一页 = 一个类**，构造期把引擎、DOM 引用、Ant Design 绑定、
+       * 交互态与事件一次建好；`this.onUpdate()` 是**唯一**刷新入口（属性面板 / 选中变化都走它）。
+       */
+      class EntityEditorPage {
+        constructor() {
+          this.ice = new IED.ICE().init('canvas-1');
+          this.designer = new IED.EntityDesigner(this.ice);
+          window.__ice = this.ice;
+          window.__designer = this.designer;
+          this.ice.alignmentGuide.enable({ threshold: 6 });
 
-      const canvasEl = document.getElementById('canvas-1');
-      const linkPreview = document.getElementById('link-preview');
-      const linkPreviewPath = document.getElementById('link-preview-path');
-      const entityPanel = document.getElementById('entity-panel');
-      const schemaOutput = document.getElementById('schema-output');
-      const validationOutput = document.getElementById('validation-output');
+          this.canvasEl = document.getElementById('canvas-1');
+          this.linkPreview = document.getElementById('link-preview');
+          this.linkPreviewPath = document.getElementById('link-preview-path');
+          this.entityPanel = document.getElementById('entity-panel');
+          this.schemaOutput = document.getElementById('schema-output');
+          this.validationOutput = document.getElementById('validation-output');
+          this.projectStorageKey = 'ice-entity-designer-project';
 
-      document.querySelectorAll('.icon-btn[title]').forEach((button) => {
-        button.dataset.tooltip = button.getAttribute('title');
-        button.removeAttribute('title');
-      });
+          // 交互态（原来散在模块作用域，现在归页面实例所有）
+          this.panning = false;
+          this.lastX = 0;
+          this.lastY = 0;
+          this.linkingMode = false;
+          this.linkSource = null;
 
-      // 画布默认支持滚轮缩放 + 空白/中键拖拽。
-      // 锚点缩放直接用引擎原语 ICE.zoomAt（内部用 screenToWorld 反解平移并钳制 scale）。
-      canvasEl.addEventListener(
-        'wheel',
-        (evt) => {
-          evt.preventDefault();
-          ice.zoomAt(evt.offsetX, evt.offsetY, evt.deltaY > 0 ? 1 / 1.1 : 1.1, 0.3, 3);
-        },
-        { passive: false }
-      );
+          // Ant Design（可选）：属性面板是 React 组件；没引入 antd 时退化成空实现
+          const antdUI = window.antd || {};
+          this.Table = antdUI.Table || (() => null);
+          this.Input = antdUI.Input || (() => null);
+          this.Button = antdUI.Button || (() => null);
+          this.Select = antdUI.Select || (() => null);
+          this.Tabs = antdUI.Tabs || (() => null);
+          this.Typography = antdUI.Typography || {};
+          this.Form = antdUI.Form || (() => null);
+          this.propertyPanelRoot = null;
 
-      let panning = false;
-      let lastX = 0;
-      let lastY = 0;
-      let linkingMode = false;
-      let linkSource = null;
+          // 这三个是**当作 React 组件**用的方法（React.createElement(方法) 会丢掉 this）：
+          // 在构造期绑定一次，既拿到实例上下文，又保持函数身份稳定（每次 render 都新建会整棵重挂）。
+          this.PropertyPanel = this.PropertyPanel.bind(this);
+          this.EntityFieldsTable = this.EntityFieldsTable.bind(this);
+          this.RelationPropertyPanel = this.RelationPropertyPanel.bind(this);
 
-      function findRootEntity(component) {
+          document.querySelectorAll('.icon-btn[title]').forEach((button) => {
+            button.dataset.tooltip = button.getAttribute('title');
+            button.removeAttribute('title');
+          });
+
+          // e2e / 调试入口：外部要求重画面板时走同一个刷新入口
+          window.__renderPanel = () => this.onUpdate();
+
+          this.__wireCanvas();
+          this.__wireCanvasInteraction();
+          this.__wireToolbar();
+          this.__wireGlobalEvents();
+
+          // 「构造结束即画好」
+          this.buildCase();
+          this.onUpdate();
+        }
+
+        /**
+         * 画布默认支持滚轮缩放 + 空白/中键拖拽。
+         * 锚点缩放直接用引擎原语 ICE.zoomAt（内部用 screenToWorld 反解平移并钳制 scale）。
+         */
+        __wireCanvas() {
+          this.canvasEl.addEventListener(
+            'wheel',
+            (evt) => {
+              evt.preventDefault();
+              this.ice.zoomAt(evt.offsetX, evt.offsetY, evt.deltaY > 0 ? 1 / 1.1 : 1.1, 0.3, 3);
+            },
+            { passive: false }
+          );
+        }
+
+      findRootEntity(component) {
         let root = component;
         while (root && root.parentNode) {
           root = root.parentNode;
@@ -329,23 +373,23 @@
         return root && root.constructor && root.constructor.typeId === 'ice-entity-designer:Entity' ? root : null;
       }
 
-      function entityCenterInCanvas(entity) {
+      entityCenterInCanvas(entity) {
         const box = entity.getMinBoundingBox(true);
         const center = box.center;
-        return ice.worldToScreen(center[0], center[1]);
+        return this.ice.worldToScreen(center[0], center[1]);
       }
 
-      function showLinkPreview(entity) {
-        const [x, y] = entityCenterInCanvas(entity);
-        linkPreviewPath.setAttribute('d', orthogonalPreviewPath(x, y, x, y));
-        linkPreview.style.display = 'block';
+      showLinkPreview(entity) {
+        const [x, y] = this.entityCenterInCanvas(entity);
+        this.linkPreviewPath.setAttribute('d', this.orthogonalPreviewPath(x, y, x, y));
+        this.linkPreview.style.display = 'block';
       }
 
-      function hideLinkPreview() {
-        linkPreview.style.display = 'none';
+      hideLinkPreview() {
+        this.linkPreview.style.display = 'none';
       }
 
-      function orthogonalPreviewPath(x1, y1, x2, y2) {
+      orthogonalPreviewPath(x1, y1, x2, y2) {
         const dx = x2 - x1;
         const dy = y2 - y1;
         if (Math.abs(dx) > Math.abs(dy)) {
@@ -356,84 +400,86 @@
         return `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
       }
 
-      function canvasPoint(evt) {
+      canvasPoint(evt) {
         return [evt.offsetX, evt.offsetY];
       }
 
-      canvasEl.addEventListener('mousedown', (evt) => {
-        if (linkingMode) {
-          const [px, py] = canvasPoint(evt);
-          const hit = ice.hitTest(px, py);
-          const entity = findRootEntity(hit);
+      __wireCanvasInteraction() {
+      this.canvasEl.addEventListener('mousedown', (evt) => {
+        if (this.linkingMode) {
+          const [px, py] = this.canvasPoint(evt);
+          const hit = this.ice.hitTest(px, py);
+          const entity = this.findRootEntity(hit);
           if (entity) {
             evt.preventDefault();
             evt.stopPropagation();
-            if (!linkSource) {
-              linkSource = entity;
-              showLinkPreview(entity);
+            if (!this.linkSource) {
+              this.linkSource = entity;
+              this.showLinkPreview(entity);
               document.getElementById('relation-hint').textContent = `已选择源 Entity：${entity.state.entityName}，请点击目标 Entity`;
               document.getElementById('relation-hint').style.color = '#0f766e';
-            } else if (linkSource.state.id !== entity.state.id) {
-              designer.createRelation({
+            } else if (this.linkSource.state.id !== entity.state.id) {
+              this.designer.createRelation({
                 relationType: document.getElementById('rel-type').value,
                 linkShape: document.getElementById('rel-shape').value,
-                sourceId: linkSource.state.id,
+                sourceId: this.linkSource.state.id,
                 targetId: entity.state.id,
               });
-              hideLinkPreview();
-              setLinkingMode(false);
-              renderPanel();
-              refreshHistoryButtons();
+              this.hideLinkPreview();
+              this.setLinkingMode(false);
+              this.onUpdate();
+              this.refreshHistoryButtons();
             } else {
               document.getElementById('relation-hint').textContent = '源 Entity 和目标 Entity 不能相同，请重新选择';
               document.getElementById('relation-hint').style.color = '#b45309';
-              linkSource = null;
-              hideLinkPreview();
+              this.linkSource = null;
+              this.hideLinkPreview();
             }
           }
           return;
         }
 
-        const [px, py] = canvasPoint(evt);
-        const blank = evt.button === 0 && !ice.hitTest(px, py);
+        const [px, py] = this.canvasPoint(evt);
+        const blank = evt.button === 0 && !this.ice.hitTest(px, py);
         if (evt.button !== 1 && !blank) return;
         evt.preventDefault();
         evt.stopPropagation();
-        panning = true;
-        lastX = px;
-        lastY = py;
-        canvasEl.style.cursor = 'grabbing';
+        this.panning = true;
+        this.lastX = px;
+        this.lastY = py;
+        this.canvasEl.style.cursor = 'grabbing';
       });
-      canvasEl.addEventListener('mousemove', (evt) => {
-        if (linkingMode && linkSource) {
-          const [mx, my] = canvasPoint(evt);
-          const [sx, sy] = entityCenterInCanvas(linkSource);
-          linkPreviewPath.setAttribute('d', orthogonalPreviewPath(sx, sy, mx, my));
+      this.canvasEl.addEventListener('mousemove', (evt) => {
+        if (this.linkingMode && this.linkSource) {
+          const [mx, my] = this.canvasPoint(evt);
+          const [sx, sy] = this.entityCenterInCanvas(this.linkSource);
+          this.linkPreviewPath.setAttribute('d', this.orthogonalPreviewPath(sx, sy, mx, my));
         }
-        if (!panning) return;
-        const [mx, my] = canvasPoint(evt);
-        const dx = mx - lastX;
-        const dy = my - lastY;
-        lastX = mx;
-        lastY = my;
-        ice.setViewport(ice.viewport.scale, ice.viewport.tx + dx, ice.viewport.ty + dy);
+        if (!this.panning) return;
+        const [mx, my] = this.canvasPoint(evt);
+        const dx = mx - this.lastX;
+        const dy = my - this.lastY;
+        this.lastX = mx;
+        this.lastY = my;
+        this.ice.setViewport(this.ice.viewport.scale, this.ice.viewport.tx + dx, this.ice.viewport.ty + dy);
       });
-      canvasEl.addEventListener('mouseup', () => {
-        panning = false;
-        canvasEl.style.cursor = 'grab';
+      this.canvasEl.addEventListener('mouseup', () => {
+        this.panning = false;
+        this.canvasEl.style.cursor = 'grab';
       });
-      canvasEl.addEventListener('mouseleave', () => {
-        panning = false;
-        canvasEl.style.cursor = 'grab';
+      this.canvasEl.addEventListener('mouseleave', () => {
+        this.panning = false;
+        this.canvasEl.style.cursor = 'grab';
       });
-      canvasEl.addEventListener('auxclick', (evt) => {
+      this.canvasEl.addEventListener('auxclick', (evt) => {
         if (evt.button === 1) evt.preventDefault();
       });
+      }
 
-      function setLinkingMode(enabled) {
-        linkingMode = enabled;
-        linkSource = null;
-        designer.entities.forEach((entity) => {
+      setLinkingMode(enabled) {
+        this.linkingMode = enabled;
+        this.linkSource = null;
+        this.designer.entities.forEach((entity) => {
           entity.setState({ draggable: !enabled });
         });
         const hint = document.getElementById('relation-hint');
@@ -442,18 +488,18 @@
           hint.textContent = '连接模式：请先点击源 Entity，再点击目标 Entity';
           hint.style.color = '#0f766e';
           button.style.borderColor = '#0f766e';
-          canvasEl.style.cursor = 'crosshair';
+          this.canvasEl.style.cursor = 'crosshair';
         } else {
-          hideLinkPreview();
+          this.hideLinkPreview();
           hint.textContent = '选择关系类型后点击“连接关系”';
           hint.style.color = '#64748b';
           button.style.borderColor = '';
-          canvasEl.style.cursor = 'grab';
+          this.canvasEl.style.cursor = 'grab';
         }
       }
 
-      function fitViewportToContent(padding = 80) {
-        const entities = designer.entities;
+      fitViewportToContent(padding = 80) {
+        const entities = this.designer.entities;
         if (!entities.length) return;
         let minX = Infinity;
         let minY = Infinity;
@@ -470,16 +516,16 @@
         const contentHeight = maxY - minY;
         if (contentWidth <= 0 || contentHeight <= 0) return;
         const scale = Math.min(
-          (canvasEl.width - padding * 2) / contentWidth,
-          (canvasEl.height - padding * 2) / contentHeight,
+          (this.canvasEl.width - padding * 2) / contentWidth,
+          (this.canvasEl.height - padding * 2) / contentHeight,
           1.25,
         );
-        const tx = (canvasEl.width - contentWidth * scale) / 2 - minX * scale;
-        const ty = (canvasEl.height - contentHeight * scale) / 2 - minY * scale;
-        ice.setViewport(scale, tx, ty);
+        const tx = (this.canvasEl.width - contentWidth * scale) / 2 - minX * scale;
+        const ty = (this.canvasEl.height - contentHeight * scale) / 2 - minY * scale;
+        this.ice.setViewport(scale, tx, ty);
       }
 
-      function relationSlotPoint(component, position) {
+      relationSlotPoint(component, position) {
         const box = component.getMinBoundingBox(true);
         switch (position) {
           case 'T':
@@ -496,12 +542,12 @@
         }
       }
 
-      function routeRelations(direction) {
-        designer.relations.forEach((relation) => {
+      routeRelations(direction) {
+        this.designer.relations.forEach((relation) => {
           const startId = relation.state.links && relation.state.links.start && relation.state.links.start.id;
           const endId = relation.state.links && relation.state.links.end && relation.state.links.end.id;
-          const source = startId ? ice.findComponent(startId) : null;
-          const target = endId ? ice.findComponent(endId) : null;
+          const source = startId ? this.ice.findComponent(startId) : null;
+          const target = endId ? this.ice.findComponent(endId) : null;
           if (!source || !target) return;
 
           const sourceBox = source.getMinBoundingBox(true);
@@ -530,8 +576,8 @@
             }
           }
 
-          const startPoint = relationSlotPoint(source, startPosition);
-          const endPoint = relationSlotPoint(target, endPosition);
+          const startPoint = this.relationSlotPoint(source, startPosition);
+          const endPoint = this.relationSlotPoint(target, endPosition);
           relation.setState({
             routeType: 'orthogonal',
             routeOffset: 28,
@@ -545,8 +591,8 @@
         });
       }
 
-      function buildLayoutGraph() {
-        const nodes = designer.entities.map((entity) => ({
+      buildLayoutGraph() {
+        const nodes = this.designer.entities.map((entity) => ({
           id: entity.state.id,
           entity,
           in: new Set(),
@@ -558,7 +604,7 @@
           nodeMap[node.id] = node;
         });
 
-        designer.relations.forEach((relation) => {
+        this.designer.relations.forEach((relation) => {
           const start = relation.state.links && relation.state.links.start && relation.state.links.start.id;
           const end = relation.state.links && relation.state.links.end && relation.state.links.end.id;
           if (!start || !end || !nodeMap[start] || !nodeMap[end] || start === end) return;
@@ -571,7 +617,7 @@
         return { nodes, nodeMap };
       }
 
-      function computeRanks(nodes, nodeMap) {
+      computeRanks(nodes, nodeMap) {
         const rank = {};
         const visit = (id, stack) => {
           if (rank[id] !== undefined) return rank[id];
@@ -589,7 +635,7 @@
         return rank;
       }
 
-      function orderLayers(nodes, nodeMap, rank) {
+      orderLayers(nodes, nodeMap, rank) {
         const layers = {};
         nodes.forEach((node) => {
           (layers[rank[node.id]] = layers[rank[node.id]] || []).push(node);
@@ -673,12 +719,12 @@
         return { layers, rankList };
       }
 
-      function applyFlowLayout(direction) {
-        designer.captureHistory();
-        const { nodes, nodeMap } = buildLayoutGraph();
+      applyFlowLayout(direction) {
+        this.designer.captureHistory();
+        const { nodes, nodeMap } = this.buildLayoutGraph();
         if (!nodes.length) return;
-        const rank = computeRanks(nodes, nodeMap);
-        const { layers, rankList } = orderLayers(nodes, nodeMap, rank);
+        const rank = this.computeRanks(nodes, nodeMap);
+        const { layers, rankList } = this.orderLayers(nodes, nodeMap, rank);
         const boxMap = {};
         nodes.forEach((node) => {
           boxMap[node.id] = node.entity.getMinBoundingBox(true);
@@ -716,19 +762,19 @@
 
         const positionList = nodes.map((node) => positions[node.id]);
         const boxList = nodes.map((node) => boxMap[node.id]);
-        resolveOverlaps(positionList, boxList);
+        this.resolveOverlaps(positionList, boxList);
         nodes.forEach((node, index) => {
           node.entity.setPosition(positionList[index].x, positionList[index].y);
         });
-        routeRelations(direction);
-        setLinkingMode(false);
-        fitViewportToContent();
-        refreshHistoryButtons();
+        this.routeRelations(direction);
+        this.setLinkingMode(false);
+        this.fitViewportToContent();
+        this.refreshHistoryButtons();
       }
 
-      function applyRadialLayout() {
-        designer.captureHistory();
-        const { nodes, nodeMap } = buildLayoutGraph();
+      applyRadialLayout() {
+        this.designer.captureHistory();
+        const { nodes, nodeMap } = this.buildLayoutGraph();
         if (!nodes.length) return;
         const rootId =
           nodes.reduce((best, node) => (node.all.size > best.all.size ? node : best), nodes[0]).id;
@@ -788,17 +834,17 @@
 
         const positionList = nodes.map((node) => positions[node.id]);
         const boxList = nodes.map((node) => boxMap[node.id]);
-        resolveOverlaps(positionList, boxList);
+        this.resolveOverlaps(positionList, boxList);
         nodes.forEach((node, index) => {
           node.entity.setPosition(positionList[index].x, positionList[index].y);
         });
-        routeRelations(null);
-        setLinkingMode(false);
-        fitViewportToContent();
-        refreshHistoryButtons();
+        this.routeRelations(null);
+        this.setLinkingMode(false);
+        this.fitViewportToContent();
+        this.refreshHistoryButtons();
       }
 
-      function resolveOverlaps(positions, boxes) {
+      resolveOverlaps(positions, boxes) {
         let moved = false;
         for (let iter = 0; iter < 400; iter++) {
           moved = false;
@@ -837,9 +883,9 @@
         }
       }
 
-      function applyForceLayout() {
-        designer.captureHistory();
-        const { nodes, nodeMap } = buildLayoutGraph();
+      applyForceLayout() {
+        this.designer.captureHistory();
+        const { nodes, nodeMap } = this.buildLayoutGraph();
         if (!nodes.length) return;
         const boxMap = {};
         nodes.forEach((node) => {
@@ -851,8 +897,8 @@
           const row = Math.floor(index / 6);
           return {
             id: node.id,
-            x: canvasEl.width / 2 + (col - 2.5) * 320 + Math.random() * 40,
-            y: canvasEl.height / 2 + (row - 2.5) * 260 + Math.random() * 40,
+            x: this.canvasEl.width / 2 + (col - 2.5) * 320 + Math.random() * 40,
+            y: this.canvasEl.height / 2 + (row - 2.5) * 260 + Math.random() * 40,
           };
         });
         const posMap = {};
@@ -860,9 +906,9 @@
           posMap[item.id] = item;
         });
 
-        const area = canvasEl.width * canvasEl.height;
+        const area = this.canvasEl.width * this.canvasEl.height;
         const ideal = Math.sqrt(area / nodes.length) * 0.9;
-        let temperature = Math.max(canvasEl.width, canvasEl.height) / 6;
+        let temperature = Math.max(this.canvasEl.width, this.canvasEl.height) / 6;
         const disp = positions.map(() => ({ x: 0, y: 0 }));
 
         for (let iter = 0; iter < 260; iter++) {
@@ -886,7 +932,7 @@
             }
           }
 
-          designer.relations.forEach((relation) => {
+          this.designer.relations.forEach((relation) => {
             const start = relation.state.links && relation.state.links.start && relation.state.links.start.id;
             const end = relation.state.links && relation.state.links.end && relation.state.links.end.id;
             if (!start || !end || !posMap[start] || !posMap[end] || start === end) return;
@@ -915,36 +961,32 @@
         }
 
         const boxes = nodes.map((node) => boxMap[node.id]);
-        resolveOverlaps(positions, boxes);
+        this.resolveOverlaps(positions, boxes);
 
         positions.forEach((item) => {
           const node = nodeMap[item.id];
           node.entity.setPosition(item.x, item.y);
         });
-        routeRelations(null);
-        setLinkingMode(false);
-        fitViewportToContent();
-        refreshHistoryButtons();
+        this.routeRelations(null);
+        this.setLinkingMode(false);
+        this.fitViewportToContent();
+        this.refreshHistoryButtons();
       }
 
-      const antdUI = window.antd || {};
-      const { Table = () => null, Input = () => null, Button = () => null, Select = () => null, Tabs = () => null, Typography = {}, Form = () => null } = antdUI;
-      let propertyPanelRoot = null;
-
-      function commitField(entity, index, patch) {
+      commitField(entity, index, patch) {
         const fields = [...(entity.state.fields || [])];
         fields[index] = { ...fields[index], ...patch };
         entity.setFields(fields);
       }
 
-      function removeField(entity, index) {
+      removeField(entity, index) {
         const fields = [...(entity.state.fields || [])];
         fields.splice(index, 1);
         entity.setFields(fields);
       }
 
-      function commitConstraints(entity, index, values) {
-        commitField(entity, index, {
+      commitConstraints(entity, index, values) {
+        this.commitField(entity, index, {
           primary: values.includes('PK'),
           foreignKey: values.includes('FK'),
           unique: values.includes('UQ'),
@@ -955,7 +997,7 @@
         });
       }
 
-      function EntityFieldsTable({ entity, refresh }) {
+      EntityFieldsTable({ entity, refresh }) {
         const fields = (entity.state.fields || []).map((field, index) => ({ ...field, key: index }));
         const constraintOptions = [
           { value: 'PK', label: 'PK' },
@@ -996,8 +1038,8 @@
             width: 130,
             render: (value, record, index) =>
               React.createElement(
-                Input,
-                inputProps(value, 'name', (next) => commitField(entity, index, { name: next })),
+                this.Input,
+                inputProps(value, 'name', (next) => this.commitField(entity, index, { name: next })),
               ),
           },
           {
@@ -1006,8 +1048,8 @@
             width: 90,
             render: (value, record, index) =>
               React.createElement(
-                Input,
-                inputProps(value, 'type', (next) => commitField(entity, index, { type: next || undefined })),
+                this.Input,
+                inputProps(value, 'type', (next) => this.commitField(entity, index, { type: next || undefined })),
               ),
           },
           {
@@ -1016,8 +1058,8 @@
             width: 72,
             render: (value, record, index) =>
               React.createElement(
-                Input,
-                inputProps(value, 'len', (next) => commitField(entity, index, { length: next === '' ? undefined : next })),
+                this.Input,
+                inputProps(value, 'len', (next) => this.commitField(entity, index, { length: next === '' ? undefined : next })),
               ),
           },
           {
@@ -1026,7 +1068,7 @@
             width: 190,
             render: (value, record, index) =>
               React.createElement(
-                Select,
+                this.Select,
                 {
                   mode: 'multiple',
                   size: 'small',
@@ -1035,7 +1077,7 @@
                   style: { width: '100%' },
                   maxTagCount: 2,
                   onChange: (values) => {
-                    commitConstraints(entity, index, values);
+                    this.commitConstraints(entity, index, values);
                     refresh();
                   },
                 },
@@ -1048,13 +1090,13 @@
             fixed: 'right',
             render: (value, record, index) =>
               React.createElement(
-                Button,
+                this.Button,
                 {
                   type: 'link',
                   danger: true,
                   size: 'small',
                   onClick: () => {
-                    removeField(entity, index);
+                    this.removeField(entity, index);
                     refresh();
                   },
                 },
@@ -1079,9 +1121,9 @@
               null,
               React.createElement('div', { style: { marginBottom: 4, color: '#64748b' } }, '默认值'),
               React.createElement(
-                Input,
+                this.Input,
                 inputProps(record.default, 'default', (next) =>
-                  commitField(entity, index, { default: next === '' ? undefined : next }),
+                  this.commitField(entity, index, { default: next === '' ? undefined : next }),
                 ),
               ),
             ),
@@ -1090,9 +1132,9 @@
               null,
               React.createElement('div', { style: { marginBottom: 4, color: '#64748b' } }, '注释'),
               React.createElement(
-                Input,
+                this.Input,
                 inputProps(record.comment, 'comment', (next) =>
-                  commitField(entity, index, { comment: next || undefined }),
+                  this.commitField(entity, index, { comment: next || undefined }),
                 ),
               ),
             ),
@@ -1101,18 +1143,18 @@
         return React.createElement(
           'div',
           null,
-          React.createElement(Typography.Text, { strong: true }, '实体名称'),
-          React.createElement(Input, {
+          React.createElement(this.Typography.Text, { strong: true }, '实体名称'),
+          React.createElement(this.Input, {
             defaultValue: entity.state.entityName || '',
             size: 'large',
             style: { marginTop: 8, marginBottom: 12 },
             onBlur: (evt) => {
-              designer.updateEntity(entity.state.id, { entityName: evt.target.value || 'Entity Name' });
+              this.designer.updateEntity(entity.state.id, { entityName: evt.target.value || 'Entity Name' });
               refresh();
             },
             onPressEnter: (evt) => evt.target.blur(),
           }),
-          React.createElement(Table, {
+          React.createElement(this.Table, {
             size: 'small',
             columns,
             dataSource: fields,
@@ -1122,7 +1164,7 @@
             rowKey: (record) => record.key,
           }),
           React.createElement(
-            Button,
+            this.Button,
             {
               type: 'dashed',
               block: true,
@@ -1137,7 +1179,7 @@
         );
       }
 
-      function RelationPropertyPanel({ relation, refresh }) {
+      RelationPropertyPanel({ relation, refresh }) {
         const relationTypeOptions = ['one-to-many', 'many-to-one', 'one-to-one', 'many-to-many'].map((value) => ({
           value,
           label: value,
@@ -1149,31 +1191,31 @@
 
         const field = (label, control) =>
           React.createElement(
-            Form.Item,
+            this.Form.Item,
             { label, style: { marginBottom: 12 } },
             control,
           );
 
         return React.createElement(
-          Form,
+          this.Form,
           { layout: 'vertical' },
-          React.createElement(Typography.Title, { level: 5 }, '关系属性'),
-          React.createElement(Typography.Paragraph, { type: 'secondary' }, relation.state.label || ''),
+          React.createElement(this.Typography.Title, { level: 5 }, '关系属性'),
+          React.createElement(this.Typography.Paragraph, { type: 'secondary' }, relation.state.label || ''),
           field(
             '关系类型',
-            React.createElement(Select, {
+            React.createElement(this.Select, {
               defaultValue: relation.state.relationType || 'one-to-many',
               options: relationTypeOptions,
               style: { width: '100%' },
               onChange: (value) => {
-                designer.updateRelation(relation.state.id, { relationType: value });
+                this.designer.updateRelation(relation.state.id, { relationType: value });
                 refresh();
               },
             }),
           ),
           field(
             '连线形态',
-            React.createElement(Select, {
+            React.createElement(this.Select, {
               id: 'rel-shape-select',
               //受控：这一项除了面板，工具栏下拉也能改（选中连线时），非受控会导致两处显示不一致
               value: relation.state.linkShape || 'visio',
@@ -1183,17 +1225,17 @@
               ],
               style: { width: '100%' },
               onChange: (value) => {
-                designer.updateRelation(relation.state.id, { linkShape: value });
+                this.designer.updateRelation(relation.state.id, { linkShape: value });
                 refresh();
               },
             }),
           ),
           field(
             '源字段',
-            React.createElement(Input, {
+            React.createElement(this.Input, {
               defaultValue: relation.state.sourceField || 'id',
               onBlur: (evt) => {
-                designer.updateRelation(relation.state.id, { sourceField: evt.target.value || 'id' });
+                this.designer.updateRelation(relation.state.id, { sourceField: evt.target.value || 'id' });
                 refresh();
               },
               onPressEnter: (evt) => evt.target.blur(),
@@ -1201,10 +1243,10 @@
           ),
           field(
             '目标字段',
-            React.createElement(Input, {
+            React.createElement(this.Input, {
               defaultValue: relation.state.targetField || 'id',
               onBlur: (evt) => {
-                designer.updateRelation(relation.state.id, { targetField: evt.target.value || 'id' });
+                this.designer.updateRelation(relation.state.id, { targetField: evt.target.value || 'id' });
                 refresh();
               },
               onPressEnter: (evt) => evt.target.blur(),
@@ -1212,35 +1254,35 @@
           ),
           field(
             'onDelete',
-            React.createElement(Select, {
+            React.createElement(this.Select, {
               defaultValue: relation.state.onDelete || '',
               options: actionOptions,
               style: { width: '100%' },
               onChange: (value) => {
-                designer.updateRelation(relation.state.id, { onDelete: value || undefined });
+                this.designer.updateRelation(relation.state.id, { onDelete: value || undefined });
                 refresh();
               },
             }),
           ),
           field(
             'onUpdate',
-            React.createElement(Select, {
+            React.createElement(this.Select, {
               defaultValue: relation.state.onUpdate || '',
               options: actionOptions,
               style: { width: '100%' },
               onChange: (value) => {
-                designer.updateRelation(relation.state.id, { onUpdate: value || undefined });
+                this.designer.updateRelation(relation.state.id, { onUpdate: value || undefined });
                 refresh();
               },
             }),
           ),
           field(
             'joinTableName',
-            React.createElement(Input, {
+            React.createElement(this.Input, {
               defaultValue: relation.state.joinTableName || '',
               placeholder: 'user_roles',
               onBlur: (evt) => {
-                designer.updateRelation(relation.state.id, { joinTableName: evt.target.value || undefined });
+                this.designer.updateRelation(relation.state.id, { joinTableName: evt.target.value || undefined });
                 refresh();
               },
               onPressEnter: (evt) => evt.target.blur(),
@@ -1249,7 +1291,7 @@
         );
       }
 
-      function PropertyPanel({ selected, refresh }) {
+      PropertyPanel({ selected, refresh }) {
         const renderEditor = () => {
           if (!selected) {
             return React.createElement(
@@ -1264,23 +1306,23 @@
             // key 绑定选中项 id：面板里的输入框是**非受控**（defaultValue）的，
             // 不换 key 的话 React 复用旧 DOM，切换选中后仍显示上一个对象的旧值
             //（用户照着旧值编辑，会写到新选中的对象上）。
-            return React.createElement(RelationPropertyPanel, { relation: selected, refresh, key: selected.state.id });
+            return React.createElement(this.RelationPropertyPanel, { relation: selected, refresh, key: selected.state.id });
           }
-          return React.createElement(EntityFieldsTable, { entity: selected, refresh, key: selected.state.id });
+          return React.createElement(this.EntityFieldsTable, { entity: selected, refresh, key: selected.state.id });
         };
 
-        let jsonText = designer.serializeProject();
+        let jsonText = this.designer.serializeProject();
         try {
           jsonText = JSON.stringify(JSON.parse(jsonText), null, 2);
         } catch (error) {
-          jsonText = designer.serializeProject();
+          jsonText = this.designer.serializeProject();
         }
 
-        let schemaText = designer.toSchemaString();
+        let schemaText = this.designer.toSchemaString();
         try {
           schemaText = JSON.stringify(JSON.parse(schemaText), null, 2);
         } catch (error) {
-          schemaText = designer.toSchemaString();
+          schemaText = this.designer.toSchemaString();
         }
 
         const items = [
@@ -1323,31 +1365,31 @@
           },
         ];
 
-        return React.createElement(Tabs, {
+        return React.createElement(this.Tabs, {
           defaultActiveKey: 'editor',
           size: 'small',
           items,
         });
       }
 
-      function renderPanel() {
+      onUpdate() {
         if (!window.React || !window.ReactDOM || !window.antd) {
-          entityPanel.innerHTML = 'React/antd 资源加载失败，请检查网络连接';
+          this.entityPanel.innerHTML = 'React/antd 资源加载失败，请检查网络连接';
           return;
         }
-        if (!propertyPanelRoot) {
-          propertyPanelRoot = ReactDOM.createRoot(entityPanel);
+        if (!this.propertyPanelRoot) {
+          this.propertyPanelRoot = ReactDOM.createRoot(this.entityPanel);
         }
-        propertyPanelRoot.render(
-          React.createElement(PropertyPanel, {
-            selected: designer.selected,
-            refresh: renderPanel,
+        this.propertyPanelRoot.render(
+          React.createElement(this.PropertyPanel, {
+            selected: this.designer.selected,
+            refresh: () => this.onUpdate(),
           }),
         );
 
         //选中连线时让工具栏下拉跟随它的形态，避免工具栏与属性面板两处显示不一致。
         //判类型用稳定标识 typeId，不用 constructor.name（下游打包会 mangle 类名）。
-        const selectedRel = designer.selected;
+        const selectedRel = this.designer.selected;
         const relShapeSelect = document.getElementById('rel-shape');
         if (
           relShapeSelect &&
@@ -1359,51 +1401,50 @@
           relShapeSelect.value = selectedRel.state.linkShape;
         }
       }
-      window.__renderPanel = renderPanel;
-
-      ice.evtBus.on('mousedown', () => {
+      __wireToolbar() {
+      this.ice.evtBus.on('mousedown', () => {
         setTimeout(() => {
-          renderPanel();
+          this.onUpdate();
         }, 0);
       });
 
       document.getElementById('btn-add-entity').addEventListener('click', () => {
-        designer.createEntity({
+        this.designer.createEntity({
           entityName: 'NewEntity',
           fields: [{ name: 'id', type: 'number', primary: true, autoIncrement: true, nullable: false }],
         });
-        renderPanel();
-        setLinkingMode(false);
-        refreshHistoryButtons();
+        this.onUpdate();
+        this.setLinkingMode(false);
+        this.refreshHistoryButtons();
       });
 
       document.getElementById('btn-delete-selected').addEventListener('click', () => {
-        if (designer.selectedId) {
-          designer.removeComponent(designer.selectedId);
-          renderPanel();
-          setLinkingMode(false);
-          refreshHistoryButtons();
+        if (this.designer.selectedId) {
+          this.designer.removeComponent(this.designer.selectedId);
+          this.onUpdate();
+          this.setLinkingMode(false);
+          this.refreshHistoryButtons();
         }
       });
 
       document.getElementById('btn-toggle-link').addEventListener('click', () => {
-        setLinkingMode(!linkingMode);
+        this.setLinkingMode(!this.linkingMode);
       });
 
       document.getElementById('btn-schema').addEventListener('click', () => {
-        schemaOutput.hidden = false;
-        schemaOutput.textContent = JSON.stringify(designer.toSchemaObject(), null, 2);
+        this.schemaOutput.hidden = false;
+        this.schemaOutput.textContent = JSON.stringify(this.designer.toSchemaObject(), null, 2);
       });
 
       document.getElementById('btn-validate').addEventListener('click', () => {
-        const issues = designer.validate();
-        validationOutput.innerHTML = '';
+        const issues = this.designer.validate();
+        this.validationOutput.innerHTML = '';
         if (!issues.length) {
-          validationOutput.textContent = '✅ Schema 校验通过';
-          validationOutput.style.color = '#059669';
+          this.validationOutput.textContent = '✅ Schema 校验通过';
+          this.validationOutput.style.color = '#059669';
           return;
         }
-        validationOutput.style.color = '#b91c1c';
+        this.validationOutput.style.color = '#b91c1c';
         const list = document.createElement('ul');
         list.style.cssText = 'margin:0;padding-left:20px;';
         issues.forEach((issue) => {
@@ -1411,88 +1452,91 @@
           item.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
           list.appendChild(item);
         });
-        validationOutput.appendChild(list);
+        this.validationOutput.appendChild(list);
       });
 
-      const projectStorageKey = 'ice-entity-designer-project';
       document.getElementById('btn-save-project').addEventListener('click', () => {
-        window.localStorage.setItem(projectStorageKey, designer.serializeProject());
-        validationOutput.innerHTML = '';
-        validationOutput.textContent = '✅ 项目已保存';
-        validationOutput.style.color = '#059669';
+        window.localStorage.setItem(this.projectStorageKey, this.designer.serializeProject());
+        this.validationOutput.innerHTML = '';
+        this.validationOutput.textContent = '✅ 项目已保存';
+        this.validationOutput.style.color = '#059669';
       });
 
       document.getElementById('btn-load-project').addEventListener('click', () => {
-        const json = window.localStorage.getItem(projectStorageKey);
+        const json = window.localStorage.getItem(this.projectStorageKey);
         if (!json) {
-          validationOutput.innerHTML = '';
-          validationOutput.textContent = '⚠️ 没有可加载的项目';
-          validationOutput.style.color = '#b45309';
+          this.validationOutput.innerHTML = '';
+          this.validationOutput.textContent = '⚠️ 没有可加载的项目';
+          this.validationOutput.style.color = '#b45309';
           return;
         }
         let report;
         try {
-          report = designer.loadProject(json);
+          report = this.designer.loadProject(json);
         } catch (error) {
-          validationOutput.innerHTML = '';
-          validationOutput.textContent = `❌ 项目加载失败：${error.message}`;
-          validationOutput.style.color = '#b91c1c';
+          this.validationOutput.innerHTML = '';
+          this.validationOutput.textContent = `❌ 项目加载失败：${error.message}`;
+          this.validationOutput.style.color = '#b91c1c';
           return;
         }
-        renderPanel();
-        setLinkingMode(false);
-        refreshHistoryButtons();
-        validationOutput.innerHTML = '';
+        this.onUpdate();
+        this.setLinkingMode(false);
+        this.refreshHistoryButtons();
+        this.validationOutput.innerHTML = '';
         if (report && report.unknownTypes && report.unknownTypes.length) {
           // 未注册的类型会被跳过而不是让整份数据打不开，这里如实提示用户
-          validationOutput.textContent = `⚠️ 项目已加载，但跳过了未注册的类型：${report.unknownTypes.join('、')}`;
-          validationOutput.style.color = '#b45309';
+          this.validationOutput.textContent = `⚠️ 项目已加载，但跳过了未注册的类型：${report.unknownTypes.join('、')}`;
+          this.validationOutput.style.color = '#b45309';
         } else {
-          validationOutput.textContent = '✅ 项目已加载';
-          validationOutput.style.color = '#059669';
+          this.validationOutput.textContent = '✅ 项目已加载';
+          this.validationOutput.style.color = '#059669';
         }
       });
 
       document.getElementById('btn-reset').addEventListener('click', () => {
-        ice.setViewport(1, 0, 0);
+        this.ice.setViewport(1, 0, 0);
       });
 
-      document.getElementById('btn-layout-horizontal').addEventListener('click', () => applyFlowLayout('LR'));
-      document.getElementById('btn-layout-vertical').addEventListener('click', () => applyFlowLayout('TB'));
-      document.getElementById('btn-layout-radial').addEventListener('click', applyRadialLayout);
-      document.getElementById('btn-layout-force').addEventListener('click', applyForceLayout);
+      document.getElementById('btn-layout-horizontal').addEventListener('click', () => this.applyFlowLayout('LR'));
+      document.getElementById('btn-layout-vertical').addEventListener('click', () => this.applyFlowLayout('TB'));
+      // 注意：这里必须是箭头包装 —— 直接传 this.applyRadialLayout 会在回调里丢掉 this，
+      // 进到方法里 this.designer 就变成 undefined（改造时真踩了：布局按钮点了没反应 + captureHistory 报错）。
+      document.getElementById('btn-layout-radial').addEventListener('click', () => this.applyRadialLayout());
+      document.getElementById('btn-layout-force').addEventListener('click', () => this.applyForceLayout());
 
       //工具栏「连线形态」：选中连线时直接改这条线；没选中时只作为新建连线的默认形态。
       document.getElementById('rel-shape').addEventListener('change', (evt) => {
-        const selectedRel = designer.selected;
+        const selectedRel = this.designer.selected;
         if (
           selectedRel &&
           selectedRel.constructor &&
           selectedRel.constructor.typeId === 'ice-entity-designer:Relation'
         ) {
-          designer.updateRelation(selectedRel.state.id, { linkShape: evt.target.value });
-          renderPanel();
-          refreshHistoryButtons();
+          this.designer.updateRelation(selectedRel.state.id, { linkShape: evt.target.value });
+          this.onUpdate();
+          this.refreshHistoryButtons();
         }
       });
-
-      function refreshHistoryButtons() {
-        document.getElementById('btn-undo').disabled = !designer.canUndo();
-        document.getElementById('btn-redo').disabled = !designer.canRedo();
       }
 
+      refreshHistoryButtons() {
+        document.getElementById('btn-undo').disabled = !this.designer.canUndo();
+        document.getElementById('btn-redo').disabled = !this.designer.canRedo();
+      }
+
+      __wireGlobalEvents() {
       document.getElementById('btn-undo').addEventListener('click', () => {
-        designer.undo();
-        renderPanel();
-        setLinkingMode(false);
-        refreshHistoryButtons();
+        this.designer.undo();
+        this.onUpdate();
+        this.setLinkingMode(false);
+        this.refreshHistoryButtons();
       });
 
       document.getElementById('btn-redo').addEventListener('click', () => {
-        designer.redo();
-        renderPanel();
-        setLinkingMode(false);
-        refreshHistoryButtons();
+        this.designer.redo();
+        this.onUpdate();
+        this.setLinkingMode(false);
+        this.refreshHistoryButtons();
       });
 
       document.addEventListener('keydown', (evt) => {
@@ -1500,19 +1544,25 @@
         if (!mod) return;
         if (evt.key.toLowerCase() === 'z' && !evt.shiftKey) {
           evt.preventDefault();
-          designer.undo();
-          renderPanel();
-          setLinkingMode(false);
-          refreshHistoryButtons();
+          this.designer.undo();
+          this.onUpdate();
+          this.setLinkingMode(false);
+          this.refreshHistoryButtons();
         } else if (evt.key.toLowerCase() === 'y' || (evt.key.toLowerCase() === 'z' && evt.shiftKey)) {
           evt.preventDefault();
-          designer.redo();
-          renderPanel();
-          setLinkingMode(false);
-          refreshHistoryButtons();
+          this.designer.redo();
+          this.onUpdate();
+          this.setLinkingMode(false);
+          this.refreshHistoryButtons();
         }
       });
+      }
 
+      /**
+       * 内置案例：电商订单领域模型（会员 / 订单 / 支付 / 物流 / 营销）。
+       * 坐标走固定栅格（gridCols × gridRows），保证 e2e / 截图可复现。
+       */
+      buildCase() {
       const idField = {
         name: 'id',
         type: 'number',
@@ -1522,8 +1572,8 @@
         nullable: false,
       };
 
-      function makeEntity(props) {
-        return designer.createEntity({
+      const makeEntity = (props) => {
+        return this.designer.createEntity({
           style: {
             fillStyle: '#ffffff',
             strokeStyle: '#94a3b8',
@@ -1545,8 +1595,8 @@
         });
       }
 
-      function makeRelation(props) {
-        return designer.createRelation({
+      const makeRelation = (props) => {
+        return this.designer.createRelation({
           style: {
             strokeStyle: '#64748b',
             fillStyle: '#334155',
@@ -1559,7 +1609,7 @@
       const fld = (name, type, length, opts = {}) => ({ name, type, length, ...opts });
       const fk = (name, opts = {}) => ({ name, type: 'number', length: 64, foreignKey: true, index: true, nullable: false, ...opts });
 
-      function rel(source, target, props = {}) {
+      const rel = (source, target, props = {}) => {
         const sourceBox = source.getMinBoundingBox(true);
         const targetBox = target.getMinBoundingBox(true);
         const sx = sourceBox.center[0];
@@ -1592,7 +1642,7 @@
       const gridRows = [50, 370, 690, 1010, 1330];
       const E = {};
 
-      function put(key, col, row, entityName, fields) {
+      const put = (key, col, row, entityName, fields) => {
         const entity = makeEntity({
           left: gridCols[col],
           top: gridRows[row],
@@ -2129,9 +2179,13 @@
         joinTableName: 'order_promotions',
       });
 
-      applyForceLayout();
-      designer.select(E.Customer.state.id);
-      renderPanel();
+      this.applyForceLayout();
+      this.designer.select(E.Customer.state.id);
+      this.onUpdate();
+      }
+      }
+
+      new EntityEditorPage();
     </script>
   </body>
 </html>
