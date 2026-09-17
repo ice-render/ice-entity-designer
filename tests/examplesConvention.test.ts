@@ -95,7 +95,7 @@ describe('成员顺序棘轮（static 常量 → 实例字段 → 构造函数 �
     let scanned = 0;
     for (const f of files) {
       const script = scriptOf(fs.readFileSync(path.join(DIR, f), 'utf8'));
-      const at = script.search(/\bclass\s+[A-Z]/);
+      const at = script.search(/^[ \t]*(?:export\s+)?(?:abstract\s+)?class\s+[A-Za-z_$]/m);
       if (at < 0) continue;
       const seq = memberSequence(script.slice(at).split('\n').slice(1).join('\n'));
       if (!seq) continue;
