@@ -62,42 +62,64 @@
     <script src="../dist/index.umd.js"></script>
     <script src="./canvas-interactions.js"></script>
     <script type="text/javascript">
+      /**
+       * 水工艺流程图编辑器（示例页）。
+       *
+       * 页面写法与 flowchart-editor / ice-smart-water 一致：**一页 = 一个类**，构造期把引擎、
+       * DOM 引用、下拉框、交互态与事件一次建好；`onUpdate()` 是**唯一**刷新入口。
+       */
       const { ICE, WaterProcessDesigner, WATER_SYMBOL_PRESETS, WATER_MEDIUM_STYLES } = IED;
-      const ice = new ICE().init('canvas-1');
-      const designer = new WaterProcessDesigner(ice);
-      const canvasEl = document.getElementById('canvas-1');
-      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
-      window.__ice = ice;
-      window.__designer = designer;
 
-      const panel = document.getElementById('panel');
-      const validateOutput = document.getElementById('validate-output');
-      const flowOutput = document.getElementById('flow-output');
+      class WaterEditorPage {
+        constructor() {
+          this.ice = new ICE().init('canvas-1');
+          this.designer = new WaterProcessDesigner(this.ice);
+          this.canvasEl = document.getElementById('canvas-1');
+          this.viewport = IedCanvasViewport.install({ ice: this.ice, canvas: this.canvasEl, designer: this.designer });
+          window.__ice = this.ice;
+          window.__designer = this.designer;
 
-      /* ---------------- 下拉框：直接由符号库 / 介质表生成，永不脱节 ---------------- */
-      const kindSelect = document.getElementById('in-kind');
-      Object.keys(WATER_SYMBOL_PRESETS).forEach((kind) => {
-        const option = document.createElement('option');
-        option.value = kind;
-        option.textContent = WATER_SYMBOL_PRESETS[kind].label;
-        kindSelect.appendChild(option);
-      });
-      kindSelect.value = 'pump';
+          this.panel = document.getElementById('panel');
+          this.validateOutput = document.getElementById('validate-output');
+          this.flowOutput = document.getElementById('flow-output');
+          this.kindSelect = document.getElementById('in-kind');
+          this.mediumSelect = document.getElementById('in-medium');
+          /** 「画管线」的起点选中项（原来是模块级 let） */
+          this.pipeSource = null;
 
-      const mediumSelect = document.getElementById('in-medium');
-      Object.keys(WATER_MEDIUM_STYLES).forEach((medium) => {
-        const option = document.createElement('option');
-        option.value = medium;
-        option.textContent = WATER_MEDIUM_STYLES[medium].label;
-        mediumSelect.appendChild(option);
-      });
-      mediumSelect.value = 'sewage';
+          this.__fillSelects();
+          this.__wireToolbar();
+
+          // 「构造结束即画好」
+          this.buildCase();
+          this.viewport.fitViewport();
+          this.onUpdate();
+        }
+
+        /* ---------------- 下拉框：直接由符号库 / 介质表生成，永不脱节 ---------------- */
+        __fillSelects() {
+          Object.keys(WATER_SYMBOL_PRESETS).forEach((kind) => {
+            const option = document.createElement('option');
+            option.value = kind;
+            option.textContent = WATER_SYMBOL_PRESETS[kind].label;
+            this.kindSelect.appendChild(option);
+          });
+          this.kindSelect.value = 'pump';
+
+          Object.keys(WATER_MEDIUM_STYLES).forEach((medium) => {
+            const option = document.createElement('option');
+            option.value = medium;
+            option.textContent = WATER_MEDIUM_STYLES[medium].label;
+            this.mediumSelect.appendChild(option);
+          });
+          this.mediumSelect.value = 'sewage';
+        }
 
       /* ---------------- 案例：AAO 市政污水厂 ---------------- */
-      function buildCase() {
-        const add = (kind, props) => designer.createSymbol(kind, props);
+      buildCase() {
+        const add = (kind, props) => this.designer.createSymbol(kind, props);
         const pipe = (sourceId, targetId, medium, dn, ports) =>
-          designer.createPipe({
+          this.designer.createPipe({
             sourceId,
             targetId,
             medium,
@@ -166,15 +188,15 @@
         void outlet;
         void sludgeOut;
         void blower;
-        designer.select(null);
-        designer.resetHistory();
+        this.designer.select(null);
+        this.designer.resetHistory();
       }
 
       /* ---------------- 属性面板 ---------------- */
-      function renderPanel() {
-        const node = designer.nodes.find((item) => item.state.id === designer.selectedId);
-        const edge = designer.edges.find((item) => item.state.id === designer.selectedId);
-        panel.innerHTML = '';
+      onUpdate() {
+        const node = this.designer.nodes.find((item) => item.state.id === this.designer.selectedId);
+        const edge = this.designer.edges.find((item) => item.state.id === this.designer.selectedId);
+        this.panel.innerHTML = '';
         const row = (label, control) => {
           const div = document.createElement('div');
           div.className = 'row';
@@ -182,7 +204,7 @@
           span.textContent = label;
           div.appendChild(span);
           div.appendChild(control);
-          panel.appendChild(div);
+          this.panel.appendChild(div);
         };
 
         if (edge) {
@@ -208,7 +230,7 @@
         }
 
         if (!node) {
-          panel.textContent = '点击符号 / 管线进行编辑';
+          this.panel.textContent = '点击符号 / 管线进行编辑';
           return;
         }
         const preset = WATER_SYMBOL_PRESETS[node.state.kind];
@@ -233,90 +255,90 @@
             valveSelect.appendChild(option);
           });
           valveSelect.value = node.state.valveState || 'open';
-          valveSelect.addEventListener('change', () => designer.setValveState(node.state.id, valveSelect.value));
+          valveSelect.addEventListener('change', () => this.designer.setValveState(node.state.id, valveSelect.value));
           row('阀门', valveSelect);
         }
       }
 
       /* ---------------- 工具栏 ---------------- */
-      let pipeSource = null;
+      __wireToolbar() {
       document.getElementById('btn-add').addEventListener('click', () => {
-        const kind = kindSelect.value;
+        const kind = this.kindSelect.value;
         const preset = WATER_SYMBOL_PRESETS[kind];
-        designer.createSymbol(kind, { name: preset.label, tag: preset.tag });
-        renderPanel();
+        this.designer.createSymbol(kind, { name: preset.label, tag: preset.tag });
+        this.onUpdate();
       });
       document.getElementById('btn-delete').addEventListener('click', () => {
-        if (designer.selectedId) {
-          designer.remove(designer.selectedId);
-          renderPanel();
+        if (this.designer.selectedId) {
+          this.designer.remove(this.designer.selectedId);
+          this.onUpdate();
         }
       });
       document.getElementById('btn-undo').addEventListener('click', () => {
-        designer.undo();
-        renderPanel();
+        this.designer.undo();
+        this.onUpdate();
       });
       document.getElementById('btn-redo').addEventListener('click', () => {
-        designer.redo();
-        renderPanel();
+        this.designer.redo();
+        this.onUpdate();
       });
       document.getElementById('btn-pipe').addEventListener('click', () => {
-        const selected = designer.selectedId;
+        const selected = this.designer.selectedId;
         if (!selected) {
-          flowOutput.className = 'hint';
-          flowOutput.textContent = '先选中起点符号，再点「画管线」';
+          this.flowOutput.className = 'hint';
+          this.flowOutput.textContent = '先选中起点符号，再点「画管线」';
           return;
         }
-        if (!pipeSource) {
-          pipeSource = selected;
-          flowOutput.className = 'hint';
-          flowOutput.textContent = '已选起点，再选中终点符号并点「画管线」完成连线';
+        if (!this.pipeSource) {
+          this.pipeSource = selected;
+          this.flowOutput.className = 'hint';
+          this.flowOutput.textContent = '已选起点，再选中终点符号并点「画管线」完成连线';
           return;
         }
-        if (pipeSource !== selected) {
-          designer.createPipe({ sourceId: pipeSource, targetId: selected, medium: mediumSelect.value, dn: 'DN100' });
+        if (this.pipeSource !== selected) {
+          this.designer.createPipe({ sourceId: this.pipeSource, targetId: selected, medium: this.mediumSelect.value, dn: 'DN100' });
         }
-        pipeSource = null;
-        renderPanel();
+        this.pipeSource = null;
+        this.onUpdate();
       });
       document.getElementById('btn-valve').addEventListener('click', () => {
-        const node = designer.nodes.find((item) => item.state.id === designer.selectedId);
+        const node = this.designer.nodes.find((item) => item.state.id === this.designer.selectedId);
         if (!node || node.state.kind !== 'valve') {
-          flowOutput.className = 'hint';
-          flowOutput.textContent = '先选中一个阀门';
+          this.flowOutput.className = 'hint';
+          this.flowOutput.textContent = '先选中一个阀门';
           return;
         }
-        designer.setValveState(node.state.id, node.state.valveState === 'closed' ? 'open' : 'closed');
-        renderPanel();
+        this.designer.setValveState(node.state.id, node.state.valveState === 'closed' ? 'open' : 'closed');
+        this.onUpdate();
       });
       document.getElementById('btn-flow').addEventListener('click', () => {
-        const trace = designer.traceFlow();
+        const trace = this.designer.traceFlow();
         window.__trace = trace;
-        flowOutput.className = trace.connected ? 'hint' : 'issue error';
-        flowOutput.textContent = trace.connected
+        this.flowOutput.className = trace.connected ? 'hint' : 'issue error';
+        this.flowOutput.textContent = trace.connected
           ? `✅ 进水可到出水（途经 ${trace.path.length} 个符号）`
           : `❌ 断流${trace.blockedAt ? '：卡在关断的阀门 ' + trace.blockedAt : ''}`;
       });
-      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
-      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
+      document.getElementById('btn-fit').addEventListener('click', () => this.viewport.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => this.viewport.reset());
       document.getElementById('btn-validate').addEventListener('click', () => {
-        const issues = designer.validateWater();
+        const issues = this.designer.validateWater();
         window.__issues = issues;
-        validateOutput.innerHTML = '';
-        validateOutput.className = issues.length ? '' : 'hint';
+        this.validateOutput.innerHTML = '';
+        this.validateOutput.className = issues.length ? '' : 'hint';
         if (!issues.length) {
-          validateOutput.textContent = '✅ 未发现问题';
+          this.validateOutput.textContent = '✅ 未发现问题';
           return;
         }
         issues.forEach((issue) => {
           const div = document.createElement('div');
           div.className = `issue ${issue.level}`;
           div.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
-          validateOutput.appendChild(div);
+          this.validateOutput.appendChild(div);
         });
       });
       document.getElementById('btn-export-svg').addEventListener('click', () => {
-        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
+        const svg = this.designer.toSvg({ padding: 16, background: '#ffffff' });
         window.__exportedSvg = svg;
         const blob = new Blob([svg], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
@@ -327,7 +349,7 @@
         URL.revokeObjectURL(url);
       });
       document.getElementById('btn-export-json').addEventListener('click', () => {
-        window.__exportedJson = designer.serialize();
+        window.__exportedJson = this.designer.serialize();
         const blob = new Blob([window.__exportedJson], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -340,16 +362,17 @@
         if (!window.__exportedJson) {
           return;
         }
-        const report = designer.load(window.__exportedJson);
-        designer.fitViewport();
-        validateOutput.className = 'hint';
-        validateOutput.textContent = `✅ 已导入 ${report.nodes} 个符号 / ${report.edges} 段管线`;
-        renderPanel();
+        const report = this.designer.load(window.__exportedJson);
+        this.designer.fitViewport();
+        this.validateOutput.className = 'hint';
+        this.validateOutput.textContent = `✅ 已导入 ${report.nodes} 个符号 / ${report.edges} 段管线`;
+        this.onUpdate();
       });
+      }
 
-      buildCase();
-      viewport.fitViewport();
-      renderPanel();
+      }
+
+      new WaterEditorPage();
     </script>
   </body>
 </html>

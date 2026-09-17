@@ -24,70 +24,91 @@
     <script src="../node_modules/ice-render/dist/index.umd.js"></script>
     <script src="../dist/index.umd.js"></script>
     <script type="text/javascript">
+      /**
+       * 水工艺符号目录页。
+       *
+       * 页面写法与各编辑器示例一致：**一页 = 一个类**，构造期把引擎、目录内容与事件一次建好。
+       * 目录是静态内容，所以没有 `onUpdate()`（页面没有"随数据变化"的部分）。
+       */
       const { ICE, WaterProcessDesigner, WATER_SYMBOL_PRESETS, ICERect, ICEText } = IED;
-      const ice = new ICE().init('canvas-1');
-      const designer = new WaterProcessDesigner(ice);
-      window.__ice = ice;
-      window.__designer = designer;
 
-      const COLUMNS = 5;
-      const CELL_W = 290;
-      const CELL_H = 230;
-      const PAD_X = 20;
-      const PAD_Y = 30;
+      class WaterSymbolsPage {
+        static COLUMNS = 5;
+        static CELL_W = 290;
+        static CELL_H = 230;
+        static PAD_X = 20;
+        static PAD_Y = 30;
+        /** 单元格参考框与编号的 typeId（导出 SVG 前要摘掉它们） */
+        static SYMBOL_TYPE_ID = 'ice-entity-designer:WaterSymbol';
 
-      const kinds = Object.keys(WATER_SYMBOL_PRESETS);
-      kinds.forEach((kind, index) => {
-        const column = index % COLUMNS;
-        const row = Math.floor(index / COLUMNS);
-        const cellLeft = PAD_X + column * CELL_W;
-        const cellTop = PAD_Y + row * CELL_H;
+        constructor() {
+          this.ice = new ICE().init('canvas-1');
+          this.designer = new WaterProcessDesigner(this.ice);
+          window.__ice = this.ice;
+          window.__designer = this.designer;
 
-        // 单元格参考框（不属于符号：导出 SVG 前会删掉）
-        ice.addChild(
-          new ICERect({
-            left: cellLeft,
-            top: cellTop,
-            width: CELL_W - 16,
-            height: CELL_H - 16,
-            radius: 8,
-            interactive: false,
-            style: { fillStyle: '#ffffff', strokeStyle: '#e2e8f0', lineWidth: 1 },
-          })
-        );
-        const caption = new ICEText({
-          left: cellLeft + 12,
-          top: cellTop + 8,
-          text: `${index + 1}. ${kind}`,
-          interactive: false,
-          style: { fontSize: 11, fillStyle: '#94a3b8' },
-        });
-        ice.addChild(caption);
+          this.__buildCatalog();
+          this.__wireToolbar();
 
-        const preset = WATER_SYMBOL_PRESETS[kind];
-        const symbolLeft = cellLeft + (CELL_W - 16 - preset.width) / 2;
-        const symbolTop = cellTop + 58;
-        designer.createSymbol(kind, {
-          name: preset.label,
-          tag: preset.tag + '-101',
-          left: symbolLeft,
-          top: symbolTop,
-        });
-      });
-      designer.select(null);
-      designer.resetHistory();
+          // 「构造结束即画好」
+          this.designer.select(null);
+          this.designer.resetHistory();
+          this.designer.fitViewport(20);
+        }
 
-      document.getElementById('btn-export').addEventListener('click', () => {
-        // 导出前把「单元格参考框 + 编号」这些辅助件摘掉，只留符号
-        ice.childNodes
-          .slice()
-          .filter((child) => child.constructor.typeId !== 'ice-entity-designer:WaterSymbol')
-          .forEach((child) => ice.removeChild(child));
-        window.__exportedSvg = designer.toSvg({ padding: 16, background: '#ffffff' });
-      });
-      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport(20));
+        __buildCatalog() {
+          Object.keys(WATER_SYMBOL_PRESETS).forEach((kind, index) => {
+            const column = index % WaterSymbolsPage.COLUMNS;
+            const row = Math.floor(index / WaterSymbolsPage.COLUMNS);
+            const cellLeft = WaterSymbolsPage.PAD_X + column * WaterSymbolsPage.CELL_W;
+            const cellTop = WaterSymbolsPage.PAD_Y + row * WaterSymbolsPage.CELL_H;
 
-      designer.fitViewport(20);
+            // 单元格参考框（不属于符号：导出 SVG 前会删掉）
+            this.ice.addChild(
+              new ICERect({
+                left: cellLeft,
+                top: cellTop,
+                width: WaterSymbolsPage.CELL_W - 16,
+                height: WaterSymbolsPage.CELL_H - 16,
+                radius: 8,
+                interactive: false,
+                style: { fillStyle: '#ffffff', strokeStyle: '#e2e8f0', lineWidth: 1 },
+              })
+            );
+            this.ice.addChild(
+              new ICEText({
+                left: cellLeft + 12,
+                top: cellTop + 8,
+                text: `${index + 1}. ${kind}`,
+                interactive: false,
+                style: { fontSize: 11, fillStyle: '#94a3b8' },
+              })
+            );
+
+            const preset = WATER_SYMBOL_PRESETS[kind];
+            this.designer.createSymbol(kind, {
+              name: preset.label,
+              tag: preset.tag + '-101',
+              left: cellLeft + (WaterSymbolsPage.CELL_W - 16 - preset.width) / 2,
+              top: cellTop + 58,
+            });
+          });
+        }
+
+        __wireToolbar() {
+          document.getElementById('btn-export').addEventListener('click', () => {
+            // 导出前把「单元格参考框 + 编号」这些辅助件摘掉，只留符号
+            this.ice.childNodes
+              .slice()
+              .filter((child) => child.constructor.typeId !== WaterSymbolsPage.SYMBOL_TYPE_ID)
+              .forEach((child) => this.ice.removeChild(child));
+            window.__exportedSvg = this.designer.toSvg({ padding: 16, background: '#ffffff' });
+          });
+          document.getElementById('btn-fit').addEventListener('click', () => this.designer.fitViewport(20));
+        }
+      }
+
+      new WaterSymbolsPage();
     </script>
   </body>
 </html>

@@ -191,98 +191,119 @@
     <script src="../dist/index.umd.js"></script>
     <script src="./canvas-interactions.js"></script>
     <script type="text/javascript">
+      /**
+       * BPMN 流程编辑器（示例页）。
+       *
+       * 页面写法与 flowchart-editor / ice-smart-water 一致：**一页 = 一个类**，构造期把引擎、
+       * DOM 引用、交互态与事件一次建好；`onUpdate()` 是**唯一**刷新入口（选中变化由
+       * designer.subscribe 汇到它）。
+       */
       const { ICE, BpmnDesigner, FLOW_NODE_KINDS } = IED;
-      const ice = new ICE().init('canvas-1');
-      const designer = new BpmnDesigner(ice);
-      const canvasEl = document.getElementById('canvas-1');
-      const viewport = IedCanvasViewport.install({ ice, canvas: canvasEl, designer });
-      // 引擎自带的对齐标尺（拖拽时显示对齐提示线），ER/流程图示例同样开启
-      ice.alignmentGuide.enable({ threshold: 6 });
-      window.__ice = ice;
-      window.__designer = designer;
 
-      const panel = document.getElementById('panel');
-      const validateOutput = document.getElementById('validate-output');
-      const xmlOutput = document.getElementById('xml-output');
-      const flowTypeSelect = document.getElementById('flow-type');
-      const flowDefaultCheckbox = document.getElementById('flow-default');
-      let linking = false;
-      let linkSource = null;
+      class BpmnEditorPage {
+        constructor() {
+          this.ice = new ICE().init('canvas-1');
+          this.designer = new BpmnDesigner(this.ice);
+          this.canvasEl = document.getElementById('canvas-1');
+          this.viewport = IedCanvasViewport.install({ ice: this.ice, canvas: this.canvasEl, designer: this.designer });
+          // 引擎自带的对齐标尺（拖拽时显示对齐提示线），ER/流程图示例同样开启
+          this.ice.alignmentGuide.enable({ threshold: 6 });
+          window.__ice = this.ice;
+          window.__designer = this.designer;
 
-      designer.subscribe(() => renderPanel());
+          this.panel = document.getElementById('panel');
+          this.validateOutput = document.getElementById('validate-output');
+          this.xmlOutput = document.getElementById('xml-output');
+          this.flowTypeSelect = document.getElementById('flow-type');
+          this.flowDefaultCheckbox = document.getElementById('flow-default');
+          this.linking = false;
+          this.linkSource = null;
+          /** 属性面板的重建判据：同一个选中对象只原地同步，不重建 DOM */
+          this.panelKey = null;
+          this.controls = null;
+          /** 令牌仿真器（按需创建） */
+          this.simulator = null;
+
+          this.designer.subscribe(() => this.onUpdate());
+
+          this.__wireToolbar();
+          this.__wireCanvasInteraction();
+
+          // 「构造结束即画好」
+          this.buildCase();
+          this.onUpdate();
+          window.__simulator = () => this.simulator;
+        }
 
       /* ---------------- 案例：信用卡申请审批 ---------------- */
-      function buildCase() {
-        designer.clear();
+      buildCase() {
+        this.designer.clear();
         // 池的名称带占 32px：泳道从「内容区」开始，避免盖住池标题
         // 池宽 1300（右边界 1360）：任务排到 x=1180，结束事件要落在任务**右侧**而不是压在任务身上
         // （原布局池宽 1180、事件放 x=1120 → 事件与「发卡 / 通知客户」重叠，连线只能绕回来横穿任务）
-        const bank = designer.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 1300, height: 340 });
-        designer.createNode('bpmnLane', { title: '受理岗', left: 60, top: 92, width: 1300, height: 150 });
-        designer.createNode('bpmnLane', { title: '风控岗', left: 60, top: 242, width: 1300, height: 150 });
-        const customer = designer.createNode('bpmnPool', { title: '客户', left: 60, top: 450, width: 1300, height: 190 });
-        designer.createNode('bpmnLane', { title: '申请人', left: 60, top: 482, width: 1300, height: 150 });
+        const bank = this.designer.createNode('bpmnPool', { title: '银行', left: 60, top: 60, width: 1300, height: 340 });
+        this.designer.createNode('bpmnLane', { title: '受理岗', left: 60, top: 92, width: 1300, height: 150 });
+        this.designer.createNode('bpmnLane', { title: '风控岗', left: 60, top: 242, width: 1300, height: 150 });
+        const customer = this.designer.createNode('bpmnPool', { title: '客户', left: 60, top: 450, width: 1300, height: 190 });
+        this.designer.createNode('bpmnLane', { title: '申请人', left: 60, top: 482, width: 1300, height: 150 });
 
         // 客户池也要有自己的开始事件（BPMN 语义：每个 process 至少一个开始事件）
-        const need = designer.createNode('bpmnEvent', { title: '产生用卡需求', eventKind: 'start', left: 120, top: 520 });
-        const apply_ = designer.createNode('bpmnTask', { title: '提交信用卡申请', taskType: 'user', left: 260, top: 510 });
-        designer.createEdge({ sourceId: need.state.id, targetId: apply_.state.id });
-        const submit = designer.createNode('bpmnEvent', { title: '申请提交', eventKind: 'start', left: 240, top: 120 });
-        const verify = designer.createNode('bpmnTask', { title: '身份核验', taskType: 'service', left: 400, top: 100 });
-        const credit = designer.createNode('bpmnTask', { title: '征信查询', taskType: 'service', left: 400, top: 250 });
-        const review = designer.createNode('bpmnTask', { title: '人工审批', taskType: 'user', left: 660, top: 250 });
-        const gateway = designer.createNode('bpmnGateway', { title: '是否通过', gatewayType: 'exclusive', left: 880, top: 255 });
-        const approve = designer.createNode('bpmnTask', { title: '发卡', taskType: 'service', left: 1000, top: 130 });
-        const inform = designer.createNode('bpmnTask', { title: '通知客户', taskType: 'send', left: 1000, top: 250 });
-        const rejected = designer.createNode('bpmnEvent', { title: '申请结束', eventKind: 'end', left: 1250, top: 147 });
-        const done = designer.createNode('bpmnEvent', { title: '流程结束', eventKind: 'end', left: 1250, top: 267 });
-        const data = designer.createNode('bpmnDataObject', { title: '征信报告', left: 1080, top: 380 });
-        designer.createNode('bpmnAnnotation', { title: '额度 < 6000 时转人工复核', left: 600, top: 480, width: 320, height: 60 });
+        const need = this.designer.createNode('bpmnEvent', { title: '产生用卡需求', eventKind: 'start', left: 120, top: 520 });
+        const apply_ = this.designer.createNode('bpmnTask', { title: '提交信用卡申请', taskType: 'user', left: 260, top: 510 });
+        this.designer.createEdge({ sourceId: need.state.id, targetId: apply_.state.id });
+        const submit = this.designer.createNode('bpmnEvent', { title: '申请提交', eventKind: 'start', left: 240, top: 120 });
+        const verify = this.designer.createNode('bpmnTask', { title: '身份核验', taskType: 'service', left: 400, top: 100 });
+        const credit = this.designer.createNode('bpmnTask', { title: '征信查询', taskType: 'service', left: 400, top: 250 });
+        const review = this.designer.createNode('bpmnTask', { title: '人工审批', taskType: 'user', left: 660, top: 250 });
+        const gateway = this.designer.createNode('bpmnGateway', { title: '是否通过', gatewayType: 'exclusive', left: 880, top: 255 });
+        const approve = this.designer.createNode('bpmnTask', { title: '发卡', taskType: 'service', left: 1000, top: 130 });
+        const inform = this.designer.createNode('bpmnTask', { title: '通知客户', taskType: 'send', left: 1000, top: 250 });
+        const rejected = this.designer.createNode('bpmnEvent', { title: '申请结束', eventKind: 'end', left: 1250, top: 147 });
+        const done = this.designer.createNode('bpmnEvent', { title: '流程结束', eventKind: 'end', left: 1250, top: 267 });
+        const data = this.designer.createNode('bpmnDataObject', { title: '征信报告', left: 1080, top: 380 });
+        this.designer.createNode('bpmnAnnotation', { title: '额度 < 6000 时转人工复核', left: 600, top: 480, width: 320, height: 60 });
 
-        designer.createEdge({ sourceId: submit.state.id, targetId: verify.state.id, label: '受理' });
-        designer.createEdge({ sourceId: verify.state.id, targetId: credit.state.id });
-        designer.createEdge({ sourceId: credit.state.id, targetId: review.state.id, label: '需人工' });
-        designer.createEdge({ sourceId: review.state.id, targetId: gateway.state.id });
-        designer.createEdge({ sourceId: gateway.state.id, targetId: approve.state.id, condition: '${score >= 700}', label: '通过' });
-        designer.createEdge({ sourceId: gateway.state.id, targetId: inform.state.id, label: '默认' });
-        designer.createEdge({ sourceId: approve.state.id, targetId: rejected.state.id });
-        designer.createEdge({ sourceId: inform.state.id, targetId: done.state.id });
-        designer.createEdge({ sourceId: credit.state.id, targetId: data.state.id, flowType: 'association' });
+        this.designer.createEdge({ sourceId: submit.state.id, targetId: verify.state.id, label: '受理' });
+        this.designer.createEdge({ sourceId: verify.state.id, targetId: credit.state.id });
+        this.designer.createEdge({ sourceId: credit.state.id, targetId: review.state.id, label: '需人工' });
+        this.designer.createEdge({ sourceId: review.state.id, targetId: gateway.state.id });
+        this.designer.createEdge({ sourceId: gateway.state.id, targetId: approve.state.id, condition: '${score >= 700}', label: '通过' });
+        this.designer.createEdge({ sourceId: gateway.state.id, targetId: inform.state.id, label: '默认' });
+        this.designer.createEdge({ sourceId: approve.state.id, targetId: rejected.state.id });
+        this.designer.createEdge({ sourceId: inform.state.id, targetId: done.state.id });
+        this.designer.createEdge({ sourceId: credit.state.id, targetId: data.state.id, flowType: 'association' });
         // 客户与银行之间是跨参与者通信 → 消息流
-        designer.createEdge({ sourceId: apply_.state.id, targetId: submit.state.id, flowType: 'message', label: '提交申请' });
-        designer.createEdge({ sourceId: inform.state.id, targetId: apply_.state.id, flowType: 'message', label: '结果通知' });
+        this.designer.createEdge({ sourceId: apply_.state.id, targetId: submit.state.id, flowType: 'message', label: '提交申请' });
+        this.designer.createEdge({ sourceId: inform.state.id, targetId: apply_.state.id, flowType: 'message', label: '结果通知' });
 
-        const defaultEdge = designer.edges.find((edge) => edge.state.label === '默认');
+        const defaultEdge = this.designer.edges.find((edge) => edge.state.label === '默认');
         if (defaultEdge) {
-          designer.updateEdge(defaultEdge.state.id, { isDefault: true });
+          this.designer.updateEdge(defaultEdge.state.id, { isDefault: true });
         }
-        designer.select(null);
-        designer.resetHistory();
-        designer.fitViewport();
+        this.designer.select(null);
+        this.designer.resetHistory();
+        this.designer.fitViewport();
         // 池/泳道垫底：层级由 `BpmnDesigner` 的 __nestByGeometry 统一给（池 -30000 < 泳道 -20000 < 业务图元），
         // 示例**不要**再自己抬池子的 zIndex —— 曾经这里写 `-10`，把池子抬到了泳道（-20000）之上，
         // 结果是"点泳道中心选中的是池子"，整个泳道拖不动（2026-09-15 修）。
       }
 
       /* ---------------- 属性面板 ---------------- */
-      let panelKey = null;
-      let controls = null;
-
-      function renderPanel() {
-        const selected = designer.selected;
+      onUpdate() {
+        const selected = this.designer.selected;
         const key = selected ? `${selected.constructor.typeId}:${selected.state.id}` : null;
-        if (key === panelKey) {
+        if (key === this.panelKey) {
           return;
         }
-        panelKey = key;
-        controls = null;
-        panel.innerHTML = '';
+        this.panelKey = key;
+        this.controls = null;
+        this.panel.innerHTML = '';
         if (!selected) {
-          panel.className = 'hint';
-          panel.textContent = '点击画布中的元素进行编辑；「连接」模式下依次点两个元素建立连线';
+          this.panel.className = 'hint';
+          this.panel.textContent = '点击画布中的元素进行编辑；「连接」模式下依次点两个元素建立连线';
           return;
         }
-        panel.className = '';
+        this.panel.className = '';
 
         const row = (labelText, control) => {
           const div = document.createElement('div');
@@ -291,7 +312,7 @@
           label.textContent = labelText;
           div.appendChild(label);
           div.appendChild(control);
-          panel.appendChild(div);
+          this.panel.appendChild(div);
           return control;
         };
         const input = (field, value, onChange, type = 'text') => {
@@ -318,8 +339,8 @@
 
         if (selected.constructor.typeId === 'ice-entity-designer:FlowEdge') {
           const edge = selected;
-          controls = {
-            label: row('标签', input('label', edge.state.label, (value) => designer.updateEdge(edge.state.id, { label: value }))),
+          this.controls = {
+            label: row('标签', input('label', edge.state.label, (value) => this.designer.updateEdge(edge.state.id, { label: value }))),
             flowType: row(
               '类型',
               select(
@@ -330,10 +351,10 @@
                   ['message', '消息流'],
                   ['association', '关联'],
                 ],
-                (value) => designer.updateEdge(edge.state.id, { flowType: value })
+                (value) => this.designer.updateEdge(edge.state.id, { flowType: value })
               )
             ),
-            condition: row('条件', input('condition', edge.state.condition, (value) => designer.updateEdge(edge.state.id, { condition: value }))),
+            condition: row('条件', input('condition', edge.state.condition, (value) => this.designer.updateEdge(edge.state.id, { condition: value }))),
             isDefault: row(
               '默认流',
               select(
@@ -343,7 +364,7 @@
                   ['false', '否'],
                   ['true', '是'],
                 ],
-                (value) => designer.updateEdge(edge.state.id, { isDefault: value === 'true' })
+                (value) => this.designer.updateEdge(edge.state.id, { isDefault: value === 'true' })
               )
             ),
           };
@@ -352,15 +373,15 @@
 
         const node = selected;
         const preset = FLOW_NODE_KINDS[node.state.kind] || {};
-        controls = {
-          title: row('名称', input('title', node.state.title, (value) => designer.updateNode(node.state.id, { title: value }))),
+        this.controls = {
+          title: row('名称', input('title', node.state.title, (value) => this.designer.updateNode(node.state.id, { title: value }))),
           // 记法不可变换 → 需要变尺寸的元素（池 / 泳道 / 子流程 / 数据对象 / 注释）在这里用数值改
           width: row(
             '宽',
             input(
               'width',
               Math.round(node.state.width),
-              (value) => designer.updateNode(node.state.id, { width: Math.max(20, Number(value) || node.state.width) }),
+              (value) => this.designer.updateNode(node.state.id, { width: Math.max(20, Number(value) || node.state.width) }),
               'number'
             )
           ),
@@ -369,13 +390,13 @@
             input(
               'height',
               Math.round(node.state.height),
-              (value) => designer.updateNode(node.state.id, { height: Math.max(20, Number(value) || node.state.height) }),
+              (value) => this.designer.updateNode(node.state.id, { height: Math.max(20, Number(value) || node.state.height) }),
               'number'
             )
           ),
         };
         if (node.state.kind === 'bpmnEvent') {
-          controls.eventKind = row(
+          this.controls.eventKind = row(
             '事件',
             select(
               'eventKind',
@@ -385,10 +406,10 @@
                 ['intermediate', '中间'],
                 ['end', '结束'],
               ],
-              (value) => designer.updateNode(node.state.id, { eventKind: value })
+              (value) => this.designer.updateNode(node.state.id, { eventKind: value })
             )
           );
-          controls.trigger = row(
+          this.controls.trigger = row(
             '触发',
             select(
               'trigger',
@@ -400,12 +421,12 @@
                 ['error', '错误'],
                 ['terminate', '终止'],
               ],
-              (value) => designer.updateNode(node.state.id, { trigger: value })
+              (value) => this.designer.updateNode(node.state.id, { trigger: value })
             )
           );
         }
         if (node.state.kind === 'bpmnGateway') {
-          controls.gatewayType = row(
+          this.controls.gatewayType = row(
             '网关',
             select(
               'gatewayType',
@@ -416,12 +437,12 @@
                 ['inclusive', '包容 ○'],
                 ['event', '事件网关'],
               ],
-              (value) => designer.updateNode(node.state.id, { gatewayType: value })
+              (value) => this.designer.updateNode(node.state.id, { gatewayType: value })
             )
           );
         }
         if (node.state.kind === 'bpmnTask' || node.state.kind === 'bpmnSubprocess') {
-          controls.taskType = row(
+          this.controls.taskType = row(
             '任务类型',
             select(
               'taskType',
@@ -435,7 +456,7 @@
                 ['receive', '接收'],
                 ['manual', '手动'],
               ],
-              (value) => designer.updateNode(node.state.id, { taskType: value })
+              (value) => this.designer.updateNode(node.state.id, { taskType: value })
             )
           );
         }
@@ -444,39 +465,40 @@
           fill.type = 'color';
           fill.dataset.field = 'fillColor';
           fill.value = node.state.fillColor || preset.fill;
-          fill.addEventListener('input', () => designer.updateNode(node.state.id, { fillColor: fill.value }));
-          controls.fillColor = row('填充', fill);
+          fill.addEventListener('input', () => this.designer.updateNode(node.state.id, { fillColor: fill.value }));
+          this.controls.fillColor = row('填充', fill);
         }
         if (preset.stroke) {
           const stroke = document.createElement('input');
           stroke.type = 'color';
           stroke.dataset.field = 'strokeColor';
           stroke.value = node.state.strokeColor || preset.stroke;
-          stroke.addEventListener('input', () => designer.updateNode(node.state.id, { strokeColor: stroke.value }));
-          controls.strokeColor = row('边框', stroke);
+          stroke.addEventListener('input', () => this.designer.updateNode(node.state.id, { strokeColor: stroke.value }));
+          this.controls.strokeColor = row('边框', stroke);
         }
       }
 
       /* ---------------- 工具栏 ---------------- */
+      __wireToolbar() {
       document.querySelectorAll('[data-add]').forEach((button) => {
         button.addEventListener('click', () => {
           const kind = button.dataset.add;
           const extra = kind === 'bpmnEvent' ? { eventKind: 'intermediate', trigger: 'none' } : {};
-          designer.createNode(kind, { title: FLOW_NODE_KINDS[kind].label, ...extra });
+          this.designer.createNode(kind, { title: FLOW_NODE_KINDS[kind].label, ...extra });
         });
       });
-      document.getElementById('btn-delete').addEventListener('click', () => designer.selectedId && designer.remove(designer.selectedId));
-      document.getElementById('btn-undo').addEventListener('click', () => designer.undo());
-      document.getElementById('btn-redo').addEventListener('click', () => designer.redo());
-      document.getElementById('btn-fit').addEventListener('click', () => viewport.fitViewport());
-      document.getElementById('btn-reset').addEventListener('click', () => viewport.reset());
+      document.getElementById('btn-delete').addEventListener('click', () => this.designer.selectedId && this.designer.remove(this.designer.selectedId));
+      document.getElementById('btn-undo').addEventListener('click', () => this.designer.undo());
+      document.getElementById('btn-redo').addEventListener('click', () => this.designer.redo());
+      document.getElementById('btn-fit').addEventListener('click', () => this.viewport.fitViewport());
+      document.getElementById('btn-reset').addEventListener('click', () => this.viewport.reset());
 
       document.getElementById('btn-validate').addEventListener('click', () => {
-        const issues = designer.validateBpmn();
-        validateOutput.innerHTML = '';
-        validateOutput.className = issues.length ? '' : 'hint';
+        const issues = this.designer.validateBpmn();
+        this.validateOutput.innerHTML = '';
+        this.validateOutput.className = issues.length ? '' : 'hint';
         if (!issues.length) {
-          validateOutput.textContent = '✅ BPMN 语义校验通过';
+          this.validateOutput.textContent = '✅ BPMN 语义校验通过';
           return;
         }
         const list = document.createElement('ul');
@@ -487,40 +509,37 @@
           item.textContent = `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`;
           list.appendChild(item);
         });
-        validateOutput.appendChild(list);
+        this.validateOutput.appendChild(list);
       });
 
       document.getElementById('btn-export').addEventListener('click', () => {
-        xmlOutput.value = IED.toBpmnXml(designer, { name: '信用卡申请审批' });
-        validateOutput.className = 'hint';
-        validateOutput.textContent = '✅ 已导出 BPMN 2.0 XML（见右侧文本框）';
+        this.xmlOutput.value = IED.toBpmnXml(this.designer, { name: '信用卡申请审批' });
+        this.validateOutput.className = 'hint';
+        this.validateOutput.textContent = '✅ 已导出 BPMN 2.0 XML（见右侧文本框）';
       });
 
       // 令牌仿真：把「流程怎么走」演示出来（令牌挂在工具层，不污染文档）
-      let simulator = null;
       document.getElementById('btn-simulate').addEventListener('click', () => {
-        if (!simulator) {
-          simulator = new IED.BpmnSimulator(designer, { nodeDuration: 500, edgeDuration: 700 });
+        if (!this.simulator) {
+          this.simulator = new IED.BpmnSimulator(this.designer, { nodeDuration: 500, edgeDuration: 700 });
         }
-        simulator.stop();
-        simulator.reset();
-        simulator.start();
-        validateOutput.className = 'hint';
-        validateOutput.textContent = '▶ 仿真中：令牌从「开始事件」出发，沿顺序流前进（橙色圆点）';
+        this.simulator.stop();
+        this.simulator.reset();
+        this.simulator.start();
+        this.validateOutput.className = 'hint';
+        this.validateOutput.textContent = '▶ 仿真中：令牌从「开始事件」出发，沿顺序流前进（橙色圆点）';
       });
       document.getElementById('btn-simulate-stop').addEventListener('click', () => {
-        if (simulator) {
-          simulator.stop();
-          simulator.reset();
+        if (this.simulator) {
+          this.simulator.stop();
+          this.simulator.reset();
         }
-        validateOutput.className = 'hint';
-        validateOutput.textContent = '⏹ 已停止并清除令牌';
+        this.validateOutput.className = 'hint';
+        this.validateOutput.textContent = '⏹ 已停止并清除令牌';
       });
-      window.__simulator = () => simulator;
-
       // SVG 矢量导出：与画布同一口径（几何/样式/透明度/阴影一致），放大不糊，可进设计工具
       document.getElementById('btn-export-svg').addEventListener('click', () => {
-        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
+        const svg = this.designer.toSvg({ padding: 16, background: '#ffffff' });
         window.__exportedSvg = svg;
         const blob = new Blob([svg], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
@@ -529,72 +548,76 @@
         a.download = 'bpmn-process.svg';
         a.click();
         URL.revokeObjectURL(url);
-        validateOutput.className = 'hint';
-        validateOutput.textContent = `✅ 已导出 SVG（${svg.length} 字节，矢量、可无限放大）`;
+        this.validateOutput.className = 'hint';
+        this.validateOutput.textContent = `✅ 已导出 SVG（${svg.length} 字节，矢量、可无限放大）`;
       });
 
       document.getElementById('btn-import').addEventListener('click', () => {
         try {
-          const result = IED.fromBpmnXml(xmlOutput.value, designer);
-          designer.fitViewport();
-          validateOutput.className = 'hint';
-          validateOutput.textContent = `✅ 已导入 ${result.nodes} 个元素 / ${result.edges} 条连线${result.warnings.length ? `（${result.warnings.length} 条提示）` : ''}`;
+          const result = IED.fromBpmnXml(this.xmlOutput.value, this.designer);
+          this.designer.fitViewport();
+          this.validateOutput.className = 'hint';
+          this.validateOutput.textContent = `✅ 已导入 ${result.nodes} 个元素 / ${result.edges} 条连线${result.warnings.length ? `（${result.warnings.length} 条提示）` : ''}`;
         } catch (error) {
-          validateOutput.className = 'error';
-          validateOutput.textContent = `❌ 导入失败：${error.message}`;
+          this.validateOutput.className = 'error';
+          this.validateOutput.textContent = `❌ 导入失败：${error.message}`;
         }
       });
 
       /* ---------------- 画布交互：连线模式 ---------------- */
       /* 滚轮缩放 / 拖拽平移 / 复位由 canvas-interactions.js 统一提供（四个域包示例同一套口径） */
       document.getElementById('btn-link').addEventListener('click', () => {
-        linking = !linking;
-        linkSource = null;
-        document.getElementById('btn-link').classList.toggle('active', linking);
-        canvasEl.style.cursor = linking ? 'crosshair' : 'grab';
+        this.linking = !this.linking;
+        this.linkSource = null;
+        document.getElementById('btn-link').classList.toggle('active', this.linking);
+        this.canvasEl.style.cursor = this.linking ? 'crosshair' : 'grab';
       });
+      }
 
-      function rootNodeAt(offsetX, offsetY) {
-        let node = ice.hitTest(offsetX, offsetY);
+      rootNodeAt(offsetX, offsetY) {
+        let node = this.ice.hitTest(offsetX, offsetY);
         while (node && node.parentNode) {
           node = node.parentNode;
         }
         return node;
       }
 
-      canvasEl.addEventListener('mousedown', (evt) => {
-        if (linking) {
-          const node = rootNodeAt(evt.offsetX, evt.offsetY);
+      __wireCanvasInteraction() {
+      this.canvasEl.addEventListener('mousedown', (evt) => {
+        if (this.linking) {
+          const node = this.rootNodeAt(evt.offsetX, evt.offsetY);
           const typeId = node && node.constructor && node.constructor.typeId;
           if (typeId !== 'ice-entity-designer:FlowNode' && typeId !== 'ice-entity-designer:FlowEdge') {
             return;
           }
           evt.preventDefault();
           evt.stopPropagation();
-          if (!linkSource) {
-            linkSource = node;
+          if (!this.linkSource) {
+            this.linkSource = node;
             return;
           }
-          if (linkSource === node) {
-            linkSource = null;
+          if (this.linkSource === node) {
+            this.linkSource = null;
             return;
           }
-          designer.createEdge({
-            sourceId: linkSource.state.id,
+          this.designer.createEdge({
+            sourceId: this.linkSource.state.id,
             targetId: node.state.id,
-            flowType: flowTypeSelect.value,
-            isDefault: flowDefaultCheckbox.checked,
+            flowType: this.flowTypeSelect.value,
+            isDefault: this.flowDefaultCheckbox.checked,
           });
-          linkSource = null;
-          linking = false;
+          this.linkSource = null;
+          this.linking = false;
           document.getElementById('btn-link').classList.remove('active');
-          canvasEl.style.cursor = 'grab';
+          this.canvasEl.style.cursor = 'grab';
           return;
         }
       });
+      }
 
-      buildCase();
-      renderPanel();
+      }
+
+      new BpmnEditorPage();
     </script>
   </body>
 </html>
