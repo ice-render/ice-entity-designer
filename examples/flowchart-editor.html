@@ -251,53 +251,82 @@
     <script src="../dist/index.umd.js"></script>
     <script type="text/javascript">
       /* 流程图相关的类全部来自 IED 库（FlowNode / FlowEdge / FlowDesigner / FLOW_NODE_KINDS），
-         本页只负责 UI：工具条、属性面板、连线模式与画布事件。 */
+         本页只负责 UI：工具条、属性面板、连线模式与画布事件。
+
+         页面写法与 ice-smart-water 一致：**一页 = 一个类**，构造期把实例、DOM 引用与事件一次
+         建好；`onUpdate()` 是**唯一**的刷新入口（选中变化 / 拖拽 / 撤销 / 改属性都由它统一
+         重画面板与 JSON 预览），不再散着各调各的刷新函数。 */
       const { ICE, FlowDesigner, FlowNode, FlowEdge, FLOW_NODE_KINDS } = IED;
 
-      const ice = new ICE().init('canvas-1');
-      const designer = new FlowDesigner(ice);
-      ice.alignmentGuide.enable({ threshold: 6 });
-      window.__ice = ice;
-      window.__designer = designer;
-      window.__flow = designer;
-      // 画布上的选中/删除等操作由 designer 内部广播，统一在这里刷新面板与 JSON 预览
-      designer.subscribe(() => renderPanel());
+      class FlowchartEditorPage {
+        constructor() {
+          this.ice = new ICE().init('canvas-1');
+          this.designer = new FlowDesigner(this.ice);
+          this.ice.alignmentGuide.enable({ threshold: 6 });
+          window.__ice = this.ice;
+          window.__designer = this.designer;
+          window.__flow = this.designer;
 
-      const canvasEl = document.getElementById('canvas-1');
-      const linkPreview = document.getElementById('link-preview');
-      const linkPreviewPath = document.getElementById('link-preview-path');
-      const shapePanel = document.getElementById('shape-panel');
-      const relationHint = document.getElementById('relation-hint');
-      const jsonOutput = document.getElementById('json-output');
-      const statusOutput = document.getElementById('status-output');
-      const edgeShapeSelect = document.getElementById('edge-shape');
-      const storageKey = 'ied-flowchart-project';
+          this.canvasEl = document.getElementById('canvas-1');
+          this.linkPreview = document.getElementById('link-preview');
+          this.linkPreviewPath = document.getElementById('link-preview-path');
+          this.shapePanel = document.getElementById('shape-panel');
+          this.relationHint = document.getElementById('relation-hint');
+          this.jsonOutput = document.getElementById('json-output');
+          this.statusOutput = document.getElementById('status-output');
+          this.edgeShapeSelect = document.getElementById('edge-shape');
+          this.storageKey = 'ied-flowchart-project';
 
-      let linkingMode = false;
-      let linkSource = null;
+          // 交互态（原来散在模块作用域，现在归页面实例所有）
+          this.linkingMode = false;
+          this.linkSource = null;
+          this.panning = false;
+          this.panLastX = 0;
+          this.panLastY = 0;
 
-      document.querySelectorAll('.icon-btn[title]').forEach((button) => {
-        button.dataset.tooltip = button.getAttribute('title');
-      });
+          // 属性面板：只有「选中的对象变了」才重建 DOM（理由见 onUpdate 的注释）
+          this.panelKey = null;
+          this.panelControls = null;
+          this.colorSession = false;
 
-      /* 画布交互：滚轮缩放走引擎原语 ICE.zoomAt（锚点缩放，内部已做钳制），
-         空白处/中键拖拽平移由应用层实现（引擎只提供 setViewport/hitTest 原语） */
-      canvasEl.addEventListener(
-        'wheel',
-        (evt) => {
-          evt.preventDefault();
-          // 参数：锚点 canvas 坐标、缩放倍数、最小/最大 scale
-          ice.zoomAt(evt.offsetX, evt.offsetY, evt.deltaY > 0 ? 1 / 1.1 : 1.1, 0.3, 3);
-        },
-        { passive: false }
-      );
+          document.querySelectorAll('.icon-btn[title]').forEach((button) => {
+            button.dataset.tooltip = button.getAttribute('title');
+          });
 
-      let panning = false;
-      let panLastX = 0;
-      let panLastY = 0;
+          // 画布上的选中/删除等操作由 designer 内部广播，统一走 onUpdate 刷新面板与 JSON 预览
+          this.designer.subscribe(() => this.onUpdate());
+
+          this.__wireCanvas();
+          this.__wireToolbar();
+          this.__wireLinkMode();
+          this.__wireCanvasInteraction();
+          this.__wireGlobalEvents();
+
+          // 「构造结束即画好」：内置示例 + 适应视图 + 首帧面板与状态
+          this.buildSeed();
+          this.designer.fitViewport();
+          this.onUpdate();
+          this.setStatus('示例流程已就绪：可拖拽节点、连线、改属性，或点「清空」从零开始', '#64748b');
+        }
+
+        /**
+         * 画布级交互：滚轮缩放走引擎原语 ICE.zoomAt（锚点缩放，内部已做钳制），
+         * 空白处 / 中键拖拽平移由应用层实现（引擎只提供 setViewport / hitTest 原语）。
+         */
+        __wireCanvas() {
+          this.canvasEl.addEventListener(
+            'wheel',
+            (evt) => {
+              evt.preventDefault();
+              // 参数：锚点 canvas 坐标、缩放倍数、最小/最大 scale
+              this.ice.zoomAt(evt.offsetX, evt.offsetY, evt.deltaY > 0 ? 1 / 1.1 : 1.1, 0.3, 3);
+            },
+            { passive: false }
+          );
+        }
 
       /* 内置示例：一个下单流程，坐标写死（不跑随机布局，保证 e2e/截图可复现） */
-      const SEED_FLOW = {
+        static SEED_FLOW = {
         nodes: [
           { kind: 'terminator', title: '开始', left: 610, top: 60, width: 180, height: 60 },
           { kind: 'process', title: '浏览商品', left: 590, top: 190, width: 220, height: 80 },
@@ -329,33 +358,35 @@
         ],
       };
 
-      function buildSeed() {
-        designer.clear();
-        const created = SEED_FLOW.nodes.map((item) => designer.createNode(item.kind, item));
-        SEED_FLOW.edges.forEach((edge) => {
-          designer.createEdge({
-            sourceId: created[edge.sourceIndex].state.id,
-            targetId: created[edge.targetIndex].state.id,
-            sourcePort: edge.sourcePort,
-            targetPort: edge.targetPort,
-            label: edge.label,
-            linkShape: edgeShapeSelect.value,
+        /** 恢复内置示例流程（不占用撤销栈） */
+        buildSeed() {
+          const seed = FlowchartEditorPage.SEED_FLOW;
+          this.designer.clear();
+          const created = seed.nodes.map((item) => this.designer.createNode(item.kind, item));
+          seed.edges.forEach((edge) => {
+            this.designer.createEdge({
+              sourceId: created[edge.sourceIndex].state.id,
+              targetId: created[edge.targetIndex].state.id,
+              sourcePort: edge.sourcePort,
+              targetPort: edge.targetPort,
+              label: edge.label,
+              linkShape: this.edgeShapeSelect.value,
+            });
           });
-        });
-        designer.select(null);
-        // 建示例的这批操作不该占用撤销栈
-        designer.resetHistory();
-      }
+          this.designer.select(null);
+          // 建示例的这批操作不该占用撤销栈
+          this.designer.resetHistory();
+        }
 
-      function refreshHistoryButtons() {
-        document.getElementById('btn-undo').disabled = !designer.canUndo();
-        document.getElementById('btn-redo').disabled = !designer.canRedo();
-      }
+        refreshHistoryButtons() {
+          document.getElementById('btn-undo').disabled = !this.designer.canUndo();
+          document.getElementById('btn-redo').disabled = !this.designer.canRedo();
+        }
 
-      function setStatus(text, color) {
-        statusOutput.textContent = text || '';
-        statusOutput.style.color = color || '#64748b';
-      }
+        setStatus(text, color) {
+          this.statusOutput.textContent = text || '';
+          this.statusOutput.style.color = color || '#64748b';
+        }
 
       /**
        * 属性面板。
@@ -364,13 +395,12 @@
        * `syncPanelValues()` 原地同步。早期版本每次变更都 `innerHTML = ''` 重建，
        * 会把正在交互的原生 `<input type="color">` 从 DOM 里摘掉 —— 真机上表现为
        * 「点开取色器选颜色，一松手控件就没了，颜色改不动」。
+       *
+       * 这段的缩进沿用改造前的两级（4 空格 → 2 空格）：它是本页最长的一段，
+       * 整体重排缩进会把 diff 淹没，收益只是好看。
        */
-      let panelKey = null;
-      let panelControls = null;
-      let colorSession = false;
-
-      function syncPanelValues(selected) {
-        if (!selected || !panelControls) {
+      syncPanelValues(selected) {
+        if (!selected || !this.panelControls) {
           return;
         }
         // 正在输入 / 正在取色的控件不要被回写打断
@@ -384,49 +414,49 @@
           }
         };
         if (selected.constructor.typeId === FlowNode.typeId) {
-          syncValue(panelControls.title, selected.state.title || '');
-          syncValue(panelControls.width, Math.round(selected.state.width));
-          syncValue(panelControls.height, Math.round(selected.state.height));
-          syncValue(panelControls.kind, selected.state.kind);
-          syncValue(panelControls.fill, selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill);
-          syncValue(panelControls.stroke, selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke);
-          syncValue(panelControls.textColor, selected.state.textColor || '#0f172a');
-          syncValue(panelControls.fontSize, selected.state.fontSize || 14);
-          syncValue(panelControls.width, selected.state.width);
-          syncValue(panelControls.height, selected.state.height);
+          syncValue(this.panelControls.title, selected.state.title || '');
+          syncValue(this.panelControls.width, Math.round(selected.state.width));
+          syncValue(this.panelControls.height, Math.round(selected.state.height));
+          syncValue(this.panelControls.kind, selected.state.kind);
+          syncValue(this.panelControls.fill, selected.state.fillColor || FLOW_NODE_KINDS[selected.state.kind].fill);
+          syncValue(this.panelControls.stroke, selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke);
+          syncValue(this.panelControls.textColor, selected.state.textColor || '#0f172a');
+          syncValue(this.panelControls.fontSize, selected.state.fontSize || 14);
+          syncValue(this.panelControls.width, selected.state.width);
+          syncValue(this.panelControls.height, selected.state.height);
           return;
         }
-        syncValue(panelControls.label, selected.state.label || '');
-        syncValue(panelControls.lineColor, (selected.state.style && selected.state.style.strokeStyle) || '#475569');
-        syncValue(panelControls.lineWidth, (selected.state.style && selected.state.style.lineWidth) || 1.6);
-        syncValue(panelControls.labelColor, (selected.state.style && selected.state.style.label && selected.state.style.label.fillStyle) || '#334155');
-        syncValue(panelControls.shape, selected.state.linkShape || 'visio');
+        syncValue(this.panelControls.label, selected.state.label || '');
+        syncValue(this.panelControls.lineColor, (selected.state.style && selected.state.style.strokeStyle) || '#475569');
+        syncValue(this.panelControls.lineWidth, (selected.state.style && selected.state.style.lineWidth) || 1.6);
+        syncValue(this.panelControls.labelColor, (selected.state.style && selected.state.style.label && selected.state.style.label.fillStyle) || '#334155');
+        syncValue(this.panelControls.shape, selected.state.linkShape || 'visio');
       }
 
-      function renderPanel() {
-        const selected = designer.selected;
-        jsonOutput.textContent = JSON.stringify(designer.toSnapshot(), null, 2);
-        document.getElementById('flow-stats').textContent = `当前流程：${designer.nodes.length} 个节点 / ${designer.edges.length} 条连线`;
-        refreshHistoryButtons();
+      onUpdate() {
+        const selected = this.designer.selected;
+        this.jsonOutput.textContent = JSON.stringify(this.designer.toSnapshot(), null, 2);
+        document.getElementById('flow-stats').textContent = `当前流程：${this.designer.nodes.length} 个节点 / ${this.designer.edges.length} 条连线`;
+        this.refreshHistoryButtons();
         if (!selected) {
-          panelKey = null;
-          panelControls = null;
-          shapePanel.className = 'hint';
-          shapePanel.textContent = '点击画布中的节点或连线进行编辑；滚轮缩放、空白处拖拽平移；打开「连接节点」后依次点击两个节点即可连线。';
+          this.panelKey = null;
+          this.panelControls = null;
+          this.shapePanel.className = 'hint';
+          this.shapePanel.textContent = '点击画布中的节点或连线进行编辑；滚轮缩放、空白处拖拽平移；打开「连接节点」后依次点击两个节点即可连线。';
           return;
         }
 
         const key = `${selected.constructor.typeId}:${selected.state.id}`;
-        if (key === panelKey) {
-          syncPanelValues(selected);
+        if (key === this.panelKey) {
+          this.syncPanelValues(selected);
           return;
         }
         // 选中对象变了才重建
-        panelKey = key;
-        panelControls = null;
-        colorSession = false;
-        shapePanel.className = '';
-        shapePanel.innerHTML = '';
+        this.panelKey = key;
+        this.panelControls = null;
+        this.colorSession = false;
+        this.shapePanel.className = '';
+        this.shapePanel.innerHTML = '';
 
         const row = (labelText, control) => {
           const div = document.createElement('div');
@@ -435,7 +465,7 @@
           label.textContent = labelText;
           div.appendChild(label);
           div.appendChild(control);
-          shapePanel.appendChild(div);
+          this.shapePanel.appendChild(div);
           return control;
         };
 
@@ -445,9 +475,9 @@
           titleInput.dataset.field = 'title';
           titleInput.value = selected.state.title || '';
           titleInput.addEventListener('change', () => {
-            designer.updateNode(selected.state.id, { title: titleInput.value });
+            this.designer.updateNode(selected.state.id, { title: titleInput.value });
           });
-          panelControls = { title: row('标题', titleInput) };
+          this.panelControls = { title: row('标题', titleInput) };
 
           // 记法不可变换（FlowNode 默认 transformable:false）→ 需要变尺寸时用数值改
           const widthInput = document.createElement('input');
@@ -455,18 +485,18 @@
           widthInput.dataset.field = 'width';
           widthInput.value = String(Math.round(selected.state.width));
           widthInput.addEventListener('change', () => {
-            designer.updateNode(selected.state.id, { width: Math.max(20, Number(widthInput.value) || selected.state.width) });
+            this.designer.updateNode(selected.state.id, { width: Math.max(20, Number(widthInput.value) || selected.state.width) });
           });
-          panelControls.width = row('宽', widthInput);
+          this.panelControls.width = row('宽', widthInput);
 
           const heightInput = document.createElement('input');
           heightInput.type = 'number';
           heightInput.dataset.field = 'height';
           heightInput.value = String(Math.round(selected.state.height));
           heightInput.addEventListener('change', () => {
-            designer.updateNode(selected.state.id, { height: Math.max(20, Number(heightInput.value) || selected.state.height) });
+            this.designer.updateNode(selected.state.id, { height: Math.max(20, Number(heightInput.value) || selected.state.height) });
           });
-          panelControls.height = row('高', heightInput);
+          this.panelControls.height = row('高', heightInput);
 
           const kindSelect = document.createElement('select');
           kindSelect.dataset.field = 'kind';
@@ -479,7 +509,7 @@
           kindSelect.value = selected.state.kind;
           kindSelect.addEventListener('change', () => {
             const preset = FLOW_NODE_KINDS[kindSelect.value];
-            designer.updateNode(selected.state.id, {
+            this.designer.updateNode(selected.state.id, {
               kind: kindSelect.value,
               width: preset.width,
               height: preset.height,
@@ -487,7 +517,7 @@
               strokeColor: preset.stroke,
             });
           });
-          panelControls.kind = row('类型', kindSelect);
+          this.panelControls.kind = row('类型', kindSelect);
 
           const fillInput = document.createElement('input');
           fillInput.type = 'color';
@@ -496,69 +526,69 @@
           fillInput.addEventListener('input', () => {
             // 取色器拖动过程中实时反馈：首次 input 记一次历史（记的是改之前的状态），
             // 后续 input 直接改图元，避免拖一次产生几十条撤销记录
-            if (!colorSession) {
-              designer.captureHistory();
-              colorSession = true;
+            if (!this.colorSession) {
+              this.designer.captureHistory();
+              this.colorSession = true;
             }
             selected.applyPatch({ fillColor: fillInput.value });
-            renderPanel();
+            this.onUpdate();
           });
           fillInput.addEventListener('change', () => {
-            if (colorSession) {
-              colorSession = false;
+            if (this.colorSession) {
+              this.colorSession = false;
               selected.applyPatch({ fillColor: fillInput.value });
-              renderPanel();
+              this.onUpdate();
               return;
             }
-            designer.updateNode(selected.state.id, { fillColor: fillInput.value });
+            this.designer.updateNode(selected.state.id, { fillColor: fillInput.value });
           });
-          panelControls.fill = row('填充', fillInput);
+          this.panelControls.fill = row('填充', fillInput);
 
           const strokeInput = document.createElement('input');
           strokeInput.type = 'color';
           strokeInput.dataset.field = 'stroke';
           strokeInput.value = selected.state.strokeColor || FLOW_NODE_KINDS[selected.state.kind].stroke;
           strokeInput.addEventListener('input', () => {
-            if (!colorSession) {
-              designer.captureHistory();
-              colorSession = true;
+            if (!this.colorSession) {
+              this.designer.captureHistory();
+              this.colorSession = true;
             }
             selected.applyPatch({ strokeColor: strokeInput.value });
-            renderPanel();
+            this.onUpdate();
           });
           strokeInput.addEventListener('change', () => {
-            if (colorSession) {
-              colorSession = false;
+            if (this.colorSession) {
+              this.colorSession = false;
               selected.applyPatch({ strokeColor: strokeInput.value });
-              renderPanel();
+              this.onUpdate();
               return;
             }
-            designer.updateNode(selected.state.id, { strokeColor: strokeInput.value });
+            this.designer.updateNode(selected.state.id, { strokeColor: strokeInput.value });
           });
-          panelControls.stroke = row('边框', strokeInput);
+          this.panelControls.stroke = row('边框', strokeInput);
 
           const textColorInput = document.createElement('input');
           textColorInput.type = 'color';
           textColorInput.dataset.field = 'textColor';
           textColorInput.value = selected.state.textColor || '#0f172a';
           textColorInput.addEventListener('input', () => {
-            if (!colorSession) {
-              designer.captureHistory();
-              colorSession = true;
+            if (!this.colorSession) {
+              this.designer.captureHistory();
+              this.colorSession = true;
             }
             selected.applyPatch({ textColor: textColorInput.value });
-            renderPanel();
+            this.onUpdate();
           });
           textColorInput.addEventListener('change', () => {
-            if (colorSession) {
-              colorSession = false;
+            if (this.colorSession) {
+              this.colorSession = false;
               selected.applyPatch({ textColor: textColorInput.value });
-              renderPanel();
+              this.onUpdate();
               return;
             }
-            designer.updateNode(selected.state.id, { textColor: textColorInput.value });
+            this.designer.updateNode(selected.state.id, { textColor: textColorInput.value });
           });
-          panelControls.textColor = row('文字颜色', textColorInput);
+          this.panelControls.textColor = row('文字颜色', textColorInput);
 
           const fontSizeInput = document.createElement('input');
           fontSizeInput.type = 'number';
@@ -566,9 +596,9 @@
           fontSizeInput.min = '8';
           fontSizeInput.value = selected.state.fontSize || 14;
           fontSizeInput.addEventListener('change', () => {
-            designer.updateNode(selected.state.id, { fontSize: Number(fontSizeInput.value) || selected.state.fontSize });
+            this.designer.updateNode(selected.state.id, { fontSize: Number(fontSizeInput.value) || selected.state.fontSize });
           });
-          panelControls.fontSize = row('文字字号', fontSizeInput);
+          this.panelControls.fontSize = row('文字字号', fontSizeInput);
 
           [
             ['宽度', 'width'],
@@ -580,15 +610,15 @@
             input.min = '40';
             input.value = selected.state[key];
             input.addEventListener('change', () => {
-              designer.updateNode(selected.state.id, { [key]: Number(input.value) || selected.state[key] });
+              this.designer.updateNode(selected.state.id, { [key]: Number(input.value) || selected.state[key] });
             });
-            panelControls[key] = row(labelText, input);
+            this.panelControls[key] = row(labelText, input);
           });
 
           const hint = document.createElement('div');
           hint.className = 'hint';
           hint.textContent = `节点 id：${selected.state.id}`;
-          shapePanel.appendChild(hint);
+          this.shapePanel.appendChild(hint);
           return;
         }
 
@@ -599,18 +629,18 @@
         labelInput.placeholder = '例如：是 / 否';
         labelInput.value = selected.state.label || '';
         labelInput.addEventListener('change', () => {
-          designer.updateEdge(selected.state.id, { label: labelInput.value });
+          this.designer.updateEdge(selected.state.id, { label: labelInput.value });
         });
-        panelControls = { label: row('标签', labelInput) };
+        this.panelControls = { label: row('标签', labelInput) };
 
         const lineColorInput = document.createElement('input');
         lineColorInput.type = 'color';
         lineColorInput.dataset.field = 'lineColor';
         lineColorInput.value = (selected.state.style && selected.state.style.strokeStyle) || '#475569';
         lineColorInput.addEventListener('change', () => {
-          designer.updateEdge(selected.state.id, { style: { strokeStyle: lineColorInput.value, fillStyle: lineColorInput.value } });
+          this.designer.updateEdge(selected.state.id, { style: { strokeStyle: lineColorInput.value, fillStyle: lineColorInput.value } });
         });
-        panelControls.lineColor = row('连线颜色', lineColorInput);
+        this.panelControls.lineColor = row('连线颜色', lineColorInput);
 
         const lineWidthInput = document.createElement('input');
         lineWidthInput.type = 'number';
@@ -619,9 +649,9 @@
         lineWidthInput.step = '0.5';
         lineWidthInput.value = (selected.state.style && selected.state.style.lineWidth) || 1.6;
         lineWidthInput.addEventListener('change', () => {
-          designer.updateEdge(selected.state.id, { style: { lineWidth: Number(lineWidthInput.value) || 1.6 } });
+          this.designer.updateEdge(selected.state.id, { style: { lineWidth: Number(lineWidthInput.value) || 1.6 } });
         });
-        panelControls.lineWidth = row('连线粗细', lineWidthInput);
+        this.panelControls.lineWidth = row('连线粗细', lineWidthInput);
 
         const labelColorInput = document.createElement('input');
         labelColorInput.type = 'color';
@@ -629,9 +659,9 @@
         labelColorInput.value = (selected.state.style && selected.state.style.label && selected.state.style.label.fillStyle) || '#334155';
         labelColorInput.addEventListener('change', () => {
           // 标签外观的规范位置是 style.label（老 labelStyle 仍被收下，但新代码写规范位置）
-          designer.updateEdge(selected.state.id, { style: { label: { fillStyle: labelColorInput.value } } });
+          this.designer.updateEdge(selected.state.id, { style: { label: { fillStyle: labelColorInput.value } } });
         });
-        panelControls.labelColor = row('标签颜色', labelColorInput);
+        this.panelControls.labelColor = row('标签颜色', labelColorInput);
 
         const shapeSelect = document.createElement('select');
         shapeSelect.dataset.field = 'shape';
@@ -646,244 +676,256 @@
         });
         shapeSelect.value = selected.state.linkShape || 'visio';
         shapeSelect.addEventListener('change', () => {
-          designer.updateEdge(selected.state.id, { linkShape: shapeSelect.value });
+          this.designer.updateEdge(selected.state.id, { linkShape: shapeSelect.value });
         });
-        panelControls.shape = row('形态', shapeSelect);
+        this.panelControls.shape = row('形态', shapeSelect);
 
         const hint = document.createElement('div');
         hint.className = 'hint';
         const links = selected.state.links || {};
         hint.textContent = `连接：${(links.start && links.start.id) || '-'} → ${(links.end && links.end.id) || '-'}`;
-        shapePanel.appendChild(hint);
+        this.shapePanel.appendChild(hint);
       }
 
-      /* ---------------- 工具栏 ---------------- */
-      ['terminator', 'process', 'decision', 'io'].forEach((kind) => {
-        document.getElementById(`btn-add-${kind}`).addEventListener('click', () => {
-          designer.createNode(kind);
-        });
-      });
-
-      document.getElementById('btn-delete-selected').addEventListener('click', () => {
-        if (designer.selectedId) {
-          designer.remove(designer.selectedId);
-        }
-      });
-
-      document.getElementById('btn-undo').addEventListener('click', () => designer.undo());
-      document.getElementById('btn-redo').addEventListener('click', () => designer.redo());
-      document.getElementById('btn-fit').addEventListener('click', () => designer.fitViewport());
-      document.getElementById('btn-reset').addEventListener('click', () => ice.setViewport(1, 0, 0));
-
-      document.getElementById('btn-seed').addEventListener('click', () => {
-        buildSeed();
-        designer.fitViewport();
-        setStatus('已恢复内置示例流程', '#059669');
-      });
-
-      document.getElementById('btn-clear').addEventListener('click', () => {
-        designer.clear();
-        setStatus('已清空画布', '#b45309');
-      });
-
-      document.getElementById('btn-save').addEventListener('click', () => {
-        window.localStorage.setItem(storageKey, designer.serialize());
-        setStatus('✅ 流程已保存到 localStorage', '#059669');
-      });
-
-      document.getElementById('btn-load').addEventListener('click', () => {
-        const json = window.localStorage.getItem(storageKey);
-        if (!json) {
-          setStatus('⚠️ 没有可加载的流程', '#b45309');
-          return;
-        }
-        let report;
-        try {
-          report = designer.load(json);
-        } catch (error) {
-          setStatus(`❌ 加载失败：${error.message}`, '#b91c1c');
-          return;
-        }
-        if (report.skipped.length) {
-          setStatus(`⚠️ 流程已加载，但跳过了 ${report.skipped.join('、')}`, '#b45309');
-          return;
-        }
-        setStatus('✅ 流程已加载', '#059669');
-      });
-
-      document.getElementById('btn-export').addEventListener('click', () => {
-        jsonOutput.textContent = JSON.stringify(designer.toSnapshot(), null, 2);
-        jsonOutput.scrollIntoView({ block: 'nearest' });
-        setStatus('已导出 JSON（见右侧面板）', '#0f766e');
-      });
-
-      // SVG 矢量导出：与画布同一口径，放大不糊，可进设计工具 / 打印
-      document.getElementById('btn-export-svg').addEventListener('click', () => {
-        const svg = designer.toSvg({ padding: 16, background: '#ffffff' });
-        window.__exportedSvg = svg;
-        const blob = new Blob([svg], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'flowchart.svg';
-        a.click();
-        URL.revokeObjectURL(url);
-        setStatus(`已导出 SVG（${svg.length} 字节）`, '#0f766e');
-      });
-
-      document.getElementById('edge-shape').addEventListener('change', () => {
-        const selected = designer.selected;
-        if (selected && selected.constructor.typeId === FlowEdge.typeId) {
-          designer.updateEdge(selected.state.id, { linkShape: edgeShapeSelect.value });
-        }
-      });
-
-      /* ---------------- 连线模式与画布交互 ---------------- */
-      function hideLinkPreview() {
-        linkPreview.style.display = 'none';
-        linkPreviewPath.setAttribute('d', '');
-      }
-
-      function setLinkingMode(enabled) {
-        linkingMode = enabled;
-        linkSource = null;
-        hideLinkPreview();
-        const button = document.getElementById('btn-toggle-link');
-        button.classList.toggle('active', enabled);
-        canvasEl.style.cursor = enabled ? 'crosshair' : 'grab';
-        relationHint.textContent = enabled ? '依次点击两个节点：先源节点，再目标节点' : '选择连线形态后点击“连接节点”';
-        relationHint.style.color = '#64748b';
-      }
-
-      document.getElementById('btn-toggle-link').addEventListener('click', () => setLinkingMode(!linkingMode));
-
-      function showLinkPreview(node) {
-        const box = node.getMinBoundingBox(true);
-        const from = ice.worldToScreen(box.bc[0], box.bc[1]);
-        linkPreview.style.display = 'block';
-        linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${from[0]} ${from[1]}`);
-      }
-
-      canvasEl.addEventListener('mousemove', (evt) => {
-        if (linkingMode && linkSource) {
-          const box = linkSource.getMinBoundingBox(true);
-          const from = ice.worldToScreen(box.bc[0], box.bc[1]);
-          linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${evt.offsetX} ${evt.offsetY}`);
-        }
-        if (!panning) {
-          return;
-        }
-        const dx = evt.offsetX - panLastX;
-        const dy = evt.offsetY - panLastY;
-        panLastX = evt.offsetX;
-        panLastY = evt.offsetY;
-        ice.setViewport(ice.viewport.scale, ice.viewport.tx + dx, ice.viewport.ty + dy);
-      });
-
-      function stopPanning() {
-        panning = false;
-        canvasEl.style.cursor = linkingMode ? 'crosshair' : 'grab';
-      }
-
-      canvasEl.addEventListener('mouseup', stopPanning);
-      canvasEl.addEventListener('mouseleave', stopPanning);
-      canvasEl.addEventListener('auxclick', (evt) => {
-        // 中键：禁止浏览器默认的自动滚动
-        if (evt.button === 1) {
-          evt.preventDefault();
-        }
-      });
-
-      function canvasNodeAt(px, py) {
-        let node = ice.hitTest(px, py);
-        while (node && node.parentNode) {
-          node = node.parentNode;
-        }
-        return node && node.constructor.typeId === FlowNode.typeId ? node : null;
-      }
-
-      canvasEl.addEventListener('mousedown', (evt) => {
-        if (linkingMode) {
-          const node = canvasNodeAt(evt.offsetX, evt.offsetY);
-          if (!node) {
-            return;
-          }
-          evt.preventDefault();
-          evt.stopPropagation();
-          if (!linkSource) {
-            linkSource = node;
-            showLinkPreview(node);
-            relationHint.textContent = `已选择源节点：${node.state.title}，请点击目标节点`;
-            relationHint.style.color = '#0f766e';
-            return;
-          }
-          if (linkSource.state.id === node.state.id) {
-            relationHint.textContent = '源节点和目标节点不能相同，请重新选择';
-            relationHint.style.color = '#b45309';
-            linkSource = null;
-            hideLinkPreview();
-            return;
-          }
-          designer.createEdge({
-            sourceId: linkSource.state.id,
-            targetId: node.state.id,
-            sourcePort: 'B',
-            targetPort: 'T',
-            linkShape: edgeShapeSelect.value,
+        /* ---------------- 工具栏 ---------------- */
+        __wireToolbar() {
+          ['terminator', 'process', 'decision', 'io'].forEach((kind) => {
+            document.getElementById(`btn-add-${kind}`).addEventListener('click', () => {
+              this.designer.createNode(kind);
+            });
           });
-          linkSource = null;
-          hideLinkPreview();
-          setLinkingMode(false);
-          return;
+
+          document.getElementById('btn-delete-selected').addEventListener('click', () => {
+            if (this.designer.selectedId) {
+              this.designer.remove(this.designer.selectedId);
+            }
+          });
+
+          document.getElementById('btn-undo').addEventListener('click', () => this.designer.undo());
+          document.getElementById('btn-redo').addEventListener('click', () => this.designer.redo());
+          document.getElementById('btn-fit').addEventListener('click', () => this.designer.fitViewport());
+          document.getElementById('btn-reset').addEventListener('click', () => this.ice.setViewport(1, 0, 0));
+
+          document.getElementById('btn-seed').addEventListener('click', () => {
+            this.buildSeed();
+            this.designer.fitViewport();
+            this.setStatus('已恢复内置示例流程', '#059669');
+          });
+
+          document.getElementById('btn-clear').addEventListener('click', () => {
+            this.designer.clear();
+            this.setStatus('已清空画布', '#b45309');
+          });
+
+          document.getElementById('btn-save').addEventListener('click', () => {
+            window.localStorage.setItem(this.storageKey, this.designer.serialize());
+            this.setStatus('✅ 流程已保存到 localStorage', '#059669');
+          });
+
+          document.getElementById('btn-load').addEventListener('click', () => {
+            const json = window.localStorage.getItem(this.storageKey);
+            if (!json) {
+              this.setStatus('⚠️ 没有可加载的流程', '#b45309');
+              return;
+            }
+            let report;
+            try {
+              report = this.designer.load(json);
+            } catch (error) {
+              this.setStatus(`❌ 加载失败：${error.message}`, '#b91c1c');
+              return;
+            }
+            if (report.skipped.length) {
+              this.setStatus(`⚠️ 流程已加载，但跳过了 ${report.skipped.join('、')}`, '#b45309');
+              return;
+            }
+            this.setStatus('✅ 流程已加载', '#059669');
+          });
+
+          document.getElementById('btn-export').addEventListener('click', () => {
+            this.jsonOutput.textContent = JSON.stringify(this.designer.toSnapshot(), null, 2);
+            this.jsonOutput.scrollIntoView({ block: 'nearest' });
+            this.setStatus('已导出 JSON（见右侧面板）', '#0f766e');
+          });
+
+          // SVG 矢量导出：与画布同一口径，放大不糊，可进设计工具 / 打印
+          document.getElementById('btn-export-svg').addEventListener('click', () => {
+            const svg = this.designer.toSvg({ padding: 16, background: '#ffffff' });
+            window.__exportedSvg = svg;
+            const blob = new Blob([svg], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'flowchart.svg';
+            a.click();
+            URL.revokeObjectURL(url);
+            this.setStatus(`已导出 SVG（${svg.length} 字节）`, '#0f766e');
+          });
+
+          this.edgeShapeSelect.addEventListener('change', () => {
+            const selected = this.designer.selected;
+            if (selected && selected.constructor.typeId === FlowEdge.typeId) {
+              this.designer.updateEdge(selected.state.id, { linkShape: this.edgeShapeSelect.value });
+            }
+          });
         }
 
-        // 非连线模式：空白处左键 / 任意位置中键 → 拖拽平移画布
-        const blank = evt.button === 0 && !ice.hitTest(evt.offsetX, evt.offsetY);
-        if (evt.button !== 1 && !blank) {
-          return;
+        /* ---------------- 连线模式 ---------------- */
+        __wireLinkMode() {
+          document.getElementById('btn-toggle-link').addEventListener('click', () => this.setLinkingMode(!this.linkingMode));
         }
-        evt.preventDefault();
-        evt.stopPropagation();
-        panning = true;
-        panLastX = evt.offsetX;
-        panLastY = evt.offsetY;
-        canvasEl.style.cursor = 'grabbing';
-      });
 
-      // 点击画布空白处清除选中。
-      // 注意：引擎的事件拦截是**全局**的，右侧面板/工具条上的点击也会派发到 ice.evtBus
-      // （target 是面板里的 input，且没有命中任何组件）。这里必须按 target 过滤，
-      // 否则点一下面板输入框就会把选中清掉 —— 面板随即退回提示态、正在交互的
-      // 取色器/文本框被销毁（真实表现：颜色根本改不动）。
-      ice.evtBus.on('mousedown', (evt) => {
-        const component = evt && evt.param && evt.param.component;
-        const original = evt && evt.originalEvent;
-        const target = original && original.target;
-        const fromCanvas = !target || target === canvasEl;
-        if (!component && fromCanvas && designer.selectedId) {
-          designer.select(null);
+        hideLinkPreview() {
+          this.linkPreview.style.display = 'none';
+          this.linkPreviewPath.setAttribute('d', '');
         }
-      });
 
-      // 键盘快捷键：Cmd/Ctrl + Z 撤销、Shift 组合重做
-      window.addEventListener('keydown', (evt) => {
-        const meta = evt.metaKey || evt.ctrlKey;
-        if (!meta || (evt.key !== 'z' && evt.key !== 'Z')) {
-          return;
+        setLinkingMode(enabled) {
+          this.linkingMode = enabled;
+          this.linkSource = null;
+          this.hideLinkPreview();
+          const button = document.getElementById('btn-toggle-link');
+          button.classList.toggle('active', enabled);
+          this.canvasEl.style.cursor = enabled ? 'crosshair' : 'grab';
+          this.relationHint.textContent = enabled ? '依次点击两个节点：先源节点，再目标节点' : '选择连线形态后点击“连接节点”';
+          this.relationHint.style.color = '#64748b';
         }
-        evt.preventDefault();
-        if (evt.shiftKey) {
-          designer.redo();
-        } else {
-          designer.undo();
-        }
-      });
 
-      /* ---------------- 启动 ---------------- */
-      buildSeed();
-      designer.fitViewport();
-      renderPanel();
-      setStatus('示例流程已就绪：可拖拽节点、连线、改属性，或点「清空」从零开始', '#64748b');
+        showLinkPreview(node) {
+          const box = node.getMinBoundingBox(true);
+          const from = this.ice.worldToScreen(box.bc[0], box.bc[1]);
+          this.linkPreview.style.display = 'block';
+          this.linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${from[0]} ${from[1]}`);
+        }
+
+        /**
+         * 画布上的指针交互：连线预览 / 拖拽平移 / 连线取点 / 空白处平移。
+         *
+         * 空白处/中键拖拽平移由应用层实现（引擎只提供 setViewport / hitTest 原语）。
+         */
+        __wireCanvasInteraction() {
+          this.canvasEl.addEventListener('mousemove', (evt) => {
+            if (this.linkingMode && this.linkSource) {
+              const box = this.linkSource.getMinBoundingBox(true);
+              const from = this.ice.worldToScreen(box.bc[0], box.bc[1]);
+              this.linkPreviewPath.setAttribute('d', `M ${from[0]} ${from[1]} L ${evt.offsetX} ${evt.offsetY}`);
+            }
+            if (!this.panning) {
+              return;
+            }
+            const dx = evt.offsetX - this.panLastX;
+            const dy = evt.offsetY - this.panLastY;
+            this.panLastX = evt.offsetX;
+            this.panLastY = evt.offsetY;
+            this.ice.setViewport(this.ice.viewport.scale, this.ice.viewport.tx + dx, this.ice.viewport.ty + dy);
+          });
+
+          this.canvasEl.addEventListener('mouseup', () => this.stopPanning());
+          this.canvasEl.addEventListener('mouseleave', () => this.stopPanning());
+          this.canvasEl.addEventListener('auxclick', (evt) => {
+            // 中键：禁止浏览器默认的自动滚动
+            if (evt.button === 1) {
+              evt.preventDefault();
+            }
+          });
+
+          this.canvasEl.addEventListener('mousedown', (evt) => {
+            if (this.linkingMode) {
+              const node = this.canvasNodeAt(evt.offsetX, evt.offsetY);
+              if (!node) {
+                return;
+              }
+              evt.preventDefault();
+              evt.stopPropagation();
+              if (!this.linkSource) {
+                this.linkSource = node;
+                this.showLinkPreview(node);
+                this.relationHint.textContent = `已选择源节点：${node.state.title}，请点击目标节点`;
+                this.relationHint.style.color = '#0f766e';
+                return;
+              }
+              if (this.linkSource.state.id === node.state.id) {
+                this.relationHint.textContent = '源节点和目标节点不能相同，请重新选择';
+                this.relationHint.style.color = '#b45309';
+                this.linkSource = null;
+                this.hideLinkPreview();
+                return;
+              }
+              this.designer.createEdge({
+                sourceId: this.linkSource.state.id,
+                targetId: node.state.id,
+                sourcePort: 'B',
+                targetPort: 'T',
+                linkShape: this.edgeShapeSelect.value,
+              });
+              this.linkSource = null;
+              this.hideLinkPreview();
+              this.setLinkingMode(false);
+              return;
+            }
+
+            // 非连线模式：空白处左键 / 任意位置中键 → 拖拽平移画布
+            const blank = evt.button === 0 && !this.ice.hitTest(evt.offsetX, evt.offsetY);
+            if (evt.button !== 1 && !blank) {
+              return;
+            }
+            evt.preventDefault();
+            evt.stopPropagation();
+            this.panning = true;
+            this.panLastX = evt.offsetX;
+            this.panLastY = evt.offsetY;
+            this.canvasEl.style.cursor = 'grabbing';
+          });
+        }
+
+        stopPanning() {
+          this.panning = false;
+          this.canvasEl.style.cursor = this.linkingMode ? 'crosshair' : 'grab';
+        }
+
+        /** 命中一个 FlowNode（穿透到根，忽略内部装饰子组件） */
+        canvasNodeAt(px, py) {
+          let node = this.ice.hitTest(px, py);
+          while (node && node.parentNode) {
+            node = node.parentNode;
+          }
+          return node && node.constructor.typeId === FlowNode.typeId ? node : null;
+        }
+
+        /* ---------------- 全局事件 ---------------- */
+        __wireGlobalEvents() {
+          // 点击画布空白处清除选中。
+          // 注意：引擎的事件拦截是**全局**的，右侧面板/工具条上的点击也会派发到 ice.evtBus
+          // （target 是面板里的 input，且没有命中任何组件）。这里必须按 target 过滤，
+          // 否则点一下面板输入框就会把选中清掉 —— 面板随即退回提示态、正在交互的
+          // 取色器/文本框被销毁（真实表现：颜色根本改不动）。
+          this.ice.evtBus.on('mousedown', (evt) => {
+            const component = evt && evt.param && evt.param.component;
+            const original = evt && evt.originalEvent;
+            const target = original && original.target;
+            const fromCanvas = !target || target === this.canvasEl;
+            if (!component && fromCanvas && this.designer.selectedId) {
+              this.designer.select(null);
+            }
+          });
+
+          // 键盘快捷键：Cmd/Ctrl + Z 撤销、Shift 组合重做
+          window.addEventListener('keydown', (evt) => {
+            const meta = evt.metaKey || evt.ctrlKey;
+            if (!meta || (evt.key !== 'z' && evt.key !== 'Z')) {
+              return;
+            }
+            evt.preventDefault();
+            if (evt.shiftKey) {
+              this.designer.redo();
+            } else {
+              this.designer.undo();
+            }
+          });
+        }
+      }
+
+      new FlowchartEditorPage();
     </script>
   </body>
 </html>
