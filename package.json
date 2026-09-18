@@ -59,7 +59,7 @@
     "types:watch": "npm run types:check -- --watch"
   },
   "peerDependencies": {
-    "ice-render": "^2.14.1",
+    "ice-render": "^2.16.0",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19"
   },
