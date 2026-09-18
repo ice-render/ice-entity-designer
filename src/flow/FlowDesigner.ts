@@ -14,6 +14,8 @@ import FlowNode from './FlowNode';
 import type { FlowNodeKind } from './FlowNode';
 import type { FlowPort } from './FlowEdge';
 import { autoPorts } from '../designer/autoPorts';
+import DesignerHighlightLayer from '../designer/highlight';
+import type { DesignerHighlightOptions } from '../designer/highlight';
 import { registerIEDType } from '../utils/type-registry';
 
 /**
@@ -139,6 +141,15 @@ export default class FlowDesigner {
   /** 画布拖拽节点时会话：BEFORE_MOVE 记一次历史，mouseup 结束会话 */
   private __moveSession = false;
   private __moveEmitQueued = false;
+  /**
+   * 程序化高亮层（见 `designer/highlight.ts`）。
+   *
+   * 它是**视图状态**：不进快照、不参与命中。图元在容器里（BPMN 池 / 泳道）也画得出来，
+   * 因为高亮框落在工具层。
+   */
+  private __highlight: DesignerHighlightLayer;
+  /** 上一次用过的样式，图元移动后重新摆位时要沿用同一份。 */
+  private __highlightOptions: DesignerHighlightOptions = {};
 
   /**
    * 节点在画布上被拖动（引擎 `setPosition()` → BEFORE_MOVE/AFTER_MOVE）。
@@ -157,6 +168,7 @@ export default class FlowDesigner {
     // 拖拽对齐引导线：图元位置就是数据、没有布局约束，编辑器默认就该有（见 designer/alignmentGuides.ts）
     enableDesignerAlignmentGuides(ice);
     this.ice = ice;
+    this.__highlight = new DesignerHighlightLayer(this.ice);
     registerIEDType(this.ice, FlowNode);
     registerIEDType(this.ice, FlowEdge);
     this.ice.evtBus.on('mousedown', this.__mousedownHandler, this);
@@ -196,6 +208,86 @@ export default class FlowDesigner {
   }
 
   /**
+   * **程序化高亮**：高亮一组图元（给"指着讲"/教程/演示用）。
+   *
+   * 为什么要有这个入口：设计器原先**没有任何"高亮某个图元"的公开手段** ——
+   * `ice.setSelection()` 只写选中集合（a11y / 插件读，不画）、`designer.select()` 只写字段、
+   * `chrome.selection` 只被"按 mousedown 弹出来"的控制面板消费。应用层只能自己给图元打
+   * style 补丁再手动置脏来模拟，既依赖组件内部实现，也要在图元改动时自己对表。
+   *
+   * 契约（三条都是"不这样就会被静默坑到"的）：
+   * - 高亮是**视图状态**：`serialize()` 里不会多出任何东西，载入快照也不会带回来；
+   * - 高亮框**不参与命中测试**，图元自己的交互、连线端点手柄照常（否则高亮会挡住被高亮的东西）；
+   * - 图元移动 / 增删后高亮框**自动跟随**（拖拽走 `AFTER_MOVE`，文档变更走 `__emitChange`）；
+   *   高亮中的图元被删掉，它的框也跟着消失。
+   *
+   * ```ts
+   * designer.highlight('pump-2');                        // 只高亮一个
+   * designer.setHighlights(['a', 'b', 'c']);             // 高亮一组
+   * designer.setHighlights(ids, { color: '#FFD400', fill: 'rgba(255,212,0,0.18)' });
+   * designer.clearHighlights();
+   * ```
+   *
+   * @param ids 图元 id 或位号（各域包自行把业务标识写进 `state.id`）；`null` 等价于清除
+   * @returns 真正落地的数量 —— 认不出的 id 会被忽略（不抛错：agent 给的标识经常对不上）
+   */
+  public setHighlights(ids: string[] | string | null, options: DesignerHighlightOptions = {}): number {
+    if (Object.keys(options).length) {
+      this.__highlightOptions = { ...this.__highlightOptions, ...options };
+    }
+    const list = ids === null || ids === undefined ? [] : Array.isArray(ids) ? ids : [ids];
+    const entries = list
+      .map((id) => this.__highlightEntry(id))
+      .filter((entry): entry is { id: string; minX: number; minY: number; maxX: number; maxY: number } => !!entry);
+    this.__highlight.set(entries, this.__highlightOptions);
+    return entries.length;
+  }
+
+  /** 只高亮一个图元（先清掉其余的）；认不出这个 id 时返回 false，且**不动**现有高亮。 */
+  public highlight(id: string | null, options: DesignerHighlightOptions = {}): boolean {
+    const entry = id === null || id === undefined ? null : this.__highlightEntry(id);
+    if (id !== null && id !== undefined && !entry) {
+      return false;
+    }
+    this.setHighlights(entry ? [entry.id] : null, options);
+    return !!entry;
+  }
+
+  /** 清掉全部高亮。 */
+  public clearHighlights(): void {
+    this.setHighlights(null);
+  }
+
+  /** 当前高亮的图元 id。 */
+  public getHighlightedIds(): string[] {
+    return this.__highlight.ids;
+  }
+
+  /** 图元 id（或位号 `state.tag`）→ 高亮目标（全局包围盒）。 */
+  private __highlightEntry(
+    value: string
+  ): { id: string; minX: number; minY: number; maxX: number; maxY: number } | null {
+    const key = String(value);
+    const node =
+      this.nodes.find((item: any) => String(item.state?.id) === key) ||
+      this.nodes.find((item: any) => String(item.state?.tag) === key);
+    if (!node) {
+      return null;
+    }
+    const bounds = node.getMinBoundingBox(true).getMinAndMaxPoint();
+    return { id: String(node.state.id), minX: bounds.minX, minY: bounds.minY, maxX: bounds.maxX, maxY: bounds.maxY };
+  }
+
+  /** 图元动了 / 文档变了之后，把已高亮的那几只框重新摆到当前位置。 */
+  private __syncHighlights(): void {
+    const ids = this.__highlight.ids;
+    if (!ids.length) {
+      return;
+    }
+    this.setHighlights(ids);
+  }
+
+  /**
    * 订阅流程变更（增删改 / 连线 / 载入 / undo / redo 之后触发）。
    * 回调参数是当前流程的快照（与 serialize() 一致）。
    */
@@ -213,6 +305,9 @@ export default class FlowDesigner {
   }
 
   protected __emitChange(): void {
+    // 文档变了 → 高亮框要跟着走（图元被删掉时顺手摘掉它那块）。
+    // 没有高亮时这一步是空转，不进任何分支。
+    this.__syncHighlights();
     if (!this.__listeners.length) {
       return;
     }
@@ -383,7 +478,18 @@ export default class FlowDesigner {
     return edge;
   }
 
-  /** 删除节点（连带删除挂在它两端的连线）或删除一条连线 */
+  /**
+   * 删除节点（连带删除挂在它两端的连线）或删除一条连线。
+   *
+   * ⚠️ 级联只覆盖**引擎里那棵树**：挂在被删节点两端的连线会一起删掉，所以**画布**是干净的。
+   * 但宿主若另有一份"图的可序列化文档"（本设计器的 `state.diagram`、外部项目文件、
+   * 服务端那份副本），那份**不会跟着变** —— 设计器不知道外面还有几份副本，也不该去猜。
+   *
+   * 两份东西怎么同步是**宿主的责任**：要么在调 `remove()` 之前把外部文档里
+   * 相关的连线一起列出来删（本仓 `scenarios.ts` 的 `pipesTouching` 就是这么做的），
+   * 要么删完之后重新读一次引擎树再落盘 —— 但**不要**指望渲染层的级联副作用去补文档：
+   * `state` 的读者不止渲染层（模型下一轮会读它、`STATE_SNAPSHOT` 会重放它）。
+   */
   public remove(id: string): void {
     const component = this.ice.findComponent(id);
     if (!component) {
@@ -569,11 +675,17 @@ export default class FlowDesigner {
    */
   protected fitViewportAlign: 'center' | 'start' = 'center';
 
-  /** 把整个流程缩放到画布可视区内 */
+  /**
+   * 把整个流程缩放到画布可视区内。
+   *
+   * ⚠️ 视口尺寸取的是 **CSS 尺寸**，不是 `canvasWidth/canvasHeight` ——
+   * 后者是 **backing store** 尺寸（= css × dpr），而渲染视口还会再乘一次 dpr，
+   * 直接拿它算 scale 等于**多乘一次**：dpr = 2 时内容画成两倍大并被裁掉，
+   * 且**不报错**（普通屏完全正常，只在 retina 上复发）。见 `__viewportSize()`。
+   */
   public fitViewport(padding = 80): void {
     const nodes = this.contentComponents();
-    const canvasWidth = (this.ice as any).canvasWidth || 0;
-    const canvasHeight = (this.ice as any).canvasHeight || 0;
+    const { width: canvasWidth, height: canvasHeight } = this.__viewportSize();
     if (!nodes.length || !canvasWidth || !canvasHeight) {
       return;
     }
@@ -601,6 +713,25 @@ export default class FlowDesigner {
         ? padding - minY * scale
         : (canvasHeight - contentHeight * scale) / 2 - minY * scale;
     this.ice.setViewport(scale, tx, ty);
+  }
+
+  /**
+   * 取景用的视口尺寸（**CSS 像素**）。
+   *
+   * 两级口径，都对齐"渲染视口 = dpr · viewport"这条约定：
+   * ① 首选引擎的输入矩形（`getInputRect()`）—— 它是**内容盒**，与命中测试 / 坐标换算
+   *    同一口径，dpr 变化时它的数值不变；
+   * ② 没有布局信息的运行时（测试桩 / 小程序）退回 `canvasWidth / dpr`。
+   *
+   * 千万不要退回 `canvasWidth` 本身 —— 那正是这条 dpr 缺陷的来源。
+   */
+  protected __viewportSize(): { width: number; height: number } {
+    const ice: any = this.ice as any;
+    const dpr = ice && ice.dpr ? ice.dpr : 1;
+    const rect = ice && typeof ice.getInputRect === 'function' ? ice.getInputRect() : null;
+    const cssWidth = rect && rect.width > 0 ? rect.width : (ice?.canvasWidth || 0) / dpr;
+    const cssHeight = rect && rect.height > 0 ? rect.height : (ice?.canvasHeight || 0) / dpr;
+    return { width: cssWidth, height: cssHeight };
   }
 
   public canUndo(): boolean {

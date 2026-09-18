@@ -431,6 +431,54 @@ describe('FlowDesigner 历史与视图', () => {
     expect(viewport.scale).toBeLessThanOrEqual(1.25);
   });
 
+  /**
+   * 判据是**同一个画布、同一份内容，只改 dpr** —— 取景必须逐字段一致。
+   *
+   * 缺陷的形态：`canvasWidth/canvasHeight` 是 **backing store** 尺寸（= css × dpr），
+   * 而视口渲染时还会再乘一次 dpr。拿 backing store 算 scale 等于**多乘一次**：
+   * dpr = 2 时内容画成两倍大并被裁掉，而且**不报错**（高分屏上表现为"图被放大、
+   * 四周看不全"，普通屏完全正常 —— 所以只在 retina 上复发）。
+   */
+  describe('fitViewport 与 dpr', () => {
+    /** 画一块 CSS 1000×800 的画布：dpr = 1 时 backing store 也是 1000×800 */
+    const fitOn = (dpr: number, padding = 50) => {
+      const { ice, designer } = makeDesigner();
+      const cssWidth = 1000;
+      const cssHeight = 800;
+      ice.dpr = dpr;
+      ice.canvasWidth = cssWidth * dpr;
+      ice.canvasHeight = cssHeight * dpr;
+      // 引擎的输入矩形就是 CSS 内容盒（真实浏览器里由 getBoundingClientRect 得到）
+      ice.getInputRect = () => ({ left: 0, top: 0, width: cssWidth, height: cssHeight });
+      designer.createNode('process', { left: 0, top: 0 });
+      designer.createNode('process', { left: 1000, top: 800 });
+      designer.fitViewport(padding);
+      return ice.viewport;
+    };
+
+    it('dpr = 2 与 dpr = 1 取景一致（不能按 backing store 算）', () => {
+      const atDpr1 = fitOn(1);
+      const atDpr2 = fitOn(2);
+      expect(atDpr2.scale).toBeCloseTo(atDpr1.scale, 6);
+      expect(atDpr2.tx).toBeCloseTo(atDpr1.tx, 6);
+      expect(atDpr2.ty).toBeCloseTo(atDpr1.ty, 6);
+      // 且不该顶到 1.25 的上限 —— 顶到了就说明 scale 被多乘了一次 dpr
+      expect(atDpr2.scale).toBeLessThan(1.25);
+    });
+
+    it('拿不到输入矩形时退回 canvasWidth / dpr（而不是直接读 backing store）', () => {
+      const { ice, designer } = makeDesigner();
+      ice.dpr = 2;
+      ice.canvasWidth = 2000;
+      ice.canvasHeight = 1600;
+      ice.getInputRect = () => ({ left: 0, top: 0, width: 0, height: 0 });
+      designer.createNode('process', { left: 0, top: 0 });
+      designer.createNode('process', { left: 1000, top: 800 });
+      designer.fitViewport(50);
+      expect(ice.viewport.scale).toBeCloseTo(fitOn(1).scale, 6);
+    });
+  });
+
   it('画布侧拖动节点（引擎 setPosition）会被感知：广播变更且可撤销', async () => {
     const { designer } = makeDesigner();
     const node = designer.createNode('process', { left: 100, top: 100 });
