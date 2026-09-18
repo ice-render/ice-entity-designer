@@ -288,6 +288,7 @@ flow.undo(); // 100 步历史
 | 历史与快照 | `undo()` / `redo()` / `canUndo()` / `canRedo()`、`serialize()` / `toSnapshot()` / `load()`（返回 `{ loaded, nodes, edges, skipped }`）。文档 **v2 直接复用引擎的序列化机制**：`{ version: 2, kind: 'flowchart', scene: <引擎 Serializer 产物> }`，因此自定义 `data` 与任何新增 state 字段自动往返；v1（`nodes`/`edges` 数组）仍可读，导出统一为 v2 |
 | 导出 | `toSvg(options)` —— 导出**矢量** SVG（放大不糊、可进设计工具/打印）；与画布同一口径 |
 | 视图与订阅 | `fitViewport(padding)`、`subscribe()`、`dispose()` |
+| 程序化高亮 | `setHighlights(ids, options)` / `highlight(id)` / `clearHighlights()` / `getHighlightedIds()` —— 给"指着讲"、教程、演示用。描边环落在**工具层**：**不进快照**、**不参与命中**、图元被拖动或删除时**自动跟随**；默认色取引擎主题主色，可传 `{ color, lineWidth, padding, radius, fill }` 覆盖（`fill` 默认关：工具层整体画在图元之上，填充会盖住位号与名称） |
 
 自定义形状（判定菱形 / 输入输出平行四边形）在 `src/flow/flow_shapes.ts`，走的是引擎的 `ICEPath` 子类机制。
 流程图节点是**复合组件**（形状 + 标题由 kind/标题/配色派生）：它们实现了引擎的 `hasDerivedChildren()`，
