@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import { ICECircle } from 'ice-render';
+import { ICECircle, ICE_EVENT_NAME_CONSTS } from 'ice-render';
 
 /**
  * 仿真令牌的点：一个普通的引擎圆，只是给了稳定的 `typeId`。
@@ -166,13 +166,13 @@ export default class BpmnSimulator {
       this.step(dt);
     };
     if (this.designer.ice && this.designer.ice.evtBus) {
-      this.designer.ice.evtBus.on('ICE_FRAME_EVENT', this.frameHandler, this);
+      this.designer.ice.evtBus.on(ICE_EVENT_NAME_CONSTS.ICE_FRAME_EVENT, this.frameHandler, this);
     }
   }
 
   public stop(): void {
     if (this.frameHandler && this.designer.ice && this.designer.ice.evtBus) {
-      this.designer.ice.evtBus.off('ICE_FRAME_EVENT', this.frameHandler, this);
+      this.designer.ice.evtBus.off(ICE_EVENT_NAME_CONSTS.ICE_FRAME_EVENT, this.frameHandler, this);
     }
     this.frameHandler = null;
     this.__releaseContinuousFrames();
