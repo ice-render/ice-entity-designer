@@ -10,7 +10,7 @@
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-047857.svg" /></a>
   <img alt="engine bundled" src="https://img.shields.io/badge/engine-bundled-047857.svg" />
   <img alt="domain packs" src="https://img.shields.io/badge/domain%20packs-9-047857.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/jest-364%20passed-047857.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/jest-398%20passed-047857.svg" />
   <img alt="typescript" src="https://img.shields.io/badge/TypeScript-4.6-3178c6.svg" />
 </p>
 
