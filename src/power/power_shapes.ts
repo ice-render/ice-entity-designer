@@ -265,7 +265,7 @@ export default class PowerSymbol extends ICEGroup {
         ? voltageColorOf(this.state.voltageLevel, this.state.voltageColors || undefined)
         : baseStroke || POWER_NEUTRAL_COLOR;
     const cx = w / 2;
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
     const isSwitch = POWER_SWITCH_KINDS.indexOf(kind) !== -1;
     const closed = this.state.switchState === 'closed';
 
@@ -771,7 +771,7 @@ export default class PowerSymbol extends ICEGroup {
       this.__add(
         'earth',
         new ICEPolyLine({
-          zIndex: (this.state.zIndex || 0) + 2,
+          zIndex: (Number(this.state.zIndex) || 0) + 2,
           points: [
             [cx - half, top + index * gap],
             [cx + half, top + index * gap],

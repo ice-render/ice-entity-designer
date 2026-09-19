@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import { Deserializer, Serializer, exportSvg } from 'ice-render';
+import { Deserializer, Serializer, exportSvg, ICE_EVENT_NAME_CONSTS } from 'ice-render';
 import { applyDesignerChrome } from '../theme/designerTheme';
 import { enableDesignerAlignmentGuides } from '../designer/alignmentGuides';
 import type { ICE, SvgExportOptions } from 'ice-render';
@@ -320,16 +320,16 @@ export default class FlowDesigner {
     if (!node || typeof node.on !== 'function') {
       return;
     }
-    node.on('BEFORE_MOVE', this.__beforeMoveHandler, this);
-    node.on('AFTER_MOVE', this.__afterMoveHandler, this);
+    node.on(ICE_EVENT_NAME_CONSTS.BEFORE_MOVE, this.__beforeMoveHandler, this);
+    node.on(ICE_EVENT_NAME_CONSTS.AFTER_MOVE, this.__afterMoveHandler, this);
   }
 
   protected __detachNodeListeners(node: any): void {
     if (!node || typeof node.off !== 'function') {
       return;
     }
-    node.off('BEFORE_MOVE', this.__beforeMoveHandler, this);
-    node.off('AFTER_MOVE', this.__afterMoveHandler, this);
+    node.off(ICE_EVENT_NAME_CONSTS.BEFORE_MOVE, this.__beforeMoveHandler, this);
+    node.off(ICE_EVENT_NAME_CONSTS.AFTER_MOVE, this.__afterMoveHandler, this);
   }
 
   private __onBeforeMove(): void {

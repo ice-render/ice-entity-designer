@@ -6,6 +6,7 @@
  *
  */
 
+import { ICE_EVENT_NAME_CONSTS } from 'ice-render';
 import FlowDesigner from '../flow/FlowDesigner';
 import FlowEdge from '../flow/FlowEdge';
 import PowerSymbol, { POWER_SWITCH_KINDS } from './power_shapes';
@@ -546,7 +547,7 @@ export default class PowerDesigner extends FlowDesigner {
     }
     bus.__powerBusWatched = true;
     bus.on(
-      'AFTER_MOVE',
+      ICE_EVENT_NAME_CONSTS.AFTER_MOVE,
       () => {
         const attached = this.nodes.filter((node: any) => node.state.attachedBusId === bus.state.id);
         if (!attached.length) {

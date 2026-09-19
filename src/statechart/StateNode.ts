@@ -35,6 +35,20 @@ export default class StateNode extends ICEGroup {
     return true;
   }
 
+  /**
+   * StateNode **既是复合组件、又是容器**：形状 / 名字 / 终止态内圈是派生的（不进文档），
+   * 但**复合状态里的子状态是真嵌套的子节点**（见 `StatechartDesigner.__nestByGeometry`：拖动复合状态，
+   * 子状态跟着走），必须进文档 —— 否则 `serialize() → load()` 之后子状态整套消失。
+   *
+   * 实测事故：只声明 `hasDerivedChildren()` 时，示例里按下**一次「撤销」**就会把
+   * 「库存校验 / 安排发货」两个子状态删掉（撤销走的是快照恢复：`serialize()` 只存了复合状态自己）。
+   * 引擎为此留了 `getSerializableChildren()` 钩子（BPMN 的 `FlowNode` 是同一个用法，见其注释）。
+   */
+  public getSerializableChildren(): any[] {
+    const derived = [this.shapeComponent, this.innerRingComponent, this.labelComponent];
+    return this.childNodes.filter((child: any) => derived.indexOf(child) === -1);
+  }
+
   constructor(props: any = {}) {
     super(StateNode.arrangeParam(props));
     this.syncShape();
@@ -101,12 +115,12 @@ export default class StateNode extends ICEGroup {
   /**
    * 按 kind 重建内部形状与名字。
    *
-   * zIndex 必须显式给：引擎在**构造时**分配自增 zIndex，后构造的会盖住先构造的
+   * zIndex 必须显式给：默认值 `'auto'`（排序当 0）会让同级组件平手，
    * （UML 那边就踩过「底色带盖住类名」），这里统一「形状在下、文字在上」。
    */
   protected syncShape(): void {
     this.__clearDerivedChildren();
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
     const kind: StatechartNodeKind = (this.state.kind || 'state') as StatechartNodeKind;
     const width = this.state.width;
     const height = this.state.height;
@@ -161,8 +175,13 @@ export default class StateNode extends ICEGroup {
     }
 
     // 普通状态 / 复合状态：圆角矩形 + 名字
+    //
+    // ⚠️ **复合状态的框要画在子状态之下**：复合状态是容器（子状态是真嵌套的子节点，
+    // 见 StatechartDesigner.__nestByGeometry），而渲染顺序是「树序 + 兄弟按 zIndex 升序」——
+    // 框是容器的子组件，和子状态是**兄弟**，写成 `baseZ + 1` 就会排在子状态（`'auto'` = 0）之后，
+    // 把整框子状态盖成一块白底（BPMN 的池/泳道踩过同一个坑，见 FlowNode 的 BPMN_STRUCT_Z）。
     this.shapeComponent = new ICERect({
-      zIndex: baseZ + 1,
+      zIndex: kind === 'composite' ? baseZ - 1 : baseZ + 1,
       left: 0,
       top: 0,
       width,

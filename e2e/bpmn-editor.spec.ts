@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { pixelAtWorld } from './canvas-helpers';
 
 /**
  * examples/bpmn-editor.html 端到端回归：BPMN 案例（信用卡申请审批）。
@@ -59,6 +60,36 @@ test('加载：BPMN 案例渲染、元素类型齐全、零控制台报错', asy
   // 引擎自带的对齐标尺没有被禁用（拖拽时会显示对齐提示线）
   expect(await page.evaluate(() => (window as any).__ice.alignmentGuide.isEnabled())).toBe(true);
   expect((page as any).__errors).toEqual([]);
+});
+
+/**
+ * **像素级回归：池的底不能盖住泳道内容。**
+ *
+ * 引擎 2.13.0 起渲染顺序是「树序（先父后子）+ 兄弟按 zIndex 升序」。池的底**是池的一个子组件**，
+ * 与"池里的泳道"是同层兄弟 —— 它的 zIndex 一旦不比自己这一层的内容（泳道 -20000 档）低，
+ * 泳道连同泳道里的全部节点会先画完，池的底最后盖上来，**任务矩形全部消失**（2026-09 的真实事故）。
+ *
+ * 断言口径与配色解耦：在任务框内部取一个**避开文字与角标**的点，它必须等于任务自己的填充色，
+ * 且不能等于池的填充色 —— 被池底盖住时这两个值正好相等。
+ */
+test('像素：池的底不盖泳道内容（任务矩形真的画出来了）', async ({ page }) => {
+  const target = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const task = designer.nodes.find((node: any) => node.state.kind === 'bpmnTask');
+    const pool = designer.nodes.find((node: any) => node.state.kind === 'bpmnPool');
+    const box = task.getMinBoundingBox(true);
+    const width = box.br[0] - box.tl[0];
+    const height = box.br[1] - box.tl[1];
+    return {
+      title: task.state.title,
+      point: [box.tl[0] + width * 0.1, box.tl[1] + height * 0.5],
+      taskFill: task.shapeComponent.state.style.fillStyle,
+      poolFill: pool.shapeComponent.state.style.fillStyle,
+    };
+  });
+  expect(target.taskFill).not.toBe(target.poolFill);
+  const pixel = await pixelAtWorld(page, target.point[0], target.point[1]);
+  expect(pixel, `任务「${target.title}」中心应画在自己的填充色上`).toBe(target.taskFill);
 });
 
 test('容器：拖动池会带着泳道与里面的节点一起走（引擎容器能力）', async ({ page }) => {

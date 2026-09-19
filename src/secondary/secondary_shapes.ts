@@ -140,7 +140,7 @@ export default class SecondarySymbol extends ICEGroup {
     const h = this.state.height || preset.height;
     const strokeStyle = (this.state.style && this.state.style.strokeStyle) || SECONDARY_STYLE.strokeStyle;
     const lw = (this.state.style && this.state.style.lineWidth) || SECONDARY_STYLE.lineWidth;
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
     const closed = this.state.switchState === 'closed';
     const cy = h / 2;
 

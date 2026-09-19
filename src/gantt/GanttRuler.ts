@@ -60,7 +60,7 @@ export default class GanttRuler extends ICEGroup {
     const chartWidth = labelColumnWidth + dayCount * dayWidth;
     this.state.width = chartWidth;
     this.state.height = headerHeight + tasks.length * rowHeight;
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
 
     // 左列底色 + 表头底色
     this.addChild(

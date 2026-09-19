@@ -78,6 +78,13 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
   不提供缩放/旋转/斜切手柄（尺寸与朝向是记法的一部分）；需要变尺寸的元素（母线长度、BPMN 池/泳道、
   柜体宽高、流程图节点尺寸…）在属性面板里用数值改，甘特条宽度则由「天数 × 每日像素」推出。
   图纸整体缩放走滚轮（视图缩放），与图元缩放严格分开。
+- **容器与结构层 z 序**：引擎的绘制顺序是「树序（先父后子）+ **兄弟按 `zIndex` 升序**」，而
+  **容器的底是容器自己的派生形状**（`FlowNode` / `StateNode` 的形状由子组件绘制）—— 它和容器里的
+  内容（泳道 / 子状态）是**同层兄弟**，所以结构容器的底必须压在自己这一层的内容之下：
+  BPMN 池 / 泳道走 `BPMN_STRUCT_Z`（池 `-30000` < 泳道 `-20000` < 业务图元 `'auto'`，容器的底再各低一档），
+  状态机的复合状态同理（框压在自己框里的子状态之下）。**写反的表现是整段内容被自己的底色盖住**
+  （BPMN 案例里任务矩形全部消失、状态机案例里复合状态变成空框）：
+  回归见 `tests/designer/container-content-paint-order.test.ts` 与两个示例页的像素级 e2e。
 - **拖拽对齐引导线与磁吸（默认开启）**：图元位置**就是数据**、没有布局能约束它，缺了引导必然越拖越乱
   （"看着对齐了、其实差 3px"），所以设计器在构造时就调用 `ice.alignmentGuide.enable({ threshold: 6 })`：
   拖动时出对齐提示线，并按**边缘 / 中心 / 等间距**三类候选吸附。想调阈值或关掉：
@@ -604,6 +611,10 @@ export default function App() {
 ### 6.1 取用实例的两种方式
 
 - **`ref`**：命令式 API —— `addEntity` / `connect` / `updateEntity` / `updateRelation` / `remove` / `loadProject` / `undo` / `redo` / `toSchemaObject` / `toSchemaString` / `validate` / `serializeProject`。
+  **同层叠放次序**另有四个方法（实体与连线同一套，不传 id 时作用于当前选中项，返回"是否真的改了"）：
+  `bringToFront(id?)` / `sendToBack(id?)` / `moveUp(id?)` / `moveDown(id?)` —— 它们走引擎的
+  `zIndex` 语义（默认 `'auto'`、只在兄弟之间比较），**应用自己钉成正数的节点不参与重排**，
+  所以"置顶一次，浮层就掉下去了"这种事不会发生；改动同样进 undo/redo。
 - **`useEntityDesigner()`**：在 `<EntityDesignerCanvas>` 子树内直接取到底层 `EntityDesigner` 实例（如上例的 `Stats`）。
 
 ### 6.2 组件属性

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectCanvasInteractions } from './canvas-helpers';
+import { darkPixelsInWorldBox, expectCanvasInteractions } from './canvas-helpers';
 
 /**
  * examples/statechart-editor.html 端到端回归：状态机域包（订单状态机，含复合状态）。
@@ -57,6 +57,53 @@ test('复合状态的容器行为：拖动复合状态，子状态跟着走', as
   });
   expect(delta[0]).toBeCloseTo(60, 1);
   expect(delta[1]).toBeCloseTo(40, 1);
+});
+
+/**
+ * **像素级回归：复合状态的框不能盖住子状态。**
+ *
+ * 与 BPMN 的池/泳道同源：复合状态是容器（子状态是真嵌套的子节点），它的框**是它自己的派生形状**，
+ * 与子状态是同层兄弟；框的 zIndex 一旦不低于子状态，子状态会先画完、框最后盖上来 ——
+ * 页面表现是**复合状态变成一个空框**（2026-09 的真实事故）。
+ */
+test('像素：复合状态的框不盖子状态（子状态真的画出来了）', async ({ page }) => {
+  const inset = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const child = designer.nodes.find((node: any) => node.state.title === '库存校验');
+    const box = child.getMinBoundingBox(true);
+    // 往里缩 6px：只看子状态的**内部**（避开它自己的边框），有没有画出它的名字
+    const pad = 6;
+    return [box.tl[0] + pad, box.tl[1] + pad, box.br[0] - pad, box.br[1] - pad];
+  });
+  // 复合状态与子状态都是白底（比色法失效）→ 判据用"名字的墨点"：被框盖住时框内一个墨点都没有
+  expect(await darkPixelsInWorldBox(page, inset)).toBeGreaterThan(20);
+});
+
+/**
+ * **撤销不丢子状态**：复合状态里放子状态后按一次撤销 —— 撤销走的是"恢复上一个快照"，
+ * 而快照序列化只写 `getSerializableChildren()`。漏了这个钩子时，撤销会把子状态整套删掉
+ * （实测：示例里按一次撤销，「库存校验 / 安排发货」两个子状态消失）。
+ */
+test('撤销：复合状态里的子状态不会在撤销时丢失', async ({ page }) => {
+  const before = await page.evaluate(() =>
+    (window as any).__designer.nodes.map((node: any) => node.state.title).sort()
+  );
+  await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    designer.createState({ title: '新增子状态', left: 640, top: 400, width: 160, height: 60 });
+  });
+  await page.waitForTimeout(150);
+  await page.click('#btn-undo');
+  await page.waitForTimeout(200);
+  expect(
+    await page.evaluate(() => (window as any).__designer.nodes.map((node: any) => node.state.title).sort())
+  ).toEqual(before);
+  await page.click('#btn-redo');
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => (window as any).__designer.nodes.map((node: any) => node.state.title))).toContain(
+    '新增子状态'
+  );
+  expect((page as any).__errors).toEqual([]);
 });
 
 test('语义校验与矢量导出：注入违规后能报出，导出的 SVG 含状态名与转移标签', async ({ page }) => {

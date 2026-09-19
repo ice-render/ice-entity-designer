@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import { ICEGroup, ICERect, ICEText } from 'ice-render';
+import { ICEGroup, ICERect, ICEText, ICE_EVENT_NAME_CONSTS } from 'ice-render';
 import { normalizeLabelStyle } from '../utils/label-style';
 import merge from 'lodash/merge';
 import { addDays, diffDays } from './gantt_date';
@@ -97,7 +97,7 @@ export default class GanttTask extends ICEGroup {
       this.syncBar();
       // 日期/天宽变化也是「移动」：必须派发 AFTER_MOVE，挂在本任务上的依赖线才能重路由
       // （引擎的连线跟随就是订阅宿主的 AFTER_MOVE / AFTER_RESIZE / AFTER_ROTATE）。
-      this.trigger('AFTER_MOVE', { left: this.state.left, top: this.state.top, target: this });
+      this.trigger(ICE_EVENT_NAME_CONSTS.AFTER_MOVE, { left: this.state.left, top: this.state.top, target: this });
     }
   }
 
@@ -146,7 +146,7 @@ export default class GanttTask extends ICEGroup {
 
   protected syncBar(): void {
     this.__clearDerivedChildren();
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
     const width = this.state.width;
     const height = this.state.height;
     const style = this.state.style;
