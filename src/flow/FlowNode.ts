@@ -173,6 +173,38 @@ export const FLOW_NODE_KINDS: Record<FlowNodeKind, FlowNodePreset> = {
 };
 
 /**
+ * BPMN **结构层 z 带**（池 < 泳道 < 业务图元 `'auto'` = 0）。
+ *
+ * 为什么要有"带"而不是一个值：池装泳道、泳道装节点是**真嵌套**（引擎容器），而渲染顺序是
+ * 「树序（先父后子）+ 兄弟按 zIndex 升序」（见 ice-render 的渲染顺序铁律）。
+ * `FlowNode` 的**底也是它的一个子组件**（形状由子组件绘制，这样才能画菱形 / 平行四边形 / 事件圆），
+ * 于是"容器的底"和"容器里的内容"是**同一个父容器下的兄弟** —— 只能靠 `zIndex` 把底压到内容之下。
+ *
+ * ⚠️ 踩过的坑（2026-09-17 引擎 2.13.0 把"全局按 zIndex 排序"改成"树序 + 兄弟排序"之后暴露）：
+ * 池的底原本是默认的 `'auto'`（0），而泳道是 -20000 —— 排序后**泳道连同泳道里的全部节点先画完**，
+ * 池的底最后才画，于是**整个池的内容被自己的底色盖成一片**：
+ * BPMN 案例里任务矩形全部消失（只剩连线和文字）。
+ */
+export const BPMN_STRUCT_Z = { pool: -30000, lane: -20000 } as const;
+
+/**
+ * 池 / 泳道的**底**再往下一档：底必须低于自己这一层的内容（池里是泳道、泳道里是节点）。
+ *
+ * 取值直接由结构层带推出（池 -30001 < 泳道 -20000，泳道 -20001 < 业务图元），
+ * 比"写死一个很小的数"更不容易失配：加了新结构层也不会漏掉这一步。
+ * 其它类型节点返回 `undefined` —— 它们没有真嵌套的子节点，形状沿用默认（加入顺序即正确次序）。
+ */
+export function bpmnFurnitureZ(kind: FlowNodeKind | string): number | undefined {
+  if (kind === 'bpmnPool') {
+    return BPMN_STRUCT_Z.pool - 1;
+  }
+  if (kind === 'bpmnLane') {
+    return BPMN_STRUCT_Z.lane - 1;
+  }
+  return undefined;
+}
+
+/**
  * BPMN 语义上**不能作为连线端点**的图元（2026-09-13 修）。
  *
  * 引擎的 `linkable` 是"能不能作为**任何**连线的端点"的单一开关，本身不区分连线类型；
@@ -283,7 +315,10 @@ export default class FlowNode extends ICEGroup {
     }
     const preset = FLOW_NODE_KINDS[this.state.kind as FlowNodeKind] || FLOW_NODE_KINDS.process;
     const ShapeCtor = SHAPE_BY_KIND[preset.shape] || ICERect;
+    // 池 / 泳道的底压在自己这一层的内容之下（见 BPMN_STRUCT_Z）；其它类型的形状不写 zIndex。
+    const furnitureZ = bpmnFurnitureZ(this.state.kind);
     this.shapeComponent = new ShapeCtor({
+      ...(furnitureZ === undefined ? {} : { zIndex: furnitureZ }),
       left: 0,
       top: 0,
       width: this.state.width,

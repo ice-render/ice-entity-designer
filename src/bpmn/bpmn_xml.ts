@@ -24,6 +24,7 @@
  * 与引擎 `Deserializer` 的容错语义保持一致。
  */
 import type FlowDesigner from '../flow/FlowDesigner';
+import { BPMN_STRUCT_Z } from '../flow/FlowNode';
 import type { FlowNodeKind } from '../flow/FlowNode';
 
 const BPMN_NS = 'http://www.omg.org/spec/BPMN/20100524/MODEL';
@@ -398,8 +399,8 @@ export function fromBpmnXml(xml: string, designer: FlowDesigner): BpmnImportResu
     });
     idMap.set(id, pool.state.id);
     nodeCount += 1;
-    // 池需要垫在所有元素之下
-    pool.setState({ zIndex: 0 });
+    // 池需要垫在所有元素之下（`createNode` 已经按结构层带设过，这里显式重申一次口径，别写成 0）
+    pool.setState({ zIndex: BPMN_STRUCT_Z.pool });
   });
 
   all.forEach((element) => {

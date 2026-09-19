@@ -54,6 +54,67 @@ export async function findBlankPoint(page: Page): Promise<{ x: number; y: number
   return point as { x: number; y: number };
 }
 
+/**
+ * 读画布上**世界坐标**处的像素（`#rrggbb`）。
+ *
+ * 用途：断言"某个图元**真的画出来了**"——结构性断言（节点数 / 嵌套 / zIndex）看不出
+ * "被别的图元盖住"这种绘制事故（例如池的底排在泳道内容之后，把整个池内容盖成一片底色）。
+ * 世界坐标 → CSS 像素用引擎视口、CSS 像素 → 设备像素用画布实际尺寸比（dpr 自适应）。
+ */
+export async function pixelAtWorld(page: Page, wx: number, wy: number): Promise<string> {
+  return page.evaluate(
+    (point) => {
+      const ice = (window as any).__ice;
+      const canvas = document.getElementById('canvas-1') as HTMLCanvasElement;
+      const context = canvas.getContext('2d');
+      if (!context) return 'no-context';
+      const vp = ice.viewport;
+      const dpr = canvas.width / canvas.getBoundingClientRect().width || 1;
+      const sx = Math.round((point.x * vp.scale + vp.tx) * dpr);
+      const sy = Math.round((point.y * vp.scale + vp.ty) * dpr);
+      const data = context.getImageData(sx, sy, 1, 1).data;
+      return `#${[data[0], data[1], data[2]].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+    },
+    { x: wx, y: wy }
+  );
+}
+
+/**
+ * 统计某个世界坐标矩形里"有墨"的像素数（亮度低于阈值的点）。
+ *
+ * 用途：断言**图元的内容（轮廓 / 文字）真的落在画布上**。当两个图元的填充色相同时
+ * （例如状态机的复合状态与子状态都是白底），比色法失效 —— 但"名字有没有画出来"始终有效：
+ * 被容器底色盖住时，框里一个墨点都没有。
+ */
+export async function darkPixelsInWorldBox(page: Page, box: number[], threshold = 200): Promise<number> {
+  return page.evaluate(
+    (input) => {
+      const ice = (window as any).__ice;
+      const canvas = document.getElementById('canvas-1') as HTMLCanvasElement;
+      const context = canvas.getContext('2d');
+      if (!context) return -1;
+      const vp = ice.viewport;
+      const dpr = canvas.width / canvas.getBoundingClientRect().width || 1;
+      const toDevice = (wx: number, wy: number) => [
+        Math.round((wx * vp.scale + vp.tx) * dpr),
+        Math.round((wy * vp.scale + vp.ty) * dpr),
+      ];
+      const [x0, y0] = toDevice(input.box[0], input.box[1]);
+      const [x1, y1] = toDevice(input.box[2], input.box[3]);
+      const width = Math.max(1, x1 - x0);
+      const height = Math.max(1, y1 - y0);
+      const data = context.getImageData(x0, y0, width, height).data;
+      let dark = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const luminance = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        if (luminance < input.threshold) dark++;
+      }
+      return dark;
+    },
+    { box, threshold }
+  );
+}
+
 /** 三段式回归：滚轮缩放 → 中键/空白拖拽平移 → 复位回单位视口 */
 export async function expectCanvasInteractions(page: Page): Promise<void> {
   const size = await canvasSize(page);

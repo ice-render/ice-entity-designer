@@ -6,7 +6,7 @@
  *
  */
 import FlowDesigner from '../flow/FlowDesigner';
-import { FLOW_NODE_KINDS } from '../flow/FlowNode';
+import { BPMN_STRUCT_Z, FLOW_NODE_KINDS } from '../flow/FlowNode';
 import { BpmnFlowMarker } from './bpmn_shapes';
 import { validateBpmn } from './bpmn_validate';
 import type { BpmnIssue } from './bpmn_validate';
@@ -60,11 +60,11 @@ export default class BpmnDesigner extends FlowDesigner {
       return;
     }
     if (node.state.kind === 'bpmnPool') {
-      node.setState({ zIndex: -30000 }); // 结构层：池垫在所有元素之下
+      node.setState({ zIndex: BPMN_STRUCT_Z.pool }); // 结构层：池垫在所有元素之下
       return;
     }
     if (node.state.kind === 'bpmnLane') {
-      node.setState({ zIndex: -20000 }); // 泳道在池之上、业务图元之下
+      node.setState({ zIndex: BPMN_STRUCT_Z.lane }); // 泳道在池之上、业务图元之下
     }
     const box = node.getMinBoundingBox(true);
     const cx = (box.tl[0] + box.br[0]) / 2;
