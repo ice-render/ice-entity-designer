@@ -10,10 +10,13 @@
  *   - BPMN 案例：池的底（默认 `'auto'` = 0）排在泳道（-20000）之后 → **任务矩形全部消失**；
  *   - 状态图案例：复合状态的框（`baseZ + 1` = 1）排在子状态（`'auto'` = 0）之后 → **复合状态变成空框**。
  *
- * 本用例锁住的是**次序**而不是具体的 z 数值：只要"底"在兄弟排序里排在内容之前，
- * 换一套结构层编号也不会被这条判据漏掉。
+ * 本用例锁住的是**绘制次序**而不是具体的 z 数值：判据走引擎导出的 `paintOrderChildrenOf`
+ * （与画布/导出同源的那份排序口径），所以"底必须排在内容之前"这件事换一套 z 编号也不会漏。
+ *
+ * 注：底排在内容之前**不再靠应用自己钉 zIndex** —— ice-render 2.19.0 起引擎保证派生部件先画
+ * （见 README「容器与结构层 z 序」）。这里断言的是**最终绘制次序**，不是某个具体数值。
  */
-import { ICE, EventBus, sortSiblingsByZIndex } from 'ice-render';
+import { ICE, EventBus, paintOrderChildrenOf } from 'ice-render';
 import BpmnDesigner from '../../src/bpmn/BpmnDesigner';
 import StatechartDesigner from '../../src/statechart/StatechartDesigner';
 
@@ -25,9 +28,9 @@ function makeIce(): any {
   return ice;
 }
 
-/** 同一个父容器下，「a 是否排在 b 之前」（渲染顺序 = 兄弟按 zIndex 升序，稳定）。 */
+/** 同一个父容器下，「a 是否排在 b 之前」（引擎的绘制次序口径：派生部件在前、真实子节点在后）。 */
 function paintsBefore(parent: any, a: any, b: any): boolean {
-  const order = sortSiblingsByZIndex(parent.childNodes);
+  const order = paintOrderChildrenOf(parent);
   const ia = order.indexOf(a);
   const ib = order.indexOf(b);
   expect(ia).toBeGreaterThanOrEqual(0);
@@ -72,6 +75,7 @@ describe('容器的底画在内容之下（渲染顺序铁律）', () => {
     // 池节点自己必须低于业务图元（-30000 档），否则顶层排序里它会跑到连线/图元之上
     expect(typeof pool.state.zIndex).toBe('number');
     expect(pool.state.zIndex).toBeLessThan(0);
-    expect(pool.shapeComponent.state.zIndex).toBeLessThan(pool.state.zIndex);
+    // 底不靠应用钉 zIndex（引擎保证派生部件先画），保持默认即可
+    expect(pool.shapeComponent.state.zIndex).toBe('auto');
   });
 });

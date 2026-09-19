@@ -176,12 +176,12 @@ export default class StateNode extends ICEGroup {
 
     // 普通状态 / 复合状态：圆角矩形 + 名字
     //
-    // ⚠️ **复合状态的框要画在子状态之下**：复合状态是容器（子状态是真嵌套的子节点，
-    // 见 StatechartDesigner.__nestByGeometry），而渲染顺序是「树序 + 兄弟按 zIndex 升序」——
-    // 框是容器的子组件，和子状态是**兄弟**，写成 `baseZ + 1` 就会排在子状态（`'auto'` = 0）之后，
-    // 把整框子状态盖成一块白底（BPMN 的池/泳道踩过同一个坑，见 FlowNode 的 BPMN_STRUCT_Z）。
+    // 复合状态的框是**派生部件**（StateNode 声明了 getSerializableChildren），所以它永远画在
+    // 真实子节点（子状态）之下 —— 这条由引擎保证（ice-render 2.19.0 的 paintOrderChildrenOf，
+    // CSS 背景语义），这里不需要为了"别盖住子状态"再写负的 zIndex（2026-09 曾用 baseZ - 1 绕过，
+    // 那是引擎还没给保证时的权宜写法）。zIndex 只用来在**派生部件之间**定序：框在下、名字在上。
     this.shapeComponent = new ICERect({
-      zIndex: kind === 'composite' ? baseZ - 1 : baseZ + 1,
+      zIndex: baseZ + 1,
       left: 0,
       top: 0,
       width,
