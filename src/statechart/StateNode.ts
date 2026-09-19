@@ -101,12 +101,12 @@ export default class StateNode extends ICEGroup {
   /**
    * 按 kind 重建内部形状与名字。
    *
-   * zIndex 必须显式给：引擎在**构造时**分配自增 zIndex，后构造的会盖住先构造的
+   * zIndex 必须显式给：默认值 `'auto'`（排序当 0）会让同级组件平手，
    * （UML 那边就踩过「底色带盖住类名」），这里统一「形状在下、文字在上」。
    */
   protected syncShape(): void {
     this.__clearDerivedChildren();
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
     const kind: StatechartNodeKind = (this.state.kind || 'state') as StatechartNodeKind;
     const width = this.state.width;
     const height = this.state.height;

@@ -54,7 +54,9 @@ export const CONSTRUCTOR_DEFAULT_STATE_KEYS = ['closePath', 'clipChildren', 'tit
 /** Entity / Relation 通用字段 */
 export const COMPONENT_BASE_FIELDS: CodecField[] = [
   { key: 'display', type: 'boolean' },
-  { key: 'zIndex', type: 'number' },
+  // zIndex：数字（显式钉子）或 'auto'（默认值，排序当 0）—— 引擎 2026-09 起默认值是 'auto'，
+  // 所以这里不能用 'number' 校验，否则每份文档都会被判成非法。
+  { key: 'zIndex', type: 'any' },
   { key: 'opacity', type: 'number', doc: '子树不透明度（引擎 1.3 起）' },
   { key: 'transform', type: 'object' },
   { key: 'origin', type: 'string' },

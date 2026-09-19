@@ -146,7 +146,7 @@ export default class GanttTask extends ICEGroup {
 
   protected syncBar(): void {
     this.__clearDerivedChildren();
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
     const width = this.state.width;
     const height = this.state.height;
     const style = this.state.style;

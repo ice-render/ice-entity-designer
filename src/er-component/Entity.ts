@@ -169,7 +169,7 @@ export default class Entity extends ICEGroup {
           top: inset,
           width: Math.max(this.state.width - lineWidth, 0),
           height: Math.max(this.entityNameComponent.state.height - inset, 0),
-          zIndex: this.entityNameComponent.state.zIndex - 1,
+          zIndex: (Number(this.entityNameComponent.state.zIndex) || 0) - 1,
           origin: 'top-left',
           style: {
             fillStyle: this.state.headerStyle.backgroundColor,

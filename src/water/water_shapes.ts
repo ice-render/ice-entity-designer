@@ -335,7 +335,7 @@ export default class WaterSymbol extends ICEGroup {
     const fillStyle = isSludge ? WATER_STYLE.sludgeFill : WATER_STYLE.waterFill;
     const cx = w / 2;
     const cy = h / 2;
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
     this.__originX = cx;
     this.__originY = cy;
 
@@ -785,7 +785,7 @@ export default class WaterSymbol extends ICEGroup {
         stroke: false,
         interactive: false,
         linkable: false,
-        zIndex: (this.state.zIndex || 0) + 4,
+        zIndex: (Number(this.state.zIndex) || 0) + 4,
         style: { fontSize, fillStyle: color, textAlign, textBaseline: 'middle' },
       })
     );

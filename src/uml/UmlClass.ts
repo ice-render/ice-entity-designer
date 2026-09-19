@@ -152,11 +152,11 @@ export default class UmlClass extends ICEGroup {
 
     let cursorY = 0;
 
-    // zIndex：引擎在**构造时**给每个组件分配自增 zIndex（`ICEComponent.instanceCounter++`），
+    // zIndex：`baseZ` 取本组件当前的 zIndex（引擎 2026-09 起默认值 `'auto'`，排序当 0），
     // 所以「先 addChild 的在下」并不成立 —— 标题背景是在文字之后构造的，默认会盖住类名
     // （浏览器实测：类名整条被底色带盖掉）。派生内部子组件一律显式给 z 序：
     // 背景 < 文字/分隔线（与 ER 的 Entity 用「zIndex - 1」是同一个处理）。
-    const baseZ = this.state.zIndex || 0;
+    const baseZ = Number(this.state.zIndex) || 0;
 
     // 行高按**字号解析式**算：ICEText 的高度依赖运行时的文本度量（Node / 服务端量不出来，
     // 会退化成默认高度），而类框高度是记法的一部分（成员不能画到框外），必须稳定可预期。
