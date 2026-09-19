@@ -604,6 +604,10 @@ export default function App() {
 ### 6.1 取用实例的两种方式
 
 - **`ref`**：命令式 API —— `addEntity` / `connect` / `updateEntity` / `updateRelation` / `remove` / `loadProject` / `undo` / `redo` / `toSchemaObject` / `toSchemaString` / `validate` / `serializeProject`。
+  **同层叠放次序**另有四个方法（实体与连线同一套，不传 id 时作用于当前选中项，返回"是否真的改了"）：
+  `bringToFront(id?)` / `sendToBack(id?)` / `moveUp(id?)` / `moveDown(id?)` —— 它们走引擎的
+  `zIndex` 语义（默认 `'auto'`、只在兄弟之间比较），**应用自己钉成正数的节点不参与重排**，
+  所以"置顶一次，浮层就掉下去了"这种事不会发生；改动同样进 undo/redo。
 - **`useEntityDesigner()`**：在 `<EntityDesignerCanvas>` 子树内直接取到底层 `EntityDesigner` 实例（如上例的 `Stats`）。
 
 ### 6.2 组件属性

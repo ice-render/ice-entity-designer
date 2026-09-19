@@ -908,3 +908,73 @@ describe('EntityDesigner 快照完整性（通用 ICE 字段与箭头字段）',
     expect(validateProjectSnapshot(broken).valid).toBe(false);
   });
 });
+
+describe('同层叠放次序（bringToFront / sendToBack / moveUp / moveDown）', () => {
+  /**
+   * 绘制次序（自下而上）。刻意**不引用引擎的新导出**（`sortSiblingsByZIndex`）：
+   * 本仓的 peer 依赖是已发布的 `ice-render@^2.16.x`，CI 上跑的是那个版本 ——
+   * 断言口径自己写一份，才在"旧引擎 + 新引擎"两种环境下都成立。
+   */
+  const zKey = (c: any) => (typeof c.state.zIndex === 'number' ? c.state.zIndex : 0);
+  const paintNames = (list: any[]) =>
+    list
+      .slice()
+      .sort((x: any, y: any) => zKey(x) - zKey(y))
+      .map((c: any) => c.state.entityName || c.state.label || c.state.id);
+
+  it('bringToFront / sendToBack 走引擎 API，且能 undo 回去', () => {
+    const { ice, designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    const b = designer.createEntity({ entityName: 'B' });
+    designer.createEntity({ entityName: 'C' });
+    expect(paintNames(ice.childNodes)).toEqual(['A', 'B', 'C']);
+
+    expect(designer.bringToFront(a.state.id)).toBe(true);
+    expect(paintNames(ice.childNodes)).toEqual(['B', 'C', 'A']);
+
+    designer.undo();
+    expect(paintNames(ice.childNodes)).toEqual(['A', 'B', 'C']);
+
+    expect(designer.sendToBack(b.state.id)).toBe(true);
+    expect(paintNames(ice.childNodes)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('moveUp / moveDown 逐位移；到端点时不记历史（不会白清 redo）', () => {
+    const { ice, designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    designer.createEntity({ entityName: 'B' });
+    designer.createEntity({ entityName: 'C' });
+
+    expect(designer.moveUp(a.state.id)).toBe(true);
+    expect(paintNames(ice.childNodes)).toEqual(['B', 'A', 'C']);
+    expect(designer.moveUp(a.state.id)).toBe(true);
+    expect(paintNames(ice.childNodes)).toEqual(['B', 'C', 'A']);
+
+    // 已在最上：false，且**不该**压历史 —— 一次 undo 应回到"上一步有效移动"之前
+    expect(designer.moveUp(a.state.id)).toBe(false);
+    designer.undo();
+    expect(paintNames(ice.childNodes)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('连线与实体同一套：不传 id 时作用于当前选中项；无效 id / 无选中返回 false', () => {
+    const { ice, designer } = makeDesigner();
+    const a = designer.createEntity({ entityName: 'A' });
+    designer.createEntity({ entityName: 'B' });
+    const r = designer.createRelation({ label: 'R' });
+    expect(paintNames(ice.childNodes)).toEqual(['A', 'B', 'R']);
+
+    // 连线也在同一层：sendToBack 把它压到最下（可见变化）
+    expect(designer.sendToBack(r.state.id)).toBe(true);
+    expect(paintNames(ice.childNodes)).toEqual(['R', 'A', 'B']);
+
+    // 不传 id → 作用于选中项
+    designer.select(a.state.id);
+    expect(designer.bringToFront()).toBe(true);
+    expect(paintNames(ice.childNodes)).toEqual(['R', 'B', 'A']);
+
+    // 无效 id / 无选中 → false（不记历史）
+    expect(designer.bringToFront('no-such-id')).toBe(false);
+    designer.select(null);
+    expect(designer.moveUp()).toBe(false);
+  });
+});

@@ -188,6 +188,69 @@ export default class EntityDesigner {
     this.__emitChange();
   }
 
+  /**
+   * **同层叠放次序**（实体 / 连线都适用，作用域是"同一个父容器"，`zIndex` 只在兄弟之间比较）。
+   *
+   * 四个方法都走引擎的对应 API，不自己算 `zIndex`：
+   * 引擎 2026-09 起默认值是 `'auto'`（排序当 0，平手按加入顺序），重排 API 把同层重编号成
+   * `-(n-1) … 'auto'`，而且**应用自己钉成正数的节点不参与、也不会被改写**。
+   *
+   * - 不传 `id` 时作用于当前选中项；
+   * - 返回**是否真的改了**：没改动（不在画布里 / 已在端点 / 被正数钉子压着）时**不记历史、不发通知**；
+   * - 改了才 `captureHistory` 的等价动作（先取快照、确认有变再压栈），所以 `undo()` 能回到重排前。
+   */
+  public bringToFront(id?: string): boolean {
+    return this.__reorder(id, 'front');
+  }
+
+  public sendToBack(id?: string): boolean {
+    return this.__reorder(id, 'back');
+  }
+
+  public moveUp(id?: string): boolean {
+    return this.__reorder(id, 'up');
+  }
+
+  public moveDown(id?: string): boolean {
+    return this.__reorder(id, 'down');
+  }
+
+  private __reorder(id: string | undefined, how: 'front' | 'back' | 'up' | 'down'): boolean {
+    const target = id ? this.ice.findComponent(id) : this.selected;
+    if (!target || typeof target.bringToFront !== 'function') {
+      return false;
+    }
+    // 兄弟列表：优先父容器，其次 ICE 的组件层（顶层实体 / 连线）
+    const list: any[] =
+      target.parentNode && Array.isArray(target.parentNode.childNodes)
+        ? target.parentNode.childNodes
+        : this.ice.childNodes;
+    if (!Array.isArray(list) || list.length < 2) {
+      return false;
+    }
+    // 先取快照、改完再判断"是否真的有变" —— 没变就不压历史（否则无意义的点击会把 redo 清掉）
+    const snapshot = this.serializeProject();
+    const before = list.map((item: any) => item.state.zIndex);
+    if (how === 'front') {
+      target.bringToFront();
+    } else if (how === 'back') {
+      target.sendToBack();
+    } else if (how === 'up') {
+      target.moveUp();
+    } else {
+      target.moveDown();
+    }
+    const after = list.map((item: any) => item.state.zIndex);
+    const changed =
+      before.length !== after.length || before.some((value: any, index: number) => value !== after[index]);
+    if (!changed) {
+      return false;
+    }
+    this.__pushHistory(snapshot);
+    this.__emitChange();
+    return true;
+  }
+
   public toSchemaObject(): object {
     return toSchemaObject(this.ice.childNodes);
   }
@@ -463,7 +526,20 @@ export default class EntityDesigner {
     if (!this.__historyEnabled) {
       return;
     }
-    this.__undoStack.push(this.serializeProject());
+    this.__pushHistory(this.serializeProject());
+  }
+
+  /**
+   * 把一份**已经取好的**项目快照压进 undo 栈。
+   *
+   * 与 `captureHistory()` 分开是因为 `__reorder()` 需要"先改、确认有变、再压栈" ——
+   * 无意义的点击（已经在最上 / 被钉子压着）不该清掉 redo，也不该多一条历史。
+   */
+  private __pushHistory(snapshot: string): void {
+    if (!this.__historyEnabled) {
+      return;
+    }
+    this.__undoStack.push(snapshot);
     if (this.__undoStack.length > this.__maxHistory) {
       this.__undoStack.shift();
     }
