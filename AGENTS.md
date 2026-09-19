@@ -17,7 +17,8 @@
 
 ## 门禁
 
-- `npm run lint`（eslint，0 error 起步）/ `npm run types:check` / `npm test`（jest 32 suites / 368 用例，2026-09-17 实测）/ `npm run build`
+- `npm run lint`（eslint，0 error 起步）/ `npm run types:check` / `npm test`（jest 37 suites / 398 用例，2026-09-19 实测）
+  / `npm run test:coverage`（棘轮：statements 88 / lines 88 / branches 74 / functions 85）/ `npm run build`
 - `npm run test:e2e`：Playwright，覆盖 9 个编辑器示例页（含 BPMN 令牌仿真）
 
 ## 示例页写法（2026-09-17 确立，11 个示例页已全部统一）
