@@ -721,7 +721,7 @@ export default class FlowDesigner {
    * 两级口径，都对齐"渲染视口 = dpr · viewport"这条约定：
    * ① 首选引擎的输入矩形（`getInputRect()`）—— 它是**内容盒**，与命中测试 / 坐标换算
    *    同一口径，dpr 变化时它的数值不变；
-   * ② 没有布局信息的运行时（测试桩 / 小程序）退回 `canvasWidth / dpr`。
+   * ② 没有布局信息的运行时（测试桩 / headless）退回 `canvasWidth / dpr`。
    *
    * 千万不要退回 `canvasWidth` 本身 —— 那正是这条 dpr 缺陷的来源。
    */
