@@ -99,6 +99,16 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
 拖拽中出插槽 → 落在插槽上改接）。改 `Relation` / 各域包连线类时不要动 `transformable` 的语义，
 也不要往 `project_codec.ts` 之外新增 state 键（`tests/designer/codec-completeness.test.ts` 会拦）。
 
+**Worker 镜像渲染（2026-09-20 实测落地）**：引擎可以把光栅化放到 Web Worker
+（主线程持有状态与命中检测，worker 只有镜像树）。接本仓时记住两条：
+① **worker 侧那台 ICE 没有任何 Designer**，图元类型必须显式注册 —— 用
+`IED.registerDesignerTypes(ice)`（漏了不报错，只会静默跳过整棵未注册子树）；
+② **镜像的保真边界 = 序列化格式的保真边界**：`FlowNode` / `FlowEdge` 的派生子件
+（图标 / 文字 / 连线标签）不进文档，worker 侧重建后 id 不同，应用层对它们的位置更新
+镜像不过去（几何逐项一致，只有这些子件的视觉细节有差）。实测数据、结论与踩过的 4 个引擎坑见
+`docs/worker-mirror-rendering.md`；示例页 `examples/worker-mirror.html`，回归
+`e2e/worker-mirror.spec.ts`。
+
 ## BPMN 可连接性（2026-09-13 确立）
 
 引擎的 `linkable` 是"能不能作为**任何**连线端点"的单一开关，本身不区分连线类型；本设计器目前只实现

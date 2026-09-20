@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title>IED · Worker 镜像渲染验证（流程图）</title>
+  <!-- 依赖走本地 node_modules/ice-render + ../dist（共享内核，不内联），离线可跑、e2e 可复现。 -->
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      font: 13px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    header {
+      padding: 10px 14px;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    h1 {
+      font-size: 15px;
+      margin: 0 0 4px;
+    }
+    .hint {
+      color: #475569;
+      max-width: 1080px;
+    }
+    .bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    button {
+      font: inherit;
+      padding: 4px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+    }
+    button[data-active='true'] {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #fff;
+    }
+    main {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .pane {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 8px;
+    }
+    .pane h2 {
+      font-size: 13px;
+      margin: 0 0 6px;
+      color: #334155;
+    }
+    canvas {
+      display: block;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+    }
+    pre {
+      margin: 0 12px 12px;
+      padding: 10px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 8px;
+      min-height: 140px;
+      overflow: auto;
+      font-size: 12px;
+    }
+  </style>
+  <body>
+    <header>
+      <h1>IED · Worker 镜像渲染验证（真实应用：流程图）</h1>
+      <div class="hint">
+        同一棵树两种渲染通道：<b>主线程渲染</b>（现状，引擎直接画到可见画布）与
+        <b>worker 镜像</b>（主线程只跑几何通道 + 协议，光栅化在 worker，位图回传）。
+        可见画布刻意偏离页面左上角，输入/命中在两种模式下都必须正确 —— 命中检测永远在主线程。
+      </div>
+      <div class="bar">
+        <label>节点数 <input id="nodes" type="number" min="4" max="400" value="120" style="width: 70px" /></label>
+        <button id="rebuild">重建场景</button>
+        <button id="mode-main" data-mode="main">主线程渲染</button>
+        <button id="mode-mirror" data-mode="mirror">worker 镜像</button>
+        <button id="bench-main">跑基准（主线程）</button>
+        <button id="bench-mirror">跑基准（worker 镜像）</button>
+        <button id="compare">像素比对</button>
+      </div>
+    </header>
+    <main>
+      <div class="pane">
+        <h2 id="view-title">可见画布（输入来源 + 当前渲染通道）</h2>
+        <canvas id="view" width="900" height="620"></canvas>
+      </div>
+      <div class="pane">
+        <h2>参考：同一份文档的主线程直绘</h2>
+        <canvas id="ref" width="900" height="620"></canvas>
+      </div>
+      <canvas id="probe" width="900" height="620" hidden></canvas>
+    </main>
+    <pre id="out">准备就绪。</pre>
+
+    <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+    <script src="../dist/index.umd.js"></script>
+    <script type="text/javascript">
+
+      const ICE = window.ICE;
+      const IED = window.IED;
+      const out = document.getElementById('out');
+      const view = document.getElementById('view');
+      const probe = document.getElementById('probe');
+      const ref = document.getElementById('ref');
+      const W = view.width;
+      const H = view.height;
+      const log = [];
+
+      /**
+       * 一页一个类（家族约定）：构造期把实例、DOM、事件一次建好；
+       * `bench()` / `compare()` 是给 e2e 用的把手，UI 按钮只是薄薄一层。
+       */
+      class WorkerMirrorPage {
+        constructor() {
+          this.mode = 'main';
+          this.host = null;
+          this.nodeCount = Number(new URLSearchParams(location.search).get('nodes')) || 120;
+
+          // 主线程：唯一真相（DOM 事件、命中检测、状态都在这里）
+          this.ice = new ICE.ICE().init('view', { renderMode: 'full' });
+          this.designer = new IED.FlowDesigner(this.ice);
+
+          // 参考渲染：另一台 ICE，同一份文档 + 同一批类型，主线程真实上下文直绘
+          this.refIce = new ICE.ICE().init('ref', { renderMode: 'full' });
+          IED.registerDesignerTypes(this.refIce);
+
+          this.buildScene(this.nodeCount);
+          this.bindUi();
+          window.__page = this;
+          this.say(`就绪：${this.nodeCount} 个节点 / ${this.ice.childNodes.length} 个顶层组件（默认主线程渲染）`);
+        }
+
+        /** 统一的日志出口（一页一个类：辅助方法也收进类里）。 */
+        say(line) {
+          log.push(line);
+          out.textContent = log.slice(-40).join('\n');
+        }
+
+        /** 确定性网格场景：不跑随机布局，e2e 与截图可复现。 */
+        buildScene(count) {
+          this.designer.clear();
+          const cols = Math.max(2, Math.ceil(Math.sqrt(count)));
+          const kinds = ['process', 'process', 'decision', 'io', 'process', 'terminator'];
+          const created = [];
+          for (let i = 0; i < count; i++) {
+            const kind = kinds[i % kinds.length];
+            created.push(
+              this.designer.createNode(kind, {
+                title: `步骤 ${i + 1}`,
+                left: 60 + (i % cols) * 230,
+                top: 60 + Math.floor(i / cols) * 150,
+                width: 190,
+                height: 76,
+              })
+            );
+          }
+          for (let i = 1; i < created.length; i++) {
+            // 每 3 条给个标签：标签会走文本绘制，正是要看的那部分开销
+            this.designer.createEdge({
+              sourceId: created[i - 1].state.id,
+              targetId: created[i].state.id,
+              label: i % 3 === 0 ? '是' : '',
+              linkShape: 'visio',
+            });
+          }
+          this.designer.select(null);
+          this.dragTarget = created[Math.floor(created.length / 2)];
+          this.dragBase = { left: this.dragTarget.state.left, top: this.dragTarget.state.top };
+        }
+
+        bindUi() {
+          const setMode = (mode) => this.setMode(mode);
+          document.getElementById('mode-main').onclick = () => setMode('main');
+          document.getElementById('mode-mirror').onclick = () => setMode('mirror');
+          document.getElementById('rebuild').onclick = () => {
+            this.nodeCount = Math.max(4, Number(document.getElementById('nodes').value) || 120);
+            this.buildScene(this.nodeCount);
+            this.ice.dirty = true;
+            if (this.mode === 'mirror') this.host.bridge.markSceneNeeded();
+            this.say(`重建场景：${this.nodeCount} 个节点`);
+          };
+          document.getElementById('bench-main').onclick = async () => {
+            await this.setMode('main');
+            const r = await this.bench(120, 20, 'viewport');
+            this.say(`主线程渲染（缩放平移）：每帧 p50=${r.p50.toFixed(2)}ms p95=${r.p95.toFixed(2)}ms（${r.frames} 帧）`);
+          };
+          document.getElementById('bench-mirror').onclick = async () => {
+            await this.setMode('mirror');
+            const r = await this.bench(120, 20, 'viewport');
+            const lat = await this.latency(12);
+            this.say(
+              `worker 镜像（缩放平移）：主线程每帧 p50=${r.p50.toFixed(2)}ms p95=${r.p95.toFixed(2)}ms；` +
+                `worker 渲染 p50=${(this.host.stats ? this.host.stats.renderMs : 0).toFixed(2)}ms；端到端 p50=${lat.p50.toFixed(2)}ms`
+            );
+          };
+          document.getElementById('compare').onclick = async () => {
+            const c = await this.compare();
+            this.say(`像素比对：差异 ${c.diff}/${c.total}（alphaDiff=${c.alphaDiff}，最大预乘差 ${c.maxPremult}）`);
+          };
+        }
+
+        /** 切换渲染通道：`main` = 引擎直接画到可见画布；`mirror` = 几何通道 + worker 光栅化。 */
+        async setMode(mode) {
+          if (mode === this.mode) return this.mode;
+          if (mode === 'mirror') {
+            if (typeof ICE.MirrorHost !== 'function') {
+              this.say('当前加载的 ice-render 没有 MirrorHost（需要含 worker 镜像的版本）——保持主线程渲染。');
+              return this.mode;
+            }
+            this.host = new ICE.MirrorHost({
+              onStats: (st) => {
+                window.__lastWorkerStats = st;
+              },
+              canvas: view,
+              ice: this.ice,
+              workerUrl: 'worker-mirror.worker.js',
+              onBitmap: (bitmap) => {
+                // 取像素用的旁路（drawImage 不消耗位图），之后 MirrorHost 再交给 bitmaprenderer
+                const pctx = probe.getContext('2d');
+                pctx.clearRect(0, 0, W, H);
+                pctx.drawImage(bitmap, 0, 0);
+                // 帧到达的即时通知：延迟测量**不能靠轮询**（20ms 的轮询粒度会把延迟量成 20ms）
+                const waiter = this.__frameWaiter;
+                if (waiter) {
+                  this.__frameWaiter = null;
+                  waiter();
+                }
+              },
+              onEvent: (evt) => {
+                if (evt.t === 'error' || evt.t === 'missing') {
+                  this.say(`[worker] ${evt.t}${evt.message ? ' ' + evt.message : ''}${evt.ids ? ' ' + evt.ids.join(',') : ''}`);
+                }
+              },
+            });
+            this.host.start();
+            this.mode = 'mirror';
+            document.title = 'IED · worker 镜像';
+          } else {
+            if (this.host) {
+              this.host.stop();
+              this.host = null;
+            }
+            this.mode = 'main';
+            document.title = 'IED · 主线程渲染';
+          }
+          for (const el of document.querySelectorAll('button[data-mode]')) {
+            el.dataset.active = String(el.dataset.mode === this.mode);
+          }
+          document.getElementById('view-title').textContent =
+            this.mode === 'mirror' ? '可见画布（worker 位图 + 输入来源）' : '可见画布（主线程直绘 + 输入来源）';
+          // 切回主线程后画面要立刻回来
+          this.ice.dirty = true;
+          this.ice.renderer.frameEvtHandler();
+          await this.waitFrames(1);
+          return this.mode;
+        }
+
+        /**
+         * 主线程每帧成本基准：一步 = 「改状态 + 让这一帧落地」。
+         *
+         * 两种模式做的是**同一件逻辑事**；差别只在落墨位置（主画布 vs 几何通道 + 协议）。
+         * 因此这个数直接回答"worker 渲染到底给主线程省了多少"。
+         */
+        async bench(frames = 120, warmup = 20, workload = 'viewport') {
+          const step = (i) => {
+            if (workload === 'viewport') {
+              // 编辑器里最重的一类操作：缩放 + 平移。视口一变，两级缓存（静态层 + 组件位图）
+              // 整批失效、所有图元都要按新栅格重画 —— 这正是"worker 光栅化"该省下来的那部分。
+              const phase = Math.sin((i / frames) * Math.PI * 2);
+              this.ice.setViewport(0.7 + 0.35 * (0.5 + 0.5 * phase), -i * 0.6, -i * 0.35);
+            } else {
+              // 走**应用自己的 API**（`updateNode`）而不是裸 setState：应用层要负责派生更新
+              // （连线按节点新位置重走线），这些派生更新同样是 setState —— 因此也会被镜像。
+              // 基准里绕开应用 API 去改裸 state，量到的就不是"真实编辑"的代价。
+              this.designer.updateNode(this.dragTarget.state.id, {
+                left: this.dragBase.left + (i % 60),
+                top: this.dragBase.top + ((i * 7) % 40),
+              });
+            }
+            this.ice.renderer.frameEvtHandler();
+            if (this.mode === 'mirror') this.host.frame();
+          };
+          for (let i = 0; i < warmup; i++) step(i);
+          const samples = [];
+          for (let i = 0; i < frames; i++) {
+            const t0 = performance.now();
+            step(warmup + i);
+            samples.push(performance.now() - t0);
+          }
+          samples.sort((a, b) => a - b);
+          return {
+            mode: this.mode,
+            workload,
+            frames,
+            components: this.ice.renderer.componentQueue.length,
+            layerBuilds: (this.ice.renderer && this.ice.renderer.__layerBuilds) || 0,
+            p50: samples[Math.floor(samples.length / 2)],
+            p95: samples[Math.floor(samples.length * 0.95)],
+            min: samples[0],
+            max: samples[samples.length - 1],
+          };
+        }
+
+        /** 端到端延迟：改一次状态 → worker 的位图回到主线程（只有 mirror 模式有意义）。 */
+        async latency(samples = 12) {
+          if (this.mode !== 'mirror') return { p50: 0, samples: 0 };
+          const list = [];
+          for (let i = 0; i < samples; i++) {
+            const arrived = new Promise((resolve) => {
+              this.__frameWaiter = resolve;
+            });
+            const t0 = performance.now();
+            this.dragTarget.setState({ left: this.dragBase.left + i * 2 });
+            this.host.paint();
+            await arrived;
+            list.push(performance.now() - t0);
+          }
+          list.sort((a, b) => a - b);
+          return { p50: list[Math.floor(list.length / 2)], p95: list[Math.floor(list.length * 0.95)], samples: list.length };
+        }
+
+
+        /**
+         * 要一帧并**等它真的回来**。
+         *
+         * 必须事件驱动（`__frameWaiter` 由 onBitmap 触发），不能等帧计数：
+         * 计数会与"上一帧还在路上"赛跑 —— 拿到旧位图去比新状态，看起来就像"镜像没同步"。
+         */
+        nextFrame() {
+          if (!this.host) return Promise.resolve();
+          const arrived = new Promise((resolve) => {
+            this.__frameWaiter = resolve;
+          });
+          this.host.paint();
+          return arrived;
+        }
+
+        /** 等 worker 再送一帧（最多 3s）。 */
+        waitFrames(count = 1, since = null) {
+          if (!this.host) return Promise.resolve();
+          const base = since === null ? this.host.frames : since;
+          return new Promise((resolve, reject) => {
+            const t0 = Date.now();
+            const poll = () => {
+              if (this.host && this.host.frames >= base + count) return resolve();
+              if (Date.now() - t0 > 3000) return reject(new Error('等 worker 帧超时'));
+              setTimeout(poll, 20);
+            };
+            poll();
+          });
+        }
+
+        /**
+         * 逐像素比对：worker 位图（经 2d probe） vs 参考渲染。
+         *
+         * 这是**真·应用验证**里最关键的一条：场景里有大量文本（节点标题、连线标签），
+         * 文本度量与字形栅格化两边必须一致 —— 否则"worker 渲染"对编辑器就是不可用。
+         */
+        async compare() {
+          // 参考用同一份文档重建 + 同步跑一帧（`fromJSONObject` 会重建整棵树）
+          this.refIce.fromJSONObject(this.ice.toJSONObject());
+          this.refIce.dirty = true;
+          this.refIce.renderer.frameEvtHandler();
+          if (this.mode === 'mirror') {
+            await this.nextFrame();
+          }
+          const a = probe.getContext('2d').getImageData(0, 0, W, H).data;
+          const b = ref.getContext('2d').getImageData(0, 0, W, H).data;
+          let diff = 0;
+          let alphaDiff = 0;
+          let maxChannel = 0;
+          let maxPremult = 0;
+          let first = -1;
+          const pm = (c, al) => Math.round((c * al) / 255);
+          for (let i = 0; i < a.length; i += 4) {
+            const aa = a[i + 3];
+            const ba = b[i + 3];
+            let d = 0;
+            for (let k = 0; k < 4; k++) d = Math.max(d, Math.abs(a[i + k] - b[i + k]));
+            if (d) {
+              diff++;
+              if (first < 0) first = i / 4;
+            }
+            if (aa !== ba) alphaDiff++;
+            maxChannel = Math.max(maxChannel, Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+            maxPremult = Math.max(
+              maxPremult,
+              Math.abs(pm(a[i], aa) - pm(b[i], ba)),
+              Math.abs(pm(a[i + 1], aa) - pm(b[i + 1], ba)),
+              Math.abs(pm(a[i + 2], aa) - pm(b[i + 2], ba)),
+              Math.abs(aa - ba)
+            );
+          }
+          return { diff, alphaDiff, maxChannel, maxPremult, firstPixel: first, total: W * H, mode: this.mode };
+        }
+
+          /** 墨迹包围盒（调试/比对诊断用）。 */
+          inkBox(canvas, w, h) {
+            const d = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+            let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1, n = 0;
+            for (let i = 0; i < d.length; i += 4) {
+              if (d[i + 3] > 8) {
+                const x = (i / 4) % w, y = Math.floor((i / 4) / w);
+                n++;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              }
+            }
+            return { n, box: [minX, minY, maxX, maxY] };
+          }
+        /** 与 worker 同口径的树摘要（带标题节点的世界盒）。 */
+        treeDigest() {
+          return this.ice.childNodes
+            .filter((c) => c.state && c.state.title)
+            .map((c) => {
+              const b = c.getMinBoundingBox(true).getMinAndMaxPoint();
+              return `${String(c.props.id).slice(-6)}:${b.minX.toFixed(2)},${b.minY.toFixed(2)}`;
+            })
+            .sort();
+        }
+
+        /**
+         * 树对账：镜像里的每个节点，世界盒是不是与主线程逐项一致。
+         *
+         * 这是**像素之外**的硬判据 —— 像素会被"应用层派生部件的视觉细节"干扰
+         *（`FlowNode` 的图标/文字等子件不进序列化文档，两边各自构造），但**几何**必须逐项相等。
+         */
+        async compareTrees() {
+          if (this.mode === 'mirror') await this.nextFrame();
+          const worker = this.host && this.host.stats ? this.host.stats.treeDigest : null;
+          const main = this.treeDigest();
+          const mismatch = [];
+          const rows = worker || [];
+          for (let i = 0; i < main.length; i++) {
+            if (rows[i] !== main[i]) mismatch.push(rows[i]);
+          }
+          return {
+            count: main.length,
+            workerCount: rows.length,
+            mismatchCount: mismatch.length + Math.abs(rows.length - main.length),
+            mismatch: mismatch.slice(0, 5),
+            equal: mismatch.length === 0 && rows.length === main.length,
+          };
+        }
+
+        /**
+         * e2e / 探针把手：两种模式 × 两类负载各跑一遍，回传可比较的数字。
+         *
+         * 刻意把 drag（改一个节点，引擎自己的静态层/缓存已经吸收掉了）与
+         * viewport（缩放平移，缓存整批失效）分开报 —— 混成一个数只会掩盖结论。
+         */
+        /**
+         * 用**主线程自己画的画面**当参考，比对 worker 位图。
+         *
+         * 与 `compare()` 的区别：`compare()` 的参考是"用同一份文档另建一台 ICE 直绘"，
+         * 这里比的是"主线程这台真正的源树直绘"。两者不一样时，说明差异来自**重建过程**
+         * （`fromJSONObject` 不会重放应用层的派生逻辑），而不是镜像本身。
+         */
+        async compareWithMainView() {
+          const wasMirror = this.mode === 'mirror';
+          if (wasMirror) {
+            // 先要一张"当前状态"的镜像帧再切换：否则比的是**上一张**位图（可能来自基准中途的
+            // 视口/状态），而主线程那边画的是当前状态 —— 两边根本不是同一时刻，白白看着像"镜像不同步"
+            await this.nextFrame();
+            await this.setMode('main');
+          }
+          // 关掉静态层再比：静态层位图是"上一帧粘回去"的优化，像素验收要的是**逐组件重画**的
+          // 真值（否则比到的可能是层里的旧内容，而不是这台树现在的样子）
+          this.ice.renderer.setStaticLayerEnabled(false);
+          this.ice.dirty = true;
+          for (const c of this.ice.renderer.componentQueue) c.dirty = true;
+          this.ice.renderer.frameEvtHandler();
+          const a = probe.getContext('2d').getImageData(0, 0, W, H).data;
+          const b = view.getContext('2d').getImageData(0, 0, W, H).data;
+          let diff = 0, alphaDiff = 0, maxPremult = 0;
+          const pm = (c, al) => Math.round((c * al) / 255);
+          for (let i = 0; i < a.length; i += 4) {
+            const aa = a[i + 3], ba = b[i + 3];
+            let d = 0;
+            for (let k = 0; k < 4; k++) d = Math.max(d, Math.abs(a[i + k] - b[i + k]));
+            if (d) diff++;
+            if (aa !== ba) alphaDiff++;
+            maxPremult = Math.max(maxPremult, Math.abs(pm(a[i], aa) - pm(b[i], ba)), Math.abs(aa - ba));
+          }
+          // 调试用：把"比对那一刻"的两张图画出来（探针/截图排查差异来源）
+          window.__lastCompareShots = { worker: probe.toDataURL(), main: view.toDataURL() };
+          window.__lastCmpDiag = { probeBox: this.inkBox(probe, W, H), viewBox: this.inkBox(view, W, H), workerStats: this.host ? null : null };
+          if (wasMirror) await this.setMode('mirror');
+          return { diff, alphaDiff, maxPremult, total: W * H };
+        }
+
+        async benchBoth(frames = 120) {
+          await this.setMode('main');
+          const mainViewport = await this.bench(frames, 20, 'viewport');
+          const mainDrag = await this.bench(frames, 20, 'drag');
+          const sceneBytes = this.ice.toJSONString().length;
+          await this.setMode('mirror');
+          const mirrorViewport = await this.bench(frames, 20, 'viewport');
+          const mirrorDrag = await this.bench(frames, 20, 'drag');
+          const latency = await this.latency(12);
+          const worker = this.host && this.host.stats ? this.host.stats : null;
+          // 把场景还原，便于比对/截图
+          this.ice.setViewport(1, 0, 0);
+          this.ice.dirty = true;
+          this.ice.renderer.frameEvtHandler();
+          if (this.mode === 'mirror') {
+            await this.nextFrame();
+          }
+          return { main: { viewport: mainViewport, drag: mainDrag }, mirror: { viewport: mirrorViewport, drag: mirrorDrag }, latency, worker, sceneBytes };
+        }
+
+        stats() {
+          return {
+            mode: this.mode,
+            nodes: this.nodeCount,
+            components: this.ice.renderer.componentQueue.length,
+            frames: this.host ? this.host.frames : 0,
+            sent: this.host ? this.host.bridge.sent : 0,
+            worker: this.host && this.host.stats ? this.host.stats : null,
+            sceneBytes: this.ice.toJSONString().length,
+          };
+        }
+      }
+
+      window.__page = new WorkerMirrorPage();
+      // 探针把手（e2e 用）
+      window.__ready = () => !!(window.__page && window.__page.ice);
+      window.__setMode = (mode) => window.__page.setMode(mode);
+      window.__bench = (frames) => window.__page.bench(frames || 120);
+      window.__benchBoth = (frames) => window.__page.benchBoth(frames || 120);
+      window.__compare = () => window.__page.compare();
+      window.__compareWithMainView = () => window.__page.compareWithMainView();
+      window.__compareTrees = () => window.__page.compareTrees();
+      window.__latency = (n) => window.__page.latency(n || 12);
+      window.__stats = () => window.__page.stats();
+      window.__log = () => log.slice();
+    </script>
+  </body>
+</html>
