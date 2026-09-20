@@ -14,10 +14,9 @@
  *
  * 基准页：`examples/worker-mirror.html`（`?nodes=N` 控制规模）。
  *
- * ⚠️ 前置：`node_modules/ice-render` 必须是**含 `MirrorHost` / `MirrorTarget` 的版本**。
- * 本仓 peer 声明是 `^3.0.0`，这批能力随下一个引擎版本发布；引擎未发布前，本地把工作区引擎
- * 链进来再跑（`ln -s <workspace>/ice-render node_modules/ice-render`）—— 见
- * `docs/worker-mirror-rendering.md` 的"怎么跑"。
+ * 前置：`node_modules/ice-render` 要**含 `MirrorHost` / `MirrorTarget`** —— 即 **4.0.0 及以上**
+ * （本仓 peer 声明 `^4.0.0`；`npm install` 装的就是它）。本地改引擎时可以把工作区引擎链进来再跑
+ * （`ln -s <workspace>/ice-render node_modules/ice-render`）—— 见 `docs/worker-mirror-rendering.md` 的"怎么跑"。
  */
 import { test, expect } from '@playwright/test';
 
