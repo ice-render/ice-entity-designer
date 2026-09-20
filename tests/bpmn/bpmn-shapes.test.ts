@@ -145,7 +145,7 @@ describe('BPMN 记法 · 数据对象 / 注释 / 池 / 泳道 / 流标记', () =
     expect(leftTo[2]).not.toBeCloseTo(leftFrom[2], 6);
   });
 
-  it('没有 Path2D 运行时（无头 / 低版本小程序）不抛异常', () => {
+  it('没有 Path2D 运行时（无头 / 测试桩）不抛异常', () => {
     const shapes = [
       new BpmnEventShape({ width: 56, height: 56 }),
       new BpmnGatewayShape({ width: 70, height: 70 }),
