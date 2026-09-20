@@ -4,7 +4,7 @@
  * 与 tests/designer/EntityDesigner.test.ts 同一套约定：用真实引擎、不 mock，
  * 断言结构 / 标识 / 快照等确定性行为，不断言像素。
  */
-import { ICE, EventBus, ICECircle } from 'ice-render';
+import { ICE, EventBus, ICECircle, ICE_EVENT_NAME_CONSTS } from 'ice-render';
 import FlowDesigner, { validateFlowSnapshot } from '../../src/flow/FlowDesigner';
 import FlowNode, { FLOW_NODE_KINDS } from '../../src/flow/FlowNode';
 import FlowEdge from '../../src/flow/FlowEdge';
@@ -514,6 +514,70 @@ describe('FlowDesigner 历史与视图', () => {
     // 松开鼠标（引擎在 evtBus 上派发 mouseup）后，下一次拖拽重新记一步
     (designer as any).__endMoveSession();
     node.setPosition(500, 500);
+    expect((designer as any).__undoStack.length).toBe(2);
+  });
+});
+
+/**
+ * **程序化改属性也要让"跟随者"跟上**（连线 / 对齐辅助 / 控制面板）。
+ *
+ * 真实事故（2026-09-20，worker 镜像实测暴露）：属性面板改位置走的是 `updateNode` →
+ * `FlowNode.applyPatch`，而它原先直接 `setState({left,top})` —— 引擎只在 `setPosition()`
+ * 里派发 `BEFORE_MOVE`/`AFTER_MOVE`，于是**程序化移动节点时连线不跟随**（鼠标拖拽走的是
+ * `moveGlobalPosition()`，所以肉眼只在面板 / 脚本改位置时才看得出来）；尺寸同理
+ * （插槽挂在包围盒边上，不派发 `AFTER_RESIZE` 就不跟着动）。
+ */
+describe('FlowDesigner 程序化补丁：位置 / 尺寸要通知跟随者', () => {
+  /**
+   * 无头环境下"跑一轮渲染"：连线与端点组件的**订阅**是在 `ROUND_FINISH` 建立的
+   * （`ICEPolyLine.afterAddHandler` → `syncConnections` → `createLink`），
+   * 真实渲染循环里这一轮必然会来，单测里显式补上。
+   */
+  function renderRound(ice: any): void {
+    ice.evtBus.trigger(ICE_EVENT_NAME_CONSTS.ROUND_FINISH);
+  }
+
+  it('updateNode 改位置 → 连线端点跟着走', () => {
+    const { ice, designer } = makeDesigner();
+    const a = designer.createNode('process', { title: 'A', left: 100, top: 100, width: 120, height: 60 });
+    const b = designer.createNode('process', { title: 'B', left: 400, top: 100, width: 120, height: 60 });
+    const edge: any = designer.createEdge({ sourceId: a.state.id, targetId: b.state.id, linkShape: 'visio' });
+    renderRound(ice);
+    const before = [...edge.state.endPoint];
+    expect(before[0]).toBe(400);
+
+    designer.updateNode(b.state.id, { left: 480, top: 100 });
+
+    expect(edge.state.endPoint[0]).toBe(before[0] + 80);
+  });
+
+  it('updateNode 改尺寸 → 连线插槽按新包围盒重算', () => {
+    const { ice, designer } = makeDesigner();
+    const a = designer.createNode('process', { title: 'A', left: 100, top: 100, width: 120, height: 60 });
+    const b = designer.createNode('process', { title: 'B', left: 400, top: 100, width: 120, height: 60 });
+    const edge: any = designer.createEdge({ sourceId: a.state.id, targetId: b.state.id, linkShape: 'visio' });
+    renderRound(ice);
+    const beforeStart = [...edge.state.startPoint];
+
+    designer.updateNode(a.state.id, { width: 200, height: 90 });
+
+    // 起点插槽挂在 A 的包围盒边上：A 变宽之后它必须跟着挪（不派发 AFTER_RESIZE 就停在旧位置）
+    expect(edge.state.startPoint[0]).not.toBe(beforeStart[0]);
+  });
+
+  it('程序化补丁不算"拖拽会话"：历史只记一条，且后续真拖拽仍然记得下来', () => {
+    const { designer } = makeDesigner();
+    const node = designer.createNode('process', { title: 'A', left: 100, top: 100 });
+    designer.resetHistory();
+
+    designer.updateNode(node.state.id, { left: 300, top: 200 });
+    // 一条补丁 = 一条历史（`updateNode` 自己记过一次；BEFORE_MOVE 回调不能再记一次）
+    expect((designer as any).__undoStack.length).toBe(1);
+    // 也不能把"拖拽会话"打开：那会让**下一次真拖拽**失去撤销点（程序化路径没有 mouseup）
+    expect((designer as any).__moveSession).toBe(false);
+
+    // 真实拖拽路径（引擎的 setPosition + BEFORE_MOVE/AFTER_MOVE）照旧记一步
+    node.setPosition(400, 220);
     expect((designer as any).__undoStack.length).toBe(2);
   });
 });

@@ -320,7 +320,13 @@
           };
         }
 
-        /** 端到端延迟：改一次状态 → worker 的位图回到主线程（只有 mirror 模式有意义）。 */
+        /**
+         * 端到端延迟：改一次状态 → worker 的位图回到主线程（只有 mirror 模式有意义）。
+         *
+         * 走**应用自己的 API**（`updateNode`）而不是裸 `setState`：应用层要负责派生更新
+         * （连线按节点新位置重新布线），镜像侧重放的是同一条补丁 —— 拿裸 `setState` 量，
+         * 量到的既不是真实编辑路径，也会让主线程这边"节点动了、连线没动"，与镜像分叉。
+         */
         async latency(samples = 12) {
           if (this.mode !== 'mirror') return { p50: 0, samples: 0 };
           const list = [];
@@ -329,7 +335,7 @@
               this.__frameWaiter = resolve;
             });
             const t0 = performance.now();
-            this.dragTarget.setState({ left: this.dragBase.left + i * 2 });
+            this.designer.updateNode(this.dragTarget.state.id, { left: this.dragBase.left + i * 2 });
             this.host.paint();
             await arrived;
             list.push(performance.now() - t0);
@@ -352,6 +358,38 @@
           });
           this.host.paint();
           return arrived;
+        }
+
+        /**
+         * **排空在途消息**，取一张"静止状态"的位图。
+         *
+         * 为什么 `nextFrame()` 不够：它等的是"下一张到达的位图"，而在途位图可能有不止一张
+         * （上一步的 frame 与本次 paint 的 frame 同时在路上）—— 先到的那张画的是**上一步**
+         * 的状态，读它的 `treeDigest` 就会把"镜像落后一帧"误读成"镜像状态分叉"（实测：每步差
+         * 2px 的那类假差异）。
+         *
+         * 收尾条件是**精确水印**：`frame` 带 `seq`、worker 在 `rendered` 里原样回传
+         *（`MirrorBridge.lastFrameSeq` → `host.renderedSeq`），等到"手上这张位图的 seq 已经
+         * 追平我们最后发的那一帧"才算排空。用"再等 N 帧"这种猜测会在队列深的时候误判
+         *（实测：连等 8 帧仍可能读到旧快照 —— 因为背压之前 worker 那边积压了两百多条 frame）。
+         */
+        async settle(rounds = 8) {
+          if (!this.host) return;
+          const bridge = this.host.bridge;
+          for (let i = 0; i < 40 && bridge.hasPending(); i++) {
+            await this.nextFrame();
+          }
+          // 再明确要一帧：拿到"比之前所有 frame 都新"的位图（等的是水印，不是帧数）
+          for (let i = 0; i < rounds && !this.__frameCaughtUp(); i++) {
+            await this.nextFrame();
+          }
+        }
+
+        /** 手上这张位图，是不是已经把最后发出的那帧画完了。 */
+        __frameCaughtUp() {
+          const bridge = this.host && this.host.bridge;
+          if (!bridge || !this.host) return false;
+          return !bridge.hasPending() && this.host.renderedSeq >= bridge.lastFrameSeq;
         }
 
         /** 等 worker 再送一帧（最多 3s）。 */
@@ -435,19 +473,27 @@
             .filter((c) => c.state && c.state.title)
             .map((c) => {
               const b = c.getMinBoundingBox(true).getMinAndMaxPoint();
-              return `${String(c.props.id).slice(-6)}:${b.minX.toFixed(2)},${b.minY.toFixed(2)}`;
+              const name = (c.constructor && (c.constructor.typeId || c.constructor.name)) || '?';
+              let extra = '';
+              if (Array.isArray(c.state.startPoint) && Array.isArray(c.state.endPoint)) {
+                extra = `:${c.state.startPoint.map((v) => (+v).toFixed(1))}|${c.state.endPoint.map((v) => (+v).toFixed(1))}`;
+              }
+              return `${String(c.props.id).slice(-6)}:${name}:${b.minX.toFixed(2)},${b.minY.toFixed(2)}${extra}`;
             })
             .sort();
         }
 
         /**
-         * 树对账：镜像里的每个节点，世界盒是不是与主线程逐项一致。
+         * 树对账：镜像里的每个节点，世界盒与连线两端点是不是与主线程**逐项一致**。
          *
-         * 这是**像素之外**的硬判据 —— 像素会被"应用层派生部件的视觉细节"干扰
-         *（`FlowNode` 的图标/文字等子件不进序列化文档，两边各自构造），但**几何**必须逐项相等。
+         * 这是**像素之外**的硬判据：几何一旦分叉，画面迟早对不上。派生部件（标题 / 角标 /
+         * 连线标签）不进文档，但它们由**同一条应用层通路**在两边各自重算（见 `derivedScenario`），
+         * 所以这里可以要求严格相等 —— 不一致就是真分叉，不是"容差"。
          */
         async compareTrees() {
-          if (this.mode === 'mirror') await this.nextFrame();
+          // 对齐到**静止态**再比：镜像是一帧延迟的管线，等"下一张位图"只能保证拿到的那张
+          // 不是空跑，不能保证它已经把最后一批补丁画进去了（见 settle 的说明）
+          if (this.mode === 'mirror') await this.settle();
           const worker = this.host && this.host.stats ? this.host.stats.treeDigest : null;
           const main = this.treeDigest();
           const mismatch = [];
@@ -482,7 +528,7 @@
           if (wasMirror) {
             // 先要一张"当前状态"的镜像帧再切换：否则比的是**上一张**位图（可能来自基准中途的
             // 视口/状态），而主线程那边画的是当前状态 —— 两边根本不是同一时刻，白白看着像"镜像不同步"
-            await this.nextFrame();
+            await this.settle();
             await this.setMode('main');
           }
           // 关掉静态层再比：静态层位图是"上一帧粘回去"的优化，像素验收要的是**逐组件重画**的
@@ -508,6 +554,39 @@
           window.__lastCmpDiag = { probeBox: this.inkBox(probe, W, H), viewBox: this.inkBox(view, W, H), workerStats: this.host ? null : null };
           if (wasMirror) await this.setMode('mirror');
           return { diff, alphaDiff, maxPremult, total: W * H };
+        }
+
+        /**
+         * **派生通路的镜像往返**：改标题 / 改类型 / 改位置各一次，回传对账要用的数字。
+         *
+         * 这三步刻意覆盖三条不同的派生通路（也是这一轮修掉的三类分叉）：
+         * 1. 改标题：主线程会顺手把**派生部件**（标题文本）也写一次 —— 那个 id 在镜像里不存在
+         *    （派生部件不进文档），镜像只能靠"重放容器的补丁"重建它；
+         * 2. 改类型：主线程**重建**内部部件（摘旧形状 + 挂新形状，一次真实的结构变更），
+         *    镜像侧必须重建自己那份，而不是被当成"结构变了 → 重发整份文档"；
+         * 3. 改位置：连线必须跟着重新布线（两侧跑的是同一份 `applyPatch`，见 `FlowNode.applyPatch`）。
+         *
+         * 判据（e2e）：三步走完，`appliedScenes` 不得增长（没有全量重同步），
+         * 而几何对账与像素必须仍然一致。
+         */
+        async derivedScenario() {
+          const id = this.dragTarget.state.id;
+          const scenesBefore = this.host && this.host.stats ? this.host.stats.appliedScenes : 0;
+          const base = { left: this.dragTarget.state.left, top: this.dragTarget.state.top };
+          this.designer.updateNode(id, { title: '改名后的步骤' });
+          this.designer.updateNode(id, { kind: 'decision' });
+          this.designer.updateNode(id, { left: base.left + 30, top: base.top + 20 });
+          await this.settle();
+          const trees = await this.compareTrees();
+          return {
+            id,
+            left: this.dragTarget.state.left,
+            top: this.dragTarget.state.top,
+            skippedDerived: this.host ? this.host.bridge.skippedDerived : 0,
+            scenesBefore,
+            scenesAfter: this.host && this.host.stats ? this.host.stats.appliedScenes : 0,
+            trees,
+          };
         }
 
         async benchBoth(frames = 120) {
@@ -537,6 +616,10 @@
             components: this.ice.renderer.componentQueue.length,
             frames: this.host ? this.host.frames : 0,
             sent: this.host ? this.host.bridge.sent : 0,
+            // 没被镜像过去的写入（主线程改的是"派生部件"，镜像里没有可寻址的对应节点）：
+            // 它是**正常的**（容器自己的补丁会让镜像重建那些部件），但必须看得见 —— 数字失控
+            // 就说明应用在直接改派生部件、容器状态却没动，那种写法连快照往返也留不下来。
+            skippedDerived: this.host ? this.host.bridge.skippedDerived : 0,
             worker: this.host && this.host.stats ? this.host.stats : null,
             sceneBytes: this.ice.toJSONString().length,
           };
@@ -552,6 +635,7 @@
       window.__compare = () => window.__page.compare();
       window.__compareWithMainView = () => window.__page.compareWithMainView();
       window.__compareTrees = () => window.__page.compareTrees();
+      window.__derivedScenario = () => window.__page.derivedScenario();
       window.__latency = (n) => window.__page.latency(n || 12);
       window.__stats = () => window.__page.stats();
       window.__log = () => log.slice();

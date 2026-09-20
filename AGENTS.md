@@ -103,9 +103,14 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
 （主线程持有状态与命中检测，worker 只有镜像树）。接本仓时记住两条：
 ① **worker 侧那台 ICE 没有任何 Designer**，图元类型必须显式注册 —— 用
 `IED.registerDesignerTypes(ice)`（漏了不报错，只会静默跳过整棵未注册子树）；
-② **镜像的保真边界 = 序列化格式的保真边界**：`FlowNode` / `FlowEdge` 的派生子件
-（图标 / 文字 / 连线标签）不进文档，worker 侧重建后 id 不同，应用层对它们的位置更新
-镜像不过去（几何逐项一致，只有这些子件的视觉细节有差）。实测数据、结论与踩过的 4 个引擎坑见
+② **只有"文档里的组件"能被镜像寻址**：`FlowNode` / `FlowEdge` 的派生子件（形状 / 标题 /
+角标 / 连线标签）不进文档，对它们的写入不进镜像（计数在 `bridge.skippedDerived`），靠 worker 侧
+**重放 `FlowNode.applyPatch`** 重算；③ **"有跟随者"的改动必须走公开入口**：位置用
+`setPosition()`（派发 `BEFORE_MOVE`/`AFTER_MOVE`）、尺寸派发 `AFTER_RESIZE` —— 直接写
+`setState({left,top})` 会让连线不跟随（拖拽却正常，这种分叉只从面板/脚本路径暴露，2026-09-20 实测抓到），
+并且程序化补丁要在 `FlowDesigner.__applyPatch` 里标记"不是拖拽会话"（否则历史重复、下次真拖拽丢撤销点）；
+④ **静止态验收必须先排空**：`frame` 带 `seq`，等 `host.renderedSeq >= bridge.lastFrameSeq`（示例页的
+`settle()`），不要用"又收到一张位图"判断。实测数据、结论与修掉的坑见
 `docs/worker-mirror-rendering.md`；示例页 `examples/worker-mirror.html`，回归
 `e2e/worker-mirror.spec.ts`。
 

@@ -13,6 +13,11 @@
  *    混成一个平均数只会掩盖结论，所以这里分开断言、分开打印。
  *
  * 基准页：`examples/worker-mirror.html`（`?nodes=N` 控制规模）。
+ *
+ * ⚠️ 前置：`node_modules/ice-render` 必须是**含 `MirrorHost` / `MirrorTarget` 的版本**。
+ * 本仓 peer 声明是 `^3.0.0`，这批能力随下一个引擎版本发布；引擎未发布前，本地把工作区引擎
+ * 链进来再跑（`ln -s <workspace>/ice-render node_modules/ice-render`）—— 见
+ * `docs/worker-mirror-rendering.md` 的"怎么跑"。
  */
 import { test, expect } from '@playwright/test';
 
@@ -42,9 +47,8 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
   await page.waitForTimeout(400);
   const initial: any = await page.evaluate(() => (window as any).__compare());
   expect(initial.diff, `初始态逐像素一致：${JSON.stringify(initial)}`).toBe(0);
-  // 同时做几何对账（此时两边应当逐项相等；基准跑完后再对一次，容差见 ④）
 
-  // ③ 几何对账（基准**之前**）：镜像里的每个节点，世界盒必须与主线程**逐项相等**。
+  // ① 几何对账（基准**之前**）：镜像里的每个节点，世界盒必须与主线程**逐项相等**。
   const treesBefore: any = await page.evaluate(() => (window as any).__compareTrees());
   expect(treesBefore.equal ? 'ok' : `镜像与主树的节点世界盒不一致：${JSON.stringify(treesBefore)}`).toBe('ok');
   expect(treesBefore.count, '应当对账到足够多的节点').toBeGreaterThan(100);
@@ -81,26 +85,40 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
   expect(bench.worker && bench.worker.appliedViewports, '视口变更应当真的推到了 worker').toBeGreaterThan(0);
 
   // ④ 几何对账（基准**之后**）：允许极少数不一致 —— 这是**镜像保真边界**的体现：
-  //    IED 的连线标签这类"派生子件"不进序列化文档（`FlowNode`/`FlowEdge` 的构造函数自己造），
-  //    worker 侧重建出来的标签 id 与主线程不同，应用层对它们的位置更新自然镜像不过去。
-  //    实测：119 个节点里 3 个（都是连线标签）位置不一致，其余全部逐项相等。
-  //    这一步是**护栏**：比例一旦失控（例如视口/结构没同步），这里立刻红。
+  //    必须**逐项相等**。这条 2026-09-20 收紧过一次：原先允许 <5%（3/399 个节点不一致），
+  //    原因是"派生子件（节点标题 / 连线标签）不进文档 → 主线程对它们的更新镜像不过去"。
+  //    现在补丁按**应用层入口**重放（`MirrorTarget` → `applyPatch`），派生部件在镜像侧同样会重建，
+  //    主线程与镜像的连线走线也走同一条通路 —— 所以这一栏可以要求严格相等，任何不一致都是真回归：
+  //    它意味着"镜像的树/派生几何与主线程分叉"（例如位置补丁没派发 AFTER_MOVE、视口没同步）。
   const treesAfter: any = await page.evaluate(() => (window as any).__compareTrees());
   const mismatchRatio = treesAfter.mismatchCount / treesAfter.count;
   console.log(
     `[ied-mirror] 基准后几何对账：${treesAfter.count - treesAfter.mismatchCount}/${treesAfter.count} 一致（不一致 ${
       treesAfter.mismatchCount
-    } 个，多为连线标签等派生子件）`
+    } 个）`
   );
-  expect(mismatchRatio, `基准后几何不一致比例应当很小（派生子件量级）：${JSON.stringify(treesAfter)}`).toBeLessThan(
-    0.05
-  );
+  expect(mismatchRatio, `基准后几何必须逐项一致：${JSON.stringify(treesAfter)}`).toBe(0);
 
-  // ⑤ 像素差异只报数（同一原因：派生子件的视觉细节），超出量级说明镜像真的崩了
+  // ⑤ 像素差异：几何一致 ⇒ 像素也应当一致（含节点标题与连线标签的文字栅格化）
   const pixel: any = await page.evaluate(() => (window as any).__compareWithMainView());
   const diffRatio = pixel.diff / pixel.total;
   console.log(`[ied-mirror] 基准后像素差 ${pixel.diff}/${pixel.total}（${(diffRatio * 100).toFixed(2)}%）`);
-  expect(diffRatio, `基准后像素差异应保持在"派生子件细节"量级：${JSON.stringify(pixel)}`).toBeLessThan(0.15);
+  expect(diffRatio, `基准后像素应当逐像素一致：${JSON.stringify(pixel)}`).toBe(0);
+
+  // ⑥ 派生通路（改标题 / 改类型 / 改位置）：镜像必须**重放**应用层补丁，而不是靠全量重同步兜底
+  const derived: any = await page.evaluate(() => (window as any).__derivedScenario());
+  console.log(
+    `[ied-mirror] 派生通路：几何不一致 ${derived.trees.mismatchCount}/${derived.trees.count} · ` +
+      `全量重同步 ${derived.scenesBefore}→${derived.scenesAfter} · 未镜像的派生写入 ${derived.skippedDerived}`
+  );
+  expect(derived.trees.equal, `派生通路后几何必须一致：${JSON.stringify(derived.trees)}`).toBe(true);
+  // 改名只写派生部件（标题文本），改类型会重建内部部件（主线程上是一次真实的结构变更）——
+  // 两者都不该让 worker 重发整份文档（那是"每改一次属性就传 473KB"的风暴）
+  expect(
+    derived.scenesAfter,
+    `改名/改类型/改位置都不该触发全量重同步（场景数 ${derived.scenesBefore} → ${derived.scenesAfter}）`
+  ).toBe(derived.scenesBefore);
+  expect(derived.skippedDerived, '派生部件的写入应当被识别出来（计数而不是发给 worker）').toBeGreaterThan(0);
 
   expect(errors, '不应有页面/console 错误').toEqual([]);
 });

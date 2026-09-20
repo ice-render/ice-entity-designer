@@ -47,10 +47,11 @@ function renderAndPost(seq) {
         components: ice.renderer.componentQueue ? ice.renderer.componentQueue.length : 0,
         frames,
         appliedOps: target ? target.appliedOps : 0,
+        appliedScenes: target ? target.appliedScenes : 0,
         appliedSelections: target ? target.appliedSelections : 0,
         appliedViewports: target ? target.appliedViewports : 0,
         viewport: ice && ice.viewport ? { ...ice.viewport } : null,
-        // 树摘要：所有带标题的节点的世界盒（id 尾 6 位 + 左上角）。
+        // 树摘要：所有带标题的节点的世界盒（id 尾 6 位 + 类型 + 左上角；连线再带上两端点）。
         // 主线程用同一口径算一份来对账 —— 像素之外还能证明"镜像的树与主树逐节点一致"。
         treeDigest: (function () {
           try {
@@ -58,7 +59,14 @@ function renderAndPost(seq) {
               .filter((c) => c.state && c.state.title)
               .map((c) => {
                 const b = c.getMinBoundingBox(true).getMinAndMaxPoint();
-                return `${String(c.props.id).slice(-6)}:${b.minX.toFixed(2)},${b.minY.toFixed(2)}`;
+                const name = (c.constructor && (c.constructor.typeId || c.constructor.name)) || '?';
+                let extra = '';
+                if (Array.isArray(c.state.startPoint) && Array.isArray(c.state.endPoint)) {
+                  extra = `:${c.state.startPoint.map((v) => (+v).toFixed(1))}|${c.state.endPoint.map((v) =>
+                    (+v).toFixed(1)
+                  )}`;
+                }
+                return `${String(c.props.id).slice(-6)}:${name}:${b.minX.toFixed(2)},${b.minY.toFixed(2)}${extra}`;
               })
               .sort();
           } catch (e) {
