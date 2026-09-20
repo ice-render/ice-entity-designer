@@ -631,6 +631,48 @@
         }
 
         /**
+         * **结构通路的镜像往返**：新建节点 + 连线 → 删除它们，回传对账要用的数字。
+         *
+         * 这是编辑器里最高频的一类编辑（加/删图元）。判据（e2e）：整段场景**不得触发全量重同步**
+         * （`appliedScenes` 不变），而几何对账必须仍然逐项一致 —— 也就是说"加/删一个节点"
+         * 走的是一条几 KB 的结构增量 op，而不是重发整份文档（200 节点场景 473KB + worker 冷启动重绘）。
+         */
+        async structureScenario() {
+          const scenesBefore = this.host && this.host.stats ? this.host.stats.appliedScenes : 0;
+          const addsBefore = this.host && this.host.stats ? this.host.stats.appliedAdds || 0 : 0;
+          const removesBefore = this.host && this.host.stats ? this.host.stats.appliedRemoves || 0 : 0;
+          const base = this.dragTarget.state;
+
+          const node = this.designer.createNode('process', {
+            title: '新建的步骤',
+            left: base.left + 40,
+            top: base.top + 120,
+          });
+          const edge = this.designer.createEdge({
+            sourceId: base.id,
+            targetId: node.state.id,
+            linkShape: 'visio',
+          });
+          await this.settle();
+          const afterCreate = await this.compareTrees();
+
+          this.designer.remove(node.state.id); // 连带删掉挂在它上面的连线
+          await this.settle();
+          const afterDelete = await this.compareTrees();
+
+          return {
+            nodeId: node.state.id,
+            edgeId: edge.state.id,
+            scenesBefore,
+            scenesAfter: this.host && this.host.stats ? this.host.stats.appliedScenes : 0,
+            adds: (this.host && this.host.stats ? this.host.stats.appliedAdds || 0 : 0) - addsBefore,
+            removes: (this.host && this.host.stats ? this.host.stats.appliedRemoves || 0 : 0) - removesBefore,
+            afterCreate,
+            afterDelete,
+          };
+        }
+
+        /**
          * **派生通路的镜像往返**：改标题 / 改类型 / 改位置各一次，回传对账要用的数字。
          *
          * 这三步刻意覆盖三条不同的派生通路（也是这一轮修掉的三类分叉）：
@@ -710,6 +752,7 @@
       window.__compareWithMainView = () => window.__page.compareWithMainView();
       window.__compareTrees = () => window.__page.compareTrees();
       window.__derivedScenario = () => window.__page.derivedScenario();
+      window.__structureScenario = () => window.__page.structureScenario();
       window.__latency = (n) => window.__page.latency(n || 12);
       window.__stats = () => window.__page.stats();
       window.__log = () => log.slice();

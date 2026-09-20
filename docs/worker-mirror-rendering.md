@@ -69,6 +69,28 @@ IED 的 `FlowNode` / `FlowEdge` 是复合组件：节点内部的形状 / 标题
 结果是上面那张表里的 **399/399 几何一致 + 像素 0 差异**。这条边界剩下的含义是设计而不是缺陷：
 **只改派生部件、容器状态没动**的写法不在文档模型内（`serialize → load` 往返也留不住它）。
 
+## 结构变更也走增量（协议 v2）
+
+编辑器里最高频的两件事是"加图元"和"删图元"，而它们在 v1 里是最贵的：结构一变就重发整份文档。
+v2 起结构也走增量 —— `['add', parentId, 子树文档]` / `['remove', id]`，worker 侧用
+`Deserializer.decodeInto()` 挂上并维护 id 索引（全量 `scene` 只在首次 / 拿不到可寻址 id / worker 报
+`missing` 时发，作为兜底与自愈）。
+
+本仓实测（200 节点 / 800+ 组件，"新建一个节点"）：
+
+| | v1（结构 → 全量） | v2（结构增量） |
+|---|---|---|
+| 发出去的字节 | 485 924 B（474KB） | **1 037 B**（≈470×） |
+| 全量重同步 | 1 次 | **0 次** |
+| worker 那一帧 `renderMs` | 161 / 131 ms | **6.3 ms** |
+| 端到端（改完 → 位图回来） | 192.5 ms | **53.5 ms** |
+
+端到端那 53ms 里的大头不是镜像，而是**应用层自己的 `createNode`**（`__captureHistory()` 会给撤销栈
+做一次整图快照）—— 这是下一步值得动的地方。
+
+回归：`examples/worker-mirror.html` 的 `structureScenario()`（新建节点 + 连线 → 删除）+
+`e2e/worker-mirror.spec.ts` 里那条断言：加 2 删 2 条结构 op、`appliedScenes` 不变、几何逐项一致。
+
 ## 兼容保护：某些浏览器上不去 worker 怎么办
 
 **不支持的宿主上，页面必须与"从没接过 worker"一模一样** —— 这是机制（`MirrorHost`）保证的，
@@ -127,8 +149,9 @@ if (support.supported) {
 ## 怎么跑
 
 ```bash
-# 前置：node_modules/ice-render 要含 MirrorHost / MirrorTarget —— 即 4.0.0 及以上
-#（本仓 peer 声明是 ^4.0.0，npm install 装的就是它；本地改引擎时可以把工作区引擎链进来）
+# 前置：node_modules/ice-render 要含 MirrorHost / MirrorTarget —— 4.0.0 及以上即可跑镜像与兼容回退；
+# 结构增量（协议 v2）与"起不来就回退"的最新口径要**工作区版本**（下一个小版本发布后即 ^4.1.0）
+#（本地开发：ln -s <workspace>/ice-render node_modules/ice-render 后 npm run build）
 npm run build           # 先构建 IED 产物（示例页从 ../dist 与 node_modules/ice-render 取）
 npx http-server . -p 8091 -c-1
 # 浏览器打开 /examples/worker-mirror.html?nodes=200，按钮可切换渲染通道、跑基准、像素比对

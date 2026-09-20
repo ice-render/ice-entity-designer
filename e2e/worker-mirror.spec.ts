@@ -119,6 +119,24 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
   ).toBe(derived.scenesBefore);
   expect(derived.skippedDerived, '派生部件的写入应当被识别出来（计数而不是发给 worker）').toBeGreaterThan(0);
 
+  // ⑦ 结构通路（新建节点 + 连线 → 删除）：走结构增量 op，不得触发全量重同步
+  const structure: any = await page.evaluate(() => (window as any).__structureScenario());
+  console.log(
+    `[ied-mirror] 结构通路：加 ${structure.adds} 条 / 删 ${structure.removes} 条结构 op · ` +
+      `全量重同步 ${structure.scenesBefore}→${structure.scenesAfter} · ` +
+      `几何不一致 ${structure.afterCreate.mismatchCount}/${structure.afterCreate.count}、${structure.afterDelete.mismatchCount}/${structure.afterDelete.count}`
+  );
+  expect(structure.afterCreate.equal, `新增节点/连线后几何必须一致：${JSON.stringify(structure.afterCreate)}`).toBe(
+    true
+  );
+  expect(structure.afterDelete.equal, `删除节点后几何必须一致：${JSON.stringify(structure.afterDelete)}`).toBe(true);
+  expect(structure.adds, '新增节点/连线应当走结构增量 op').toBeGreaterThan(0);
+  expect(structure.removes, '删除节点应当走结构增量 op').toBeGreaterThan(0);
+  expect(
+    structure.scenesAfter,
+    `加/删图元都不该触发全量重同步（场景数 ${structure.scenesBefore} → ${structure.scenesAfter}）`
+  ).toBe(structure.scenesBefore);
+
   expect(errors, '不应有页面/console 错误').toEqual([]);
 });
 

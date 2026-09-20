@@ -113,11 +113,14 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
 `setPosition()`（派发 `BEFORE_MOVE`/`AFTER_MOVE`）、尺寸派发 `AFTER_RESIZE` —— 直接写
 `setState({left,top})` 会让连线不跟随（拖拽却正常，这种分叉只从面板/脚本路径暴露，2026-09-20 实测抓到），
 并且程序化补丁要在 `FlowDesigner.__applyPatch` 里标记"不是拖拽会话"（否则历史重复、下次真拖拽丢撤销点）；
-④ **镜像必须能"起不来就回退"**：探测不过 / `new Worker` 抛错 / `ready` 握手超时 / 运行期看门狗
+④ **结构增量（协议 v2）要引擎工作区版本**：`['add', parentId, 子树文档]` / `['remove', id]`
+（4.0.0 只有状态补丁，结构一变仍重发整份文档）。本仓的 `structureScenario` 与 e2e 断言依赖它，
+所以本地跑镜像 e2e 要把工作区引擎链进 `node_modules/ice-render` 再 `npm run build`。
+⑤ **镜像必须能"起不来就回退"**：探测不过 / `new Worker` 抛错 / `ready` 握手超时 / 运行期看门狗
 判定已死 → 引擎会还原落墨通道并立刻用主线程重绘一帧，然后回调 `onFallback`；**应用要接住它**
 （切回主线程模式、如实显示原因），否则用户看到的是"画面冻住、也不报错"。示例页有
 `?backend=main` 与 `?worker=<坏脚本>` 两个开关专门测这条；
-⑤ **静止态验收必须先排空**：`frame` 带 `seq`，等 `host.renderedSeq >= bridge.lastFrameSeq`（示例页的
+⑥ **静止态验收必须先排空**：`frame` 带 `seq`，等 `host.renderedSeq >= bridge.lastFrameSeq`（示例页的
 `settle()`），不要用"又收到一张位图"判断。实测数据、结论与修掉的坑见
 `docs/worker-mirror-rendering.md`；示例页 `examples/worker-mirror.html`，回归
 `e2e/worker-mirror.spec.ts`。

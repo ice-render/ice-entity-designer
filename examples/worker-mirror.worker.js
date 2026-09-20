@@ -48,6 +48,8 @@ function renderAndPost(seq) {
         frames,
         appliedOps: target ? target.appliedOps : 0,
         appliedScenes: target ? target.appliedScenes : 0,
+        appliedAdds: target ? target.appliedAdds : 0,
+        appliedRemoves: target ? target.appliedRemoves : 0,
         appliedSelections: target ? target.appliedSelections : 0,
         appliedViewports: target ? target.appliedViewports : 0,
         viewport: ice && ice.viewport ? { ...ice.viewport } : null,
