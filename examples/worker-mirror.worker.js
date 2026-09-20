@@ -55,6 +55,7 @@ function renderAndPost(seq) {
         layerBuilds: ice && ice.renderer ? ice.renderer.__layerBuilds : 0,
         appliedAdds: target ? target.appliedAdds : 0,
         appliedRemoves: target ? target.appliedRemoves : 0,
+        appliedMoves: target ? target.appliedMoves : 0,
         appliedSelections: target ? target.appliedSelections : 0,
         appliedViewports: target ? target.appliedViewports : 0,
         viewport: ice && ice.viewport ? { ...ice.viewport } : null,
