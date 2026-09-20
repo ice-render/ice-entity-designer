@@ -207,3 +207,35 @@ test('兼容回退：?backend=main 强制主线程渲染，页面照常可用', 
   expect(mode.ink.n, '主线程渲染必须有内容').toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
+
+/**
+ * **"落墨占比"基准护栏**：主线程直绘 / 几何通道（删掉落墨、不启 worker）/ worker 镜像。
+ *
+ * 镜像能省的上界 = "主线程那一帧里有多少是落墨" —— 这条基准把它算出来并钉住：
+ * 三档掉出合理区间就说明**测的东西变了**（例如镜像没真的在省、或主线程那侧被别的东西拖慢），
+ * 而不是"镜像突然快/慢了几毫秒"这种噪声。
+ */
+test('落墨占比三档：几何通道是镜像的理论地板，占比落在合理区间', async ({ page }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 200)));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/examples/worker-mirror.html?nodes=200', { waitUntil: 'load' });
+  await page.waitForFunction(() => (window as any).__ready(), undefined, { timeout: 30_000 });
+
+  const h: any = await page.evaluate(() => (window as any).__headroom(60));
+  console.log(
+    `[ied-headroom] viewport p50：主线程 ${h.main}ms · 几何通道 ${h.geometryOnly}ms · 镜像 ${h.mirror}ms · ` +
+      `落墨占比 ${(h.inkShare * 100).toFixed(0)}% · 镜像省 ${(h.mirrorSave * 100).toFixed(0)}%`
+  );
+  test.info().annotations.push({ type: 'ied-headroom', description: JSON.stringify(h) });
+
+  // ① 落墨确实占一部分：几何通道必须比主线程直绘轻
+  expect(h.geometryOnly, `几何通道应当比主线程直绘轻：${JSON.stringify(h)}`).toBeLessThan(h.main);
+  // ② 占比落在合理区间（本场景实测 ~1/3）：掉到 0 说明镜像没在省，涨到 0.7+ 说明场景/负载变了
+  expect(h.inkShare, `落墨占比应当落在合理区间：${JSON.stringify(h)}`).toBeGreaterThan(0.1);
+  expect(h.inkShare, `落墨占比应当落在合理区间：${JSON.stringify(h)}`).toBeLessThan(0.75);
+  // ③ 镜像至少要达到"几何通道"那一档（它是镜像的理论地板；留 25% 噪声余量）
+  expect(h.mirror, `镜像应当与几何通道同档：${JSON.stringify(h)}`).toBeLessThan(h.geometryOnly * 1.25);
+  expect(errors, '基准不应产生页面错误').toEqual([]);
+});
