@@ -69,6 +69,38 @@ IED 的 `FlowNode` / `FlowEdge` 是复合组件：节点内部的形状 / 标题
 结果是上面那张表里的 **399/399 几何一致 + 像素 0 差异**。这条边界剩下的含义是设计而不是缺陷：
 **只改派生部件、容器状态没动**的写法不在文档模型内（`serialize → load` 往返也留不住它）。
 
+## 兼容保护：某些浏览器上不去 worker 怎么办
+
+**不支持的宿主上，页面必须与"从没接过 worker"一模一样** —— 这是机制（`MirrorHost`）保证的，
+应用只需要**接住回退回调**。三道闸 + 一个固定动作：
+
+| 闸 | 覆盖的失败 | 机制 |
+|---|---|---|
+| 启动前探测 | 没有 `Worker` / `OffscreenCanvas`+`transferToImageBitmap` / `ImageBitmap` | `ICE.MirrorHost.detect({ canvas })`；探测不过**根本不接管落墨通道** |
+| 启动期兜底 | CSP `worker-src`、`file://`、企业策略让 `new Worker()` 同步抛；脚本 404 / 顶层抛；worker 自报没有 OffscreenCanvas；协议版本不一致 | try/catch + `ready` 握手（默认 4s）+ `caps`/版本校验 |
+| 运行期看门狗 | worker 卡长任务 / 画布分配失败 / 被宿主掐掉（不一定触发 `onerror`） | 背压下"有帧在途却超时无位图" = 已死 → 回退 |
+
+回退动作固定三步：**还原落墨通道与缓存开关 → 立刻用主线程重绘一帧 → 上报**
+（`onFallback({reason, message, support})` + 一条 `MIRROR_FALLBACK` 事件）。
+本仓示例页把回退原因显示在日志里、并把模式切回主线程（`window.__mirrorFallback` 供测试读取）：
+
+```js
+const support = ICE.MirrorHost.detect({ canvas: view });   // 不支持就别接
+if (support.supported) {
+  host = new ICE.MirrorHost({
+    canvas: view, ice, workerUrl: 'worker-mirror.worker.js',
+    fallback: 'auto',                                       // 默认就是 auto
+    onFallback: (info) => console.warn('[镜像回退]', info.reason, info.message),
+  });
+  host.start();
+}
+```
+
+两个开关供测试/运维用（与引擎参考宿主同一套口径）：`?backend=main` 强制主线程渲染、
+`?worker=<url>` 换成（可以是坏的）worker 脚本。回归：`npx playwright test e2e/worker-mirror.spec.ts`，
+其中两条用例分别覆盖"worker 脚本 404 → 自动回退且画布仍可用、改状态画面跟着变"与
+"`?backend=main` 页面照常可用"。
+
 ## 一个"看不到状态分叉、只看得到滞后"的坑（已修）
 
 镜像的帧节拍原先**没有背压**：主线程每步都发 `frame`，而 worker 一帧要几毫秒 —— 一个 30 帧的基准

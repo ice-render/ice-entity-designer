@@ -122,3 +122,64 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
 
   expect(errors, '不应有页面/console 错误').toEqual([]);
 });
+
+/**
+ * **兼容保护的集成验收（应用侧）**：worker 上不去时，IED 页面必须自己回退到主线程渲染。
+ *
+ * 这条与引擎侧 `e2e/visual/worker-fallback.spec.ts` 的分工：引擎那条验"机制会不会回退"，
+ * 这条验"**应用有没有接住**" —— 页面得把模式切回主线程、如实显示原因，且画布仍然正常。
+ */
+test('兼容回退：worker 脚本加载失败 → 页面自动回退主线程，画布仍然可用', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 200)));
+
+  await page.setViewportSize({ width: 1400, height: 900 });
+  // 故意指向不存在的 worker 脚本（脚本没部署 / 被 CSP 挡 / 加载期就抛）
+  await page.goto('/examples/worker-mirror.html?nodes=40&worker=no-such-worker.js', { waitUntil: 'load' });
+  await page.waitForFunction(() => (window as any).__ready(), undefined, { timeout: 20_000 });
+
+  await page.evaluate(() => (window as any).__setMode('mirror'));
+  await page.waitForFunction(() => !!(window as any).__mirrorFallback, undefined, { timeout: 15_000 });
+
+  const state: any = await page.evaluate(() => ({
+    fallback: (window as any).__mirrorFallback,
+    mode: (window as any).__page.mode,
+    stats: (window as any).__stats(),
+  }));
+  console.log(`[ied-mirror:fallback] ${state.fallback.reason} —— ${state.fallback.message}`);
+  expect(['worker-error', 'ready-timeout'], `回退原因应当明确：${JSON.stringify(state.fallback)}`).toContain(
+    state.fallback.reason
+  );
+  // 模式必须切回主线程（否则用户看到一块冻住的画布）
+  expect(state.mode, '回退之后模式应当回到 main').toBe('main');
+  expect(state.stats.mode).toBe('main');
+
+  // 画布仍然可用：主线程重绘出了内容
+  const ink: any = await page.evaluate(() => {
+    const p = (window as any).__page;
+    const view = document.getElementById('view');
+    return p.inkBox(view, view.width, view.height);
+  });
+  expect(ink.n, `回退后画布必须有内容：${JSON.stringify(ink)}`).toBeGreaterThan(0);
+  expect(errors, '回退路径不应产生未捕获异常').toEqual([]);
+});
+
+test('兼容回退：?backend=main 强制主线程渲染，页面照常可用', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 200)));
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/examples/worker-mirror.html?nodes=40&backend=main', { waitUntil: 'load' });
+  await page.waitForFunction(() => (window as any).__ready(), undefined, { timeout: 20_000 });
+
+  const mode: any = await page.evaluate(async () => {
+    const p = (window as any).__page;
+    const after = await p.setMode('mirror');
+    const view = document.getElementById('view');
+    return { after, ink: p.inkBox(view, view.width, view.height), stats: p.stats() };
+  });
+  expect(mode.after, '强制主线程时 setMode("mirror") 应当原样返回 main').toBe('main');
+  expect(mode.ink.n, '主线程渲染必须有内容').toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});

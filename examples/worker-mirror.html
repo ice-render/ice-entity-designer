@@ -133,7 +133,11 @@
         constructor() {
           this.mode = 'main';
           this.host = null;
-          this.nodeCount = Number(new URLSearchParams(location.search).get('nodes')) || 120;
+          const params = new URLSearchParams(location.search);
+          this.nodeCount = Number(params.get('nodes')) || 120;
+          /** `?backend=main` 强制主线程渲染（等价于"这台浏览器没有 worker"）；`?worker=` 换 worker 脚本（可用坏的） */
+          this.forceMain = params.get('backend') === 'main';
+          this.workerUrl = params.get('worker') || 'worker-mirror.worker.js';
 
           // 主线程：唯一真相（DOM 事件、命中检测、状态都在这里）
           this.ice = new ICE.ICE().init('view', { renderMode: 'full' });
@@ -222,8 +226,20 @@
         async setMode(mode) {
           if (mode === this.mode) return this.mode;
           if (mode === 'mirror') {
+            if (this.forceMain) {
+              this.say('[镜像] ?backend=main —— 强制主线程渲染（用于验证没有 worker 时的形态）。');
+              return this.mode;
+            }
             if (typeof ICE.MirrorHost !== 'function') {
               this.say('当前加载的 ice-render 没有 MirrorHost（需要含 worker 镜像的版本）——保持主线程渲染。');
+              return this.mode;
+            }
+            // 启动前先探一句：不支持就**根本别接**（引擎内部还会再探一次，这里是为了把原因说清楚）
+            const support = ICE.MirrorHost.detect({ canvas: view });
+            if (!support.supported) {
+              this.say(
+                `当前运行时不支持 worker 镜像（缺 ${support.missing.join('、')}）——保持主线程渲染，功能不受影响。`
+              );
               return this.mode;
             }
             this.host = new ICE.MirrorHost({
@@ -232,7 +248,21 @@
               },
               canvas: view,
               ice: this.ice,
-              workerUrl: 'worker-mirror.worker.js',
+              workerUrl: this.workerUrl,
+              // 起不来（worker 404 / 握手超时 / 半路死掉）自动回退主线程渲染，并把原因报出来
+              fallback: 'auto',
+              onFallback: (info) => {
+                this.say(`[镜像回退] ${info.reason}：${info.message}`);
+                window.__mirrorFallback = { reason: info.reason, message: info.message, missing: info.support.missing };
+                if (this.host) {
+                  this.host = null;
+                }
+                this.mode = 'main';
+                document.title = 'IED · 主线程渲染（已回退）';
+                for (const el of document.querySelectorAll('button[data-mode]')) {
+                  el.dataset.active = String(el.dataset.mode === 'main');
+                }
+              },
               onBitmap: (bitmap) => {
                 // 取像素用的旁路（drawImage 不消耗位图），之后 MirrorHost 再交给 bitmaprenderer
                 const pctx = probe.getContext('2d');
@@ -252,6 +282,10 @@
               },
             });
             this.host.start();
+            if (this.host.fallbackReason) {
+              // start() 阶段就失败了（探测/构造/握手同步失败）：`onFallback` 已经处理完毕
+              return this.mode;
+            }
             this.mode = 'mirror';
             document.title = 'IED · worker 镜像';
           } else {
@@ -270,8 +304,48 @@
           // 切回主线程后画面要立刻回来
           this.ice.dirty = true;
           this.ice.renderer.frameEvtHandler();
-          await this.waitFrames(1);
+          if (this.mode === 'mirror' && this.host) {
+            // 等首帧（**或者**等回退）：worker 起不来时不能把 setMode 卡死在这里
+            const outcome = await this.waitFirstFrameOrFallback();
+            if (outcome === 'fallback') {
+              // `onFallback` 已经把模式切回 main 了，这里只是别让调用方以为"切成功且没画面"
+              return this.mode;
+            }
+          } else {
+            await this.nextFrameMainThread();
+          }
           return this.mode;
+        }
+
+        /** 主线程渲染下"这一帧真的画完了"（切回主线程 / 回退之后用）。 */
+        nextFrameMainThread() {
+          return new Promise((resolve) => {
+            if (typeof requestAnimationFrame === 'function') {
+              requestAnimationFrame(() => resolve());
+            } else {
+              setTimeout(resolve, 16);
+            }
+          });
+        }
+
+        /**
+         * 等 `mirror` 模式的**首帧到达**，或等**回退判定**，谁先来算谁。
+         *
+         * 为什么不能直接用 `waitFrames()`：worker 起不来时它只会一路超时抛错，
+         * 把"自动回退"这条正常路径变成异常（真实场景里等于页面卡在切换动作上）。
+         */
+        async waitFirstFrameOrFallback(timeout = 4000) {
+          const t0 = Date.now();
+          while (Date.now() - t0 < timeout) {
+            if (!this.host || this.host.fallbackReason) {
+              return 'fallback';
+            }
+            if (this.host.frames > 0) {
+              return 'frame';
+            }
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+          return 'timeout';
         }
 
         /**
