@@ -3,7 +3,7 @@
  *
  * 这里刻意使用**真实引擎**（ice-render）而不是 mock：应用层的问题往往出在「应用逻辑 × 引擎语义」
  * 的接缝上（连线宿主的生命周期、递归查找、序列化 typeId、视口/包围盒……），mock 掉的恰恰是这些。
- * 引擎在 node 下可跑：`root.requestFrame` 有定时器兜底、Path2D 走 PolyfillPath2D。
+ * 引擎在 node 下可跑：`root.requestFrame` 有定时器兜底、Path2D 走命令记录器（`Path2DRecorder`）。
  *
  * 注意：node 没有 DOM，文本量测走降级路径（拿不到真实字形宽度），因此断言只覆盖
  * **结构 / 标识 / 标签 / 快照** 等确定性行为，不断言像素或精确文本宽高。
