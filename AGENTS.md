@@ -20,6 +20,10 @@
 - `npm run lint`（eslint，0 error 起步）/ `npm run types:check` / `npm test`（jest 37 suites / 398 用例，2026-09-19 实测）
   / `npm run test:coverage`（棘轮：statements 88 / lines 88 / branches 74 / functions 85）/ `npm run build`
 - `npm run test:e2e`：Playwright，覆盖 9 个编辑器示例页（含 BPMN 令牌仿真）
+- **引擎改动之后的下游回归**走引擎仓的脚本（它会把本仓的 `node_modules/ice-render` 临时指向工作区引擎、
+  跑完还原）：`npm run regression:affected`（日常：本仓会被判定为"受影响的成员"而跑 e2e）、
+  `npm run regression:family`（发版前全量）。先看它打算跑什么：`--dry-run`；
+  只想跑本仓：`node scripts/family-regression.cjs --tier=affected --only=ice-entity-designer`。
 
 ## 示例页写法（2026-09-17 确立，11 个示例页已全部统一）
 
