@@ -127,8 +127,8 @@ if (support.supported) {
 ## 怎么跑
 
 ```bash
-# 前置：node_modules/ice-render 需要**含 MirrorHost / MirrorTarget 的版本**
-#（本仓 peer 声明是 ^3.0.0；这批能力随下一个引擎版本发布。本地开发可以把工作区引擎链进来）
+# 前置：node_modules/ice-render 要含 MirrorHost / MirrorTarget —— 即 4.0.0 及以上
+#（本仓 peer 声明是 ^4.0.0，npm install 装的就是它；本地改引擎时可以把工作区引擎链进来）
 npm run build           # 先构建 IED 产物（示例页从 ../dist 与 node_modules/ice-render 取）
 npx http-server . -p 8091 -c-1
 # 浏览器打开 /examples/worker-mirror.html?nodes=200，按钮可切换渲染通道、跑基准、像素比对
