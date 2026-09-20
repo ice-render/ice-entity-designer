@@ -20,6 +20,10 @@
 - `npm run lint`（eslint，0 error 起步）/ `npm run types:check` / `npm test`（jest 37 suites / 398 用例，2026-09-19 实测）
   / `npm run test:coverage`（棘轮：statements 88 / lines 88 / branches 74 / functions 85）/ `npm run build`
 - `npm run test:e2e`：Playwright，覆盖 9 个编辑器示例页（含 BPMN 令牌仿真）
+- **引擎改动之后的下游回归**走引擎仓的脚本（它会把本仓的 `node_modules/ice-render` 临时指向工作区引擎、
+  跑完还原）：`npm run regression:affected`（日常：本仓会被判定为"受影响的成员"而跑 e2e）、
+  `npm run regression:family`（发版前全量）。先看它打算跑什么：`--dry-run`；
+  只想跑本仓：`node scripts/family-regression.cjs --tier=affected --only=ice-entity-designer`。
 
 ## 示例页写法（2026-09-17 确立，11 个示例页已全部统一）
 
@@ -98,6 +102,25 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
 回归：`e2e/link-hooks.spec.ts`（点线 → 手柄可见 →
 拖拽中出插槽 → 落在插槽上改接）。改 `Relation` / 各域包连线类时不要动 `transformable` 的语义，
 也不要往 `project_codec.ts` 之外新增 state 键（`tests/designer/codec-completeness.test.ts` 会拦）。
+
+**Worker 镜像渲染（2026-09-20 实测落地）**：引擎可以把光栅化放到 Web Worker
+（主线程持有状态与命中检测，worker 只有镜像树）。接本仓时记住两条：
+① **worker 侧那台 ICE 没有任何 Designer**，图元类型必须显式注册 —— 用
+`IED.registerDesignerTypes(ice)`（漏了不报错，只会静默跳过整棵未注册子树）；
+② **只有"文档里的组件"能被镜像寻址**：`FlowNode` / `FlowEdge` 的派生子件（形状 / 标题 /
+角标 / 连线标签）不进文档，对它们的写入不进镜像（计数在 `bridge.skippedDerived`），靠 worker 侧
+**重放 `FlowNode.applyPatch`** 重算；③ **"有跟随者"的改动必须走公开入口**：位置用
+`setPosition()`（派发 `BEFORE_MOVE`/`AFTER_MOVE`）、尺寸派发 `AFTER_RESIZE` —— 直接写
+`setState({left,top})` 会让连线不跟随（拖拽却正常，这种分叉只从面板/脚本路径暴露，2026-09-20 实测抓到），
+并且程序化补丁要在 `FlowDesigner.__applyPatch` 里标记"不是拖拽会话"（否则历史重复、下次真拖拽丢撤销点）；
+④ **镜像必须能"起不来就回退"**：探测不过 / `new Worker` 抛错 / `ready` 握手超时 / 运行期看门狗
+判定已死 → 引擎会还原落墨通道并立刻用主线程重绘一帧，然后回调 `onFallback`；**应用要接住它**
+（切回主线程模式、如实显示原因），否则用户看到的是"画面冻住、也不报错"。示例页有
+`?backend=main` 与 `?worker=<坏脚本>` 两个开关专门测这条；
+⑤ **静止态验收必须先排空**：`frame` 带 `seq`，等 `host.renderedSeq >= bridge.lastFrameSeq`（示例页的
+`settle()`），不要用"又收到一张位图"判断。实测数据、结论与修掉的坑见
+`docs/worker-mirror-rendering.md`；示例页 `examples/worker-mirror.html`，回归
+`e2e/worker-mirror.spec.ts`。
 
 ## BPMN 可连接性（2026-09-13 确立）
 

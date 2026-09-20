@@ -71,6 +71,43 @@ IED（ice entity designer）是基于 [ice-render](https://github.com/ice-render
 
 ### 编辑器内核能力（继承自 ice-render）
 
+#### Worker 镜像渲染（2026-09-20 起，实测可用）
+
+引擎支持把**光栅化搬到 Web Worker**：主线程持有组件树与状态、处理 DOM 事件与命中检测，
+worker 持有一棵镜像树只负责画，位图回传主线程显示。本仓的流程图实测（200 节点 / 799 组件）：
+
+- **缩放平移**（最重的负载）每帧主线程 **1.90ms → 1.20ms（省 37%）**；端到端延迟约 **7ms**；
+- **画面与主线程直绘逐像素 0 差异**（含文字与连线标签）—— 初始态、跑完基准、改完属性之后都成立；
+- 纯拖动单个节点只有 12% 收益 —— 引擎的静态层 / 组件位图缓存已经把这类负载吸收掉了
+  （要不要上 worker，看场景里有没有大范围重绘，不看图元数量）；
+- **派生更新走同一条应用层通路**：worker 收到状态补丁后**重放 `applyPatch`**（重建内部部件、
+  重算连线走线），所以改名 / 改类型 / 改位置都**不需要重发整份文档**（实测全量重同步 0 次）；
+- **上不去就自动回退**：启动前探测（`ICE.MirrorHost.detect()`）、`new Worker` 兜底、`ready` 握手、
+  运行期看门狗，任一失败都还原落墨通道并**立刻用主线程重绘一帧** —— 不支持的浏览器上页面与
+  "从没接过 worker"完全一致，应用只需接住 `onFallback`。
+
+```js
+// 主线程：照常建树，然后把"落墨通道"交给 MirrorHost
+const ice = new ICE().init('canvas');
+const host = new ICE.MirrorHost({ canvas: canvasEl, ice, workerUrl: 'mirror.worker.js' });
+host.start();
+```
+
+```js
+// worker：加载引擎与 IED 的 UMD，注册类型（★ 这行不能少），然后等协议消息
+ICE.init(offscreenCanvas.getContext('2d'));
+IED.registerDesignerTypes(ice);
+const target = new ICE.MirrorTarget(ice);
+```
+
+**两个必须知道的边界**：① worker 侧那台 ICE **没有任何 Designer**，图元类型要显式注册
+（漏了不会报错，只会静默丢内容）；② **只有"文档里的组件"能被镜像寻址** —— 复合组件的派生子件
+（节点形状 / 标题 / 角标 / 连线标签）不进文档，对它们的写入不进镜像（引擎会计数上报
+`bridge.skippedDerived`），靠"重放应用层 `applyPatch`"在 worker 侧重算；因此**只改派生部件、
+容器状态没动**的写法不在文档模型内（连存盘往返也留不住它）。
+完整数据、结论与踩过的坑见 [`docs/worker-mirror-rendering.md`](docs/worker-mirror-rendering.md)；
+可直接跑的示例页：`examples/worker-mirror.html`。
+
 - 画布滚轮缩放、空白处拖拽平移。
 - 每个域包示例页统一接入上面这套视口交互（`examples/canvas-interactions.js`）：canvas 铺满可视区，
   滚轮以光标为锚点缩放，空白处左键 / 任意位置中键拖拽平移，工具栏带「适应视图 / 复位视图」。

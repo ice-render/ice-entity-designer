@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import { ICEGroup, ICERect, ICEText } from 'ice-render';
+import { ICEGroup, ICERect, ICEText, ICE_EVENT_NAME_CONSTS } from 'ice-render';
 import { FlowDiamond, FlowParallelogram } from './flow_shapes';
 import {
   BpmnAnnotationShape,
@@ -473,11 +473,43 @@ export default class FlowNode extends ICEGroup {
       patch.taskType !== undefined ||
       patch.width !== undefined ||
       patch.height !== undefined;
-    this.setState(patch);
+    /**
+     * 位置与尺寸必须走引擎那两条**自带通知**的入口，不能直接 `setState`。
+     *
+     * 真实事故（2026-09-20，worker 镜像实测暴露）：属性面板改位置走的是本方法，而本方法原先
+     * 直接 `setState({left,top})` —— 引擎只在 `setPosition()` 里派发 `BEFORE_MOVE`/`AFTER_MOVE`，
+     * 于是**节点被程序化移动时连线不跟随**（鼠标拖拽走的是 `moveGlobalPosition()` → `setPosition()`，
+     * 所以肉眼只在属性面板 / 脚本改位置时才看得出来）。尺寸同理：连线插槽挂在节点包围盒的
+     * 边上，改宽高不派发 `AFTER_RESIZE` 就等于插槽不跟着动。
+     */
+    const moved = patch.left !== undefined || patch.top !== undefined;
+    const resized = patch.width !== undefined || patch.height !== undefined;
+    if (resized) {
+      this.trigger(ICE_EVENT_NAME_CONSTS.BEFORE_RESIZE);
+    }
+    if (moved) {
+      const left = patch.left !== undefined ? patch.left : this.state.left;
+      const top = patch.top !== undefined ? patch.top : this.state.top;
+      const rest: Record<string, any> = { ...patch };
+      delete rest.left;
+      delete rest.top;
+      if (Object.keys(rest).length) {
+        this.setState(rest);
+      }
+      // 移动的**唯一**正确入口：派发事件 + 递归通知后代（容器移动时里面的图元也要重新布线）
+      this.setPosition(left, top);
+    } else {
+      this.setState(patch);
+    }
     if (needsRebuild) {
       this.__buildShape();
     } else if (this.labelComponent) {
       this.labelComponent.setState({ text: String(this.state.title || '') });
+    }
+    // 重建之后才通知：跟随者（连线 / 对齐辅助 / 控制面板）要按**最终**几何重算，
+    // 早于 `__buildShape()` 通知会让它们读到旧盒子（形状是子组件，盒子由子组件算出）。
+    if (resized || needsRebuild) {
+      this.trigger(ICE_EVENT_NAME_CONSTS.AFTER_RESIZE);
     }
     this.dirty = true;
     return this;

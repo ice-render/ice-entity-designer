@@ -142,6 +142,16 @@ export default class FlowDesigner {
   private __moveSession = false;
   private __moveEmitQueued = false;
   /**
+   * 正在执行**程序化补丁**（`updateNode` / `updateEdge`）的嵌套层数。
+   *
+   * 为什么需要：位置补丁现在走引擎的 `setPosition()`（否则连线不跟随，见 `FlowNode.applyPatch`），
+   * 而那会派发 `BEFORE_MOVE`/`AFTER_MOVE` —— 这两个事件在**鼠标拖拽**里的语义是"开一个拖拽会话"：
+   * 会话里只记一次历史、按帧合并广播。程序化补丁不是拖拽会话：它自己已经 `__captureHistory()` +
+   * `__emitChange()`，若再被当成开会话，就会出现**重复历史条目**，并且那个"会话"永远不会结束
+   * （程序化路径不会有 mouseup）——下一次真拖拽的撤销点就丢了。
+   */
+  private __patchDepth = 0;
+  /**
    * 程序化高亮层（见 `designer/highlight.ts`）。
    *
    * 它是**视图状态**：不进快照、不参与命中。图元在容器里（BPMN 池 / 泳道）也画得出来，
@@ -333,6 +343,9 @@ export default class FlowDesigner {
   }
 
   private __onBeforeMove(): void {
+    if (this.__patchDepth > 0) {
+      return;
+    }
     if (this.__moveSession) {
       return;
     }
@@ -342,6 +355,9 @@ export default class FlowDesigner {
   }
 
   private __onAfterMove(): void {
+    if (this.__patchDepth > 0) {
+      return;
+    }
     if (this.__moveEmitQueued) {
       return;
     }
@@ -456,7 +472,7 @@ export default class FlowDesigner {
     const node = this.ice.findComponent(id);
     if (node && node.constructor.typeId === FlowNode.typeId) {
       this.__captureHistory();
-      node.applyPatch(patch);
+      this.__applyPatch(node, patch);
       this.__emitChange();
     }
     return node;
@@ -466,16 +482,31 @@ export default class FlowDesigner {
     const edge = this.ice.findComponent(id);
     if (edge && edge.constructor.typeId === FlowEdge.typeId) {
       this.__captureHistory();
-      // FlowEdge.applyPatch 会顺带重算 BPMN 派生样式（虚线/箭头）
-      if (typeof edge.applyPatch === 'function') {
-        edge.applyPatch(patch);
-      } else {
-        edge.setState(patch);
-        edge.dirty = true;
-      }
+      this.__applyPatch(edge, patch);
       this.__emitChange();
     }
     return edge;
+  }
+
+  /**
+   * **程序化补丁的统一入口**：走组件自己的 `applyPatch`（会重算派生：连线样式 / 重建形状），
+   * 并把它标记成"不是拖拽会话"（见 `__patchDepth`）。
+   *
+   * 例如 `FlowEdge.applyPatch` 会顺带按 BPMN 语义重算虚线 / 箭头；`FlowNode.applyPatch` 会
+   * 按新位置 / 新尺寸派发引擎的移动与尺寸事件（连线因此跟随）。
+   */
+  private __applyPatch(component: any, patch: Record<string, any>): void {
+    this.__patchDepth++;
+    try {
+      if (component && typeof component.applyPatch === 'function') {
+        component.applyPatch(patch);
+      } else {
+        component.setState(patch);
+        component.dirty = true;
+      }
+    } finally {
+      this.__patchDepth--;
+    }
   }
 
   /**

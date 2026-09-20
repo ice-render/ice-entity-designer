@@ -108,6 +108,15 @@ export {
 } from './theme/designerTheme';
 
 /**
+ * **Worker 镜像渲染**：把本库的全部领域图元类型注册到一个 ICE 实例上。
+ *
+ * 应用里那台 ICE 由各 Designer 的构造函数顺手注册类型；worker 侧的镜像那台 ICE 没有任何 Designer，
+ * 不注册就会在反序列化时**静默跳过**整棵子树（`MirrorTarget.applyScene()` 会把 `unknownTypes`
+ * 报回来）。用法见 `examples/worker-mirror.html` 与 `docs/worker-mirror-rendering.md`。
+ */
+export { registerDesignerTypes, designerTypeIds } from './utils/register-types';
+
+/**
  * ice-render 是 peer 依赖，不再内联进本包。
  *
  * 这里继续 re-export 引擎，只是方便调用方从同一入口取到 `ICE` 与 `EntityDesigner`；
