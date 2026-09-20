@@ -129,7 +129,7 @@ export const POWER_SWITCH_KINDS: PowerSymbolKind[] = ['breaker', 'disconnector',
 
 export type PowerSwitchState = 'open' | 'closed';
 
-/** 采样半圆弧，返回折线点（不依赖 Path2D.arc，Node / 小程序一致） */
+/** 采样半圆弧，返回折线点（不依赖 Path2D.arc，浏览器 / Node 一致） */
 function arcPoints(cx: number, cy: number, radius: number, startDeg: number, endDeg: number, steps = 16): number[][] {
   const points: number[][] = [];
   for (let i = 0; i <= steps; i++) {

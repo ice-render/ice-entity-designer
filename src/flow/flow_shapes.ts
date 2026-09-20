@@ -14,8 +14,9 @@ import { ICEPath } from 'ice-render';
  * 1. 路径必须赋回 `this.path2D` —— 基类渲染读的是这个字段，不是 createPathObject() 的返回值；
  * 2. 路径坐标要扣掉 `state.localOrigin`（默认原点在组件中心），与 ICERect 的写法一致。
  *
- * Path2D 实例按运行时构造：浏览器用原生 `Path2D`，小程序低版本 / Node 用引擎的
- * PolyfillPath2D（`this.path2D` 已由 ICEPath 构造时按平台创建好，这里 clone 它的构造函数）。
+ * Path2D 实例按运行时构造：`this.path2D` 已由 ICEPath 构造时按平台创建好
+ * （`root.createPath2D()`），这里 clone 它的构造函数——这样自定义形状在浏览器与
+ * headless / 测试桩下都走同一条命令流，SVG 导出与形状断言才能复用。
  */
 function createEmptyPath(component: any): any {
   const PathCtor = component.path2D && component.path2D.constructor;
