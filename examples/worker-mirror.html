@@ -101,11 +101,11 @@
     <main>
       <div class="pane">
         <h2 id="view-title">可见画布（输入来源 + 当前渲染通道）</h2>
-        <canvas id="view" width="900" height="620"></canvas>
+        <canvas id="view" lang="zh-CN" width="900" height="620"></canvas>
       </div>
       <div class="pane">
         <h2>参考：同一份文档的主线程直绘</h2>
-        <canvas id="ref" width="900" height="620"></canvas>
+        <canvas id="ref" lang="zh-CN" width="900" height="620"></canvas>
       </div>
       <canvas id="probe" width="900" height="620" hidden></canvas>
     </main>
@@ -137,6 +137,12 @@
           this.nodeCount = Number(params.get('nodes')) || 120;
           /** `?backend=main` 强制主线程渲染（等价于"这台浏览器没有 worker"）；`?worker=` 换 worker 脚本（可用坏的） */
           this.forceMain = params.get('backend') === 'main';
+          /**
+           * 直绘模式（`transferControlToOffscreen`）要求显示画布**还没有 2d 上下文**，
+           * 而本页把引擎 init 在同一块可见画布上（输入要绑它）—— 所以这里不具备条件。
+           * 想用直绘：把显示层与"输入/量测层"拆成两块画布，见引擎参考宿主
+           * `ice-render/examples/worker/mirror-render.html` 的 `?direct=1`。
+           */
           this.workerUrl = params.get('worker') || 'worker-mirror.worker.js';
 
           // 主线程：唯一真相（DOM 事件、命中检测、状态都在这里）
@@ -631,6 +637,96 @@
         }
 
         /**
+         * **"落墨占比"三档基准**：主线程直绘 / 几何通道（删掉落墨、不启 worker）/ worker 镜像。
+         *
+         * 为什么要有它：镜像能省的**上界**就是"主线程那一帧里有多少是落墨"——把这三档摆在一条曲线上，
+         * "镜像到底还能省多少"就是算出来的，而不是感觉出来的（实测这套场景约 1/3）。
+         * 三档必须在**同一个场景、同一套负载**上量：缩放平移（缓存整批失效、全部图元重画的那类）。
+         */
+        async headroom(frames = 60) {
+          const measure = async (setup) => {
+            await setup();
+            const r = await this.bench(frames, 10, 'viewport');
+            return r.p50;
+          };
+          const main = await measure(async () => {
+            await this.setMode('main');
+          });
+          const mirror = await measure(async () => {
+            await this.setMode('mirror');
+          });
+          const original = this.ice.ctx;
+          const geometryOnly = await measure(async () => {
+            // 停掉镜像（它会还原落墨通道），然后只把落墨换成几何通道 —— 这就是"镜像是怎么省的"那一档
+            if (this.host) {
+              this.host.stop();
+              this.host = null;
+            }
+            this.mode = 'main';
+            if (!this.__geometryProbeCtx) {
+              this.__geometryProbeCtx = ICE.createGeometryOnlyContext(original);
+            }
+            this.ice.setPaintTarget(this.__geometryProbeCtx);
+          });
+          // 复位：落墨回到真实画布
+          this.ice.setPaintTarget(original);
+          this.ice.dirty = true;
+          this.ice.renderer.frameEvtHandler();
+          await this.waitFrames(1);
+          return {
+            main: +main.toFixed(3),
+            geometryOnly: +geometryOnly.toFixed(3),
+            mirror: +mirror.toFixed(3),
+            /** 落墨在主线程那一帧里的占比 = 镜像能省的**上界** */
+            inkShare: +(1 - geometryOnly / main).toFixed(3),
+            /** 镜像实际省了多少 */
+            mirrorSave: +(1 - mirror / main).toFixed(3),
+          };
+        }
+
+        /**
+         * **结构通路的镜像往返**：新建节点 + 连线 → 删除它们，回传对账要用的数字。
+         *
+         * 这是编辑器里最高频的一类编辑（加/删图元）。判据（e2e）：整段场景**不得触发全量重同步**
+         * （`appliedScenes` 不变），而几何对账必须仍然逐项一致 —— 也就是说"加/删一个节点"
+         * 走的是一条几 KB 的结构增量 op，而不是重发整份文档（200 节点场景 473KB + worker 冷启动重绘）。
+         */
+        async structureScenario() {
+          const scenesBefore = this.host && this.host.stats ? this.host.stats.appliedScenes : 0;
+          const addsBefore = this.host && this.host.stats ? this.host.stats.appliedAdds || 0 : 0;
+          const removesBefore = this.host && this.host.stats ? this.host.stats.appliedRemoves || 0 : 0;
+          const base = this.dragTarget.state;
+
+          const node = this.designer.createNode('process', {
+            title: '新建的步骤',
+            left: base.left + 40,
+            top: base.top + 120,
+          });
+          const edge = this.designer.createEdge({
+            sourceId: base.id,
+            targetId: node.state.id,
+            linkShape: 'visio',
+          });
+          await this.settle();
+          const afterCreate = await this.compareTrees();
+
+          this.designer.remove(node.state.id); // 连带删掉挂在它上面的连线
+          await this.settle();
+          const afterDelete = await this.compareTrees();
+
+          return {
+            nodeId: node.state.id,
+            edgeId: edge.state.id,
+            scenesBefore,
+            scenesAfter: this.host && this.host.stats ? this.host.stats.appliedScenes : 0,
+            adds: (this.host && this.host.stats ? this.host.stats.appliedAdds || 0 : 0) - addsBefore,
+            removes: (this.host && this.host.stats ? this.host.stats.appliedRemoves || 0 : 0) - removesBefore,
+            afterCreate,
+            afterDelete,
+          };
+        }
+
+        /**
          * **派生通路的镜像往返**：改标题 / 改类型 / 改位置各一次，回传对账要用的数字。
          *
          * 这三步刻意覆盖三条不同的派生通路（也是这一轮修掉的三类分叉）：
@@ -710,6 +806,8 @@
       window.__compareWithMainView = () => window.__page.compareWithMainView();
       window.__compareTrees = () => window.__page.compareTrees();
       window.__derivedScenario = () => window.__page.derivedScenario();
+      window.__structureScenario = () => window.__page.structureScenario();
+      window.__headroom = (frames) => window.__page.headroom(frames);
       window.__latency = (n) => window.__page.latency(n || 12);
       window.__stats = () => window.__page.stats();
       window.__log = () => log.slice();

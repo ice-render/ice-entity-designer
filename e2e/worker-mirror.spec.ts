@@ -44,6 +44,13 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
   // ① 初始态：worker 镜像 vs "用同一份文档另建一台 ICE 直绘" —— 必须严格 0 差异
   await page.evaluate(() => (window as any).__setMode('mirror'));
   await page.waitForTimeout(400);
+
+  // ①b 文本绘制语言：主画布 lang 必须推到 worker（否则简/繁/日汉字字形会与主线程分叉）
+  const workerLang: any = await page.evaluate(() => {
+    const p = (window as any).__page;
+    return p.host && p.host.stats ? p.host.stats.textLang : null;
+  });
+  expect(workerLang, `worker 侧文本语言应当与主画布一致（拿到 ${workerLang}）`).toBe('zh-CN');
   const initial: any = await page.evaluate(() => (window as any).__compare());
   expect(initial.diff, `初始态逐像素一致：${JSON.stringify(initial)}`).toBe(0);
 
@@ -119,6 +126,24 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
   ).toBe(derived.scenesBefore);
   expect(derived.skippedDerived, '派生部件的写入应当被识别出来（计数而不是发给 worker）').toBeGreaterThan(0);
 
+  // ⑦ 结构通路（新建节点 + 连线 → 删除）：走结构增量 op，不得触发全量重同步
+  const structure: any = await page.evaluate(() => (window as any).__structureScenario());
+  console.log(
+    `[ied-mirror] 结构通路：加 ${structure.adds} 条 / 删 ${structure.removes} 条结构 op · ` +
+      `全量重同步 ${structure.scenesBefore}→${structure.scenesAfter} · ` +
+      `几何不一致 ${structure.afterCreate.mismatchCount}/${structure.afterCreate.count}、${structure.afterDelete.mismatchCount}/${structure.afterDelete.count}`
+  );
+  expect(structure.afterCreate.equal, `新增节点/连线后几何必须一致：${JSON.stringify(structure.afterCreate)}`).toBe(
+    true
+  );
+  expect(structure.afterDelete.equal, `删除节点后几何必须一致：${JSON.stringify(structure.afterDelete)}`).toBe(true);
+  expect(structure.adds, '新增节点/连线应当走结构增量 op').toBeGreaterThan(0);
+  expect(structure.removes, '删除节点应当走结构增量 op').toBeGreaterThan(0);
+  expect(
+    structure.scenesAfter,
+    `加/删图元都不该触发全量重同步（场景数 ${structure.scenesBefore} → ${structure.scenesAfter}）`
+  ).toBe(structure.scenesBefore);
+
   expect(errors, '不应有页面/console 错误').toEqual([]);
 });
 
@@ -181,4 +206,36 @@ test('兼容回退：?backend=main 强制主线程渲染，页面照常可用', 
   expect(mode.after, '强制主线程时 setMode("mirror") 应当原样返回 main').toBe('main');
   expect(mode.ink.n, '主线程渲染必须有内容').toBeGreaterThan(0);
   expect(errors).toEqual([]);
+});
+
+/**
+ * **"落墨占比"基准护栏**：主线程直绘 / 几何通道（删掉落墨、不启 worker）/ worker 镜像。
+ *
+ * 镜像能省的上界 = "主线程那一帧里有多少是落墨" —— 这条基准把它算出来并钉住：
+ * 三档掉出合理区间就说明**测的东西变了**（例如镜像没真的在省、或主线程那侧被别的东西拖慢），
+ * 而不是"镜像突然快/慢了几毫秒"这种噪声。
+ */
+test('落墨占比三档：几何通道是镜像的理论地板，占比落在合理区间', async ({ page }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 200)));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/examples/worker-mirror.html?nodes=200', { waitUntil: 'load' });
+  await page.waitForFunction(() => (window as any).__ready(), undefined, { timeout: 30_000 });
+
+  const h: any = await page.evaluate(() => (window as any).__headroom(60));
+  console.log(
+    `[ied-headroom] viewport p50：主线程 ${h.main}ms · 几何通道 ${h.geometryOnly}ms · 镜像 ${h.mirror}ms · ` +
+      `落墨占比 ${(h.inkShare * 100).toFixed(0)}% · 镜像省 ${(h.mirrorSave * 100).toFixed(0)}%`
+  );
+  test.info().annotations.push({ type: 'ied-headroom', description: JSON.stringify(h) });
+
+  // ① 落墨确实占一部分：几何通道必须比主线程直绘轻
+  expect(h.geometryOnly, `几何通道应当比主线程直绘轻：${JSON.stringify(h)}`).toBeLessThan(h.main);
+  // ② 占比落在合理区间（本场景实测 ~1/3）：掉到 0 说明镜像没在省，涨到 0.7+ 说明场景/负载变了
+  expect(h.inkShare, `落墨占比应当落在合理区间：${JSON.stringify(h)}`).toBeGreaterThan(0.1);
+  expect(h.inkShare, `落墨占比应当落在合理区间：${JSON.stringify(h)}`).toBeLessThan(0.75);
+  // ③ 镜像至少要达到"几何通道"那一档（它是镜像的理论地板；留 25% 噪声余量）
+  expect(h.mirror, `镜像应当与几何通道同档：${JSON.stringify(h)}`).toBeLessThan(h.geometryOnly * 1.25);
+  expect(errors, '基准不应产生页面错误').toEqual([]);
 });

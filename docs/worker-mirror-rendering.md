@@ -69,6 +69,61 @@ IED 的 `FlowNode` / `FlowEdge` 是复合组件：节点内部的形状 / 标题
 结果是上面那张表里的 **399/399 几何一致 + 像素 0 差异**。这条边界剩下的含义是设计而不是缺陷：
 **只改派生部件、容器状态没动**的写法不在文档模型内（`serialize → load` 往返也留不住它）。
 
+## 结构变更也走增量（协议 v2）
+
+编辑器里最高频的两件事是"加图元"和"删图元"，而它们在 v1 里是最贵的：结构一变就重发整份文档。
+v2 起结构也走增量 —— `['add', parentId, 子树文档]` / `['remove', id]`，worker 侧用
+`Deserializer.decodeInto()` 挂上并维护 id 索引（全量 `scene` 只在首次 / 拿不到可寻址 id / worker 报
+`missing` 时发，作为兜底与自愈）。
+
+本仓实测（200 节点 / 800+ 组件，"新建一个节点"）：
+
+| | v1（结构 → 全量） | v2（结构增量） |
+|---|---|---|
+| 发出去的字节 | 485 924 B（474KB） | **1 037 B**（≈470×） |
+| 全量重同步 | 1 次 | **0 次** |
+| worker 那一帧 `renderMs` | 125.3 ms | **3.9 ms** |
+| 端到端（改完 → 位图回来） | 165.5 ms | **9.7 ms** |
+
+端到端那 53ms 里的大头不是镜像，而是**应用层自己的 `createNode`**（`__captureHistory()` 会给撤销栈
+做一次整图快照）—— 这是下一步值得动的地方。
+
+回归：`examples/worker-mirror.html` 的 `structureScenario()`（新建节点 + 连线 → 删除）+
+`e2e/worker-mirror.spec.ts` 里那条断言：加 2 删 2 条结构 op、`appliedScenes` 不变、几何逐项一致。
+
+## 文本口径（语言 / 字体）与直绘模式
+
+- **语言**：worker 里没有主画布元素可继承，汉字字形（简/繁/日）会与主线程分叉 —— 宿主把主画布
+  的 `lang` / `dir` 推过去（`text` 消息），worker 落到自己的 `ctx` 与 `root.textLanguage`，
+  **组件缓存 / 静态层的离屏画布也继承同一口径**。本仓示例页给画布写了 `lang="zh-CN"`，
+  e2e 断言 worker 侧 `ctx.lang` 与之一致。
+- **字体**：宿主在主线程把字体字节取好交给 `MirrorHost` 的 `fonts` 选项，worker 用 `FontFace` +
+  `self.fonts` 注册（运行时不支持时如实报 `fontErrors`、不抛）。
+- **直绘模式（本页不具备条件）**：`transferControlToOffscreen` 要求显示画布**还没有 2d 上下文**，
+  而本页把引擎 init 在同一块可见画布上（输入要绑它）。想直绘要把显示层与"输入/量测层"拆成两块
+  画布 —— 引擎参考宿主 `ice-render/examples/worker/mirror-render.html?direct=1` 是完整示例
+  （直绘与位图两条路径的**页面截图逐字节一致**）。
+
+### 换父级（`adoptChild`）
+
+换父级 = 一条 `['move', id, 新父 id]` op。它此前只触发"新增"钩子 → 镜像里**旧父那份不会被摘掉**，
+同一棵树出现两个同 id 实例（双重绘制、状态补丁只更新一个）。现在结构增量有四种 op：
+`state` / `add` / `remove` / `move`（引擎 e2e 与 `tests/worker/mirror-sync.test.ts` 都钉着）。
+
+## 图片下发与"落墨占比"护栏
+
+- **图片下发**：worker 里没有 `Image` 构造器 —— 在此之前**带图片的图（如游戏厅的壁纸/图标、
+  组件库的 `ICEImageView`）会让整个镜像退回主线程**（实测加一个 `ICEImage` 就 `hostActive: false`）。
+  现在主线程渲染发现用图 → 宿主解码成 `ImageBitmap` → 零拷贝下发，worker 直接画（未到达时"未加载"
+  不抛，到了会把用到它的组件标脏重画）。
+  **缩放绘制也逐点一致**（曾经的边界：`Image` vs `ImageBitmap` 重采样不同，缩到 72×72 差 770 像素/最大 93）：
+  宿主解码两份（两次 `createImageBitmap` 实测逐点一致），主线程与 worker 各持一份、画的是同一份像素；
+  并且位图在路上时主线程不先退回 `Image`（避免到达那帧像素跳变）。
+- **"落墨占比"三档护栏**（本仓 `headroom()` + e2e）：主线程直绘 / 几何通道（删掉落墨、不启 worker）/
+  worker 镜像。镜像是把"落墨"那一档搬走，所以**收益上界 = 落墨占比**。
+  实测（200 节点、缩放的视口负载）：主线程 1.90ms → 几何通道 1.20ms → 镜像 1.20ms，**占比 37%**；
+  用例钉住区间（占比 ∈ (0.1, 0.75)、镜像 ≤ 几何通道 × 1.25），掉出区间说明"测的东西变了"。
+
 ## 兼容保护：某些浏览器上不去 worker 怎么办
 
 **不支持的宿主上，页面必须与"从没接过 worker"一模一样** —— 这是机制（`MirrorHost`）保证的，
@@ -127,8 +182,9 @@ if (support.supported) {
 ## 怎么跑
 
 ```bash
-# 前置：node_modules/ice-render 要含 MirrorHost / MirrorTarget —— 即 4.0.0 及以上
-#（本仓 peer 声明是 ^4.0.0，npm install 装的就是它；本地改引擎时可以把工作区引擎链进来）
+# 前置：node_modules/ice-render 要含 MirrorHost / MirrorTarget —— 4.0.0 及以上即可跑镜像与兼容回退；
+# 结构增量（协议 v2）与"起不来就回退"的最新口径要**工作区版本**（下一个小版本发布后即 ^4.1.0）
+#（本地开发：ln -s <workspace>/ice-render node_modules/ice-render 后 npm run build）
 npm run build           # 先构建 IED 产物（示例页从 ../dist 与 node_modules/ice-render 取）
 npx http-server . -p 8091 -c-1
 # 浏览器打开 /examples/worker-mirror.html?nodes=200，按钮可切换渲染通道、跑基准、像素比对

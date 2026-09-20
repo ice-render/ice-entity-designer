@@ -35,19 +35,27 @@ function renderAndPost(seq) {
   ice.renderer.frameEvtHandler();
   const renderMs = performance.now() - t0;
   frames++;
-  const bitmap = off.transferToImageBitmap();
+  // 直绘模式（宿主把可见画布 transfer 过来了）：不能再 transferToImageBitmap（会清空那块画布）
+  const direct = !!(target && target.directCanvas);
+  const bitmap = direct ? null : off.transferToImageBitmap();
   self.postMessage(
     {
       t: 'rendered',
       v: ICE.MIRROR_PROTOCOL_VERSION,
       seq: typeof seq === 'number' ? seq : frames,
-      bitmap,
+      ...(bitmap ? { bitmap } : {}),
+      direct,
       stats: {
         renderMs,
         components: ice.renderer.componentQueue ? ice.renderer.componentQueue.length : 0,
         frames,
+        textLang: ice && ice.ctx ? String(ice.ctx.lang || '') : '',
         appliedOps: target ? target.appliedOps : 0,
         appliedScenes: target ? target.appliedScenes : 0,
+        layerBuilds: ice && ice.renderer ? ice.renderer.__layerBuilds : 0,
+        appliedAdds: target ? target.appliedAdds : 0,
+        appliedRemoves: target ? target.appliedRemoves : 0,
+        appliedMoves: target ? target.appliedMoves : 0,
         appliedSelections: target ? target.appliedSelections : 0,
         appliedViewports: target ? target.appliedViewports : 0,
         viewport: ice && ice.viewport ? { ...ice.viewport } : null,
@@ -77,7 +85,7 @@ function renderAndPost(seq) {
         iceCanvas: ice ? [ice.canvasWidth, ice.canvasHeight] : null,
       },
     },
-    [bitmap]
+    bitmap ? [bitmap] : []
   );
 }
 
@@ -93,8 +101,14 @@ self.onmessage = function (evt) {
     return;
   }
   if (msg.t === 'resize') {
-    off.width = Math.max(1, msg.width | 0);
-    off.height = Math.max(1, msg.height | 0);
+    const w = Math.max(1, msg.width | 0);
+    const h = Math.max(1, msg.height | 0);
+    if (target && target.directCanvas) {
+      target.resizeDirectCanvas(w, h);
+    } else {
+      off.width = w;
+      off.height = h;
+    }
     return;
   }
   if (msg.t === 'scene' && !ice) {
