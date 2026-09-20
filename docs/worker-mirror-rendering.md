@@ -82,14 +82,27 @@ v2 起结构也走增量 —— `['add', parentId, 子树文档]` / `['remove', 
 |---|---|---|
 | 发出去的字节 | 485 924 B（474KB） | **1 037 B**（≈470×） |
 | 全量重同步 | 1 次 | **0 次** |
-| worker 那一帧 `renderMs` | 161 / 131 ms | **6.3 ms** |
-| 端到端（改完 → 位图回来） | 192.5 ms | **53.5 ms** |
+| worker 那一帧 `renderMs` | 125.3 ms | **3.9 ms** |
+| 端到端（改完 → 位图回来） | 165.5 ms | **9.7 ms** |
 
 端到端那 53ms 里的大头不是镜像，而是**应用层自己的 `createNode`**（`__captureHistory()` 会给撤销栈
 做一次整图快照）—— 这是下一步值得动的地方。
 
 回归：`examples/worker-mirror.html` 的 `structureScenario()`（新建节点 + 连线 → 删除）+
 `e2e/worker-mirror.spec.ts` 里那条断言：加 2 删 2 条结构 op、`appliedScenes` 不变、几何逐项一致。
+
+## 文本口径（语言 / 字体）与直绘模式
+
+- **语言**：worker 里没有主画布元素可继承，汉字字形（简/繁/日）会与主线程分叉 —— 宿主把主画布
+  的 `lang` / `dir` 推过去（`text` 消息），worker 落到自己的 `ctx` 与 `root.textLanguage`，
+  **组件缓存 / 静态层的离屏画布也继承同一口径**。本仓示例页给画布写了 `lang="zh-CN"`，
+  e2e 断言 worker 侧 `ctx.lang` 与之一致。
+- **字体**：宿主在主线程把字体字节取好交给 `MirrorHost` 的 `fonts` 选项，worker 用 `FontFace` +
+  `self.fonts` 注册（运行时不支持时如实报 `fontErrors`、不抛）。
+- **直绘模式（本页不具备条件）**：`transferControlToOffscreen` 要求显示画布**还没有 2d 上下文**，
+  而本页把引擎 init 在同一块可见画布上（输入要绑它）。想直绘要把显示层与"输入/量测层"拆成两块
+  画布 —— 引擎参考宿主 `ice-render/examples/worker/mirror-render.html?direct=1` 是完整示例
+  （直绘与位图两条路径的**页面截图逐字节一致**）。
 
 ## 兼容保护：某些浏览器上不去 worker 怎么办
 

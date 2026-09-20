@@ -101,11 +101,11 @@
     <main>
       <div class="pane">
         <h2 id="view-title">可见画布（输入来源 + 当前渲染通道）</h2>
-        <canvas id="view" width="900" height="620"></canvas>
+        <canvas id="view" lang="zh-CN" width="900" height="620"></canvas>
       </div>
       <div class="pane">
         <h2>参考：同一份文档的主线程直绘</h2>
-        <canvas id="ref" width="900" height="620"></canvas>
+        <canvas id="ref" lang="zh-CN" width="900" height="620"></canvas>
       </div>
       <canvas id="probe" width="900" height="620" hidden></canvas>
     </main>
@@ -137,6 +137,12 @@
           this.nodeCount = Number(params.get('nodes')) || 120;
           /** `?backend=main` 强制主线程渲染（等价于"这台浏览器没有 worker"）；`?worker=` 换 worker 脚本（可用坏的） */
           this.forceMain = params.get('backend') === 'main';
+          /**
+           * 直绘模式（`transferControlToOffscreen`）要求显示画布**还没有 2d 上下文**，
+           * 而本页把引擎 init 在同一块可见画布上（输入要绑它）—— 所以这里不具备条件。
+           * 想用直绘：把显示层与"输入/量测层"拆成两块画布，见引擎参考宿主
+           * `ice-render/examples/worker/mirror-render.html` 的 `?direct=1`。
+           */
           this.workerUrl = params.get('worker') || 'worker-mirror.worker.js';
 
           // 主线程：唯一真相（DOM 事件、命中检测、状态都在这里）

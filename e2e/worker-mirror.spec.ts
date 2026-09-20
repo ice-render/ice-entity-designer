@@ -44,6 +44,13 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
   // ① 初始态：worker 镜像 vs "用同一份文档另建一台 ICE 直绘" —— 必须严格 0 差异
   await page.evaluate(() => (window as any).__setMode('mirror'));
   await page.waitForTimeout(400);
+
+  // ①b 文本绘制语言：主画布 lang 必须推到 worker（否则简/繁/日汉字字形会与主线程分叉）
+  const workerLang: any = await page.evaluate(() => {
+    const p = (window as any).__page;
+    return p.host && p.host.stats ? p.host.stats.textLang : null;
+  });
+  expect(workerLang, `worker 侧文本语言应当与主画布一致（拿到 ${workerLang}）`).toBe('zh-CN');
   const initial: any = await page.evaluate(() => (window as any).__compare());
   expect(initial.diff, `初始态逐像素一致：${JSON.stringify(initial)}`).toBe(0);
 
