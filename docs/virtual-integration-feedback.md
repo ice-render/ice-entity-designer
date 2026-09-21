@@ -113,6 +113,22 @@
 这跟"undo 改成文档补丁"是同一件事的两面：历史不该记"整棵树"，该记"文档补丁"
 （引擎的 `applyPatch` + `onChildPatched` 已经就绪）。
 
+**已落地的两条对策与复测**（2026-09-21）：
+
+| 对策 | 说明 | 复测（同样 2,020 符号 + 2,020 管线） |
+|---|---|---|
+| `beginBatch()` / `endBatch()` | 批内不逐条记历史，整批算一条（撤销一次回退整批） | 建场景 **58.5 s → 14.4 s**（−75%） |
+| 历史**按留存字节**封顶（默认 32 MB，条数上限照旧 100） | 大文档自动收敛到几十步，而不是"标签页吃掉 1 GB" | 堆（含历史）**932.8 → 58.5 MB**（−94%）；`resetHistory()` 后仍是 58.4 MB（组件树本身没变） |
+
+帧率不受影响（交互 118.6 fps / 官方 `setViewport` 平移 108.4 fps / 0 长任务）；
+配套 `setHistoryBudget({maxEntries,maxBytes})` 与 `getHistoryStats()` 便于宿主调参与诊断；
+回归见 `tests/designer/history-budget.test.ts`。
+
+**另一个顺手修的既有缺陷**（与虚拟化无关，同一根因）：`FlowDesigner.updateNode/updateEdge/nodes/edges`
+原先也按**精确 `typeId`** 判，于是「水工艺符号」在**点选 / `updateNode` / `updateEdge`** 三处静默失效。
+现在统一走可覆盖的 `isNodeComponent()` / `isEdgeComponent()`（默认 `instanceof FlowNode/FlowEdge`，
+水务包覆盖为 `WaterSymbol` / `WaterPipe`）。
+
 ## 4.4 历史记录（P2 之前的边界，供对照）
 
 文档 60,000 条目，但**设计器只看得见物化出来的那一小部分**：
