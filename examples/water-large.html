@@ -74,6 +74,8 @@
       <button id="btn-validate">工艺校验</button>
       <button id="btn-svg">导出 SVG</button>
       <button id="btn-json">序列化</button>
+      <button id="btn-save">存盘</button>
+      <button id="btn-load">读盘</button>
       <button id="btn-gc">强制 GC</button>
     </div>
     <div id="wrap">
@@ -267,6 +269,30 @@
             window.__exportedJson = this.designer.serialize();
             this.issuesEl.className = 'hint';
             this.issuesEl.textContent = `JSON ${(window.__exportedJson.length / 1024).toFixed(0)}KB`;
+          });
+          /**
+           * 存盘 / 读盘：走引擎的 `virtual` 块（载荷 = 参数 + 编辑），
+           * 读盘后**文档由工厂重建**（`registerVirtualSource`），物化子项与 `virtualIndex` 一起回来。
+           */
+          document.getElementById('btn-save').addEventListener('click', () => {
+            window.__saved = this.designer.serialize();
+            this.issuesEl.className = 'hint';
+            this.issuesEl.textContent = `已存盘 ${(window.__saved.length / 1024).toFixed(0)}KB`;
+          });
+          document.getElementById('btn-load').addEventListener('click', () => {
+            if (!window.__saved) return;
+            const report = this.designer.load(window.__saved);
+            // load 之后树是新的：页面要重新抓住虚拟层与它的文档
+            this.layer = this.ice.childNodes.find((c) => typeof c.getChildSource === 'function' && c.getChildSource());
+            if (this.layer) {
+              this.doc = this.layer.getChildSource();
+              this.doc.attachLayer(this.layer);
+            }
+            this.viewport.fitViewport();
+            this.onUpdate();
+            this.issuesEl.className = 'hint';
+            this.issuesEl.textContent = `已读盘：${report.nodes} 个符号 / ${report.edges} 段管线（文档 ${this.doc.count} 条目）`;
+            this.__refreshStats();
           });
           document.getElementById('btn-gc').addEventListener('click', () => {
             if (window.gc) window.gc();

@@ -23,7 +23,15 @@
  * - 引擎负责：窗口计算、坐标换算、批量落墨的 ctx 隔离、命中即物化 + 事件重定向、窗口增删的廉价通道；
  * - 这里负责：列存文档、空间索引、精灵、命中精算、物化时**造出真组件**。
  */
-import { ICEText, materializeVirtualChild, releaseVirtualChild, materializedIndices } from 'ice-render';
+import {
+  ICEText,
+  exportSvg,
+  materializeVirtualChild,
+  releaseVirtualChild,
+  materializedIndices,
+  materializedChild,
+  registerVirtualSource,
+} from 'ice-render';
 import type { VirtualChildSource, VirtualChildView } from 'ice-render';
 import WaterSymbol, { WATER_SYMBOL_PRESETS, WATER_MEDIUM_STYLES, WATER_STYLE } from '../water/water_shapes';
 import type { WaterMedium } from '../water/water_shapes';
@@ -33,6 +41,9 @@ import { WaterPipe } from '../water/WaterProcessDesigner';
 export const ITEM_SYMBOL = 0;
 export const ITEM_LABEL = 1;
 export const ITEM_PIPE = 2;
+
+/** 文档类型键（序列化时写进容器的 `virtual.type`，反序列化按它找工厂）。 */
+export const WATER_VIRTUAL_DOC_TYPE = 'ied:water-virtual-doc';
 
 const KIND_NAMES = Object.keys(WATER_SYMBOL_PRESETS);
 const MEDIUM_NAMES = Object.keys(WATER_MEDIUM_STYLES) as WaterMedium[];
@@ -52,6 +63,8 @@ type Sprite = { canvas: HTMLCanvasElement; w: number; h: number; ox: number; oy:
 
 export class WaterVirtualDoc implements VirtualChildSource {
   public readonly count: number;
+  /** 文档类型键：反序列化时引擎按它找回工厂（见文件末尾的注册）。 */
+  public readonly documentType = WATER_VIRTUAL_DOC_TYPE;
   /** 符号个数（下标 0..symbolCount-1 是符号，接着是标注，最后是管线） */
   public readonly symbolCount: number;
   public version = 1;
@@ -93,11 +106,13 @@ export class WaterVirtualDoc implements VirtualChildSource {
   private readonly cell: number;
   private readonly gw: number;
   private readonly gh: number;
-  private readonly head: Int32Array;
+  private head: Int32Array;
   private nodePrim: Int32Array;
   private nodeNext: Int32Array;
   private nodeCount = 0;
   private readonly sprites: Sprite[] = [];
+  /** 每 kind 的 SVG 片段（第一次导出时惰性生成；复合符号导出的正确形态是 def + use）。 */
+  private readonly svgDefs: (string | null)[] = [];
   private readonly scratch = new Float64Array(4);
   private labelSyncPad = 300;
   /** 绑定的虚拟层（`paint` 里做标注的窗口同步要用它）。 */
@@ -194,9 +209,17 @@ export class WaterVirtualDoc implements VirtualChildSource {
     this.cell = 128;
     this.gw = Math.max(1, Math.ceil(this.worldW / this.cell) + 1);
     this.gh = Math.max(1, Math.ceil(this.worldH / this.cell) + 1);
+    this.rebuildIndex();
+    // 精灵是"渲染用的批量表示"，建完索引再铸（模板组件要挂进 ICE 才能 renderTo）
+    this.__mintSprites();
+  }
+
+  /** 建/重建空间索引（构造期 + 反序列化贴完编辑之后各一次）。 */
+  public rebuildIndex(): void {
     this.head = new Int32Array(this.gw * this.gh).fill(-1);
     this.nodePrim = new Int32Array(this.count * 2).fill(-1);
     this.nodeNext = new Int32Array(this.count * 2).fill(-1);
+    this.nodeCount = 0;
     for (let i = 0; i < this.count; i++) {
       if (this.type[i] === ITEM_LABEL) continue; // 标注不进索引（点到标注 → 归它的符号）
       if (this.__degenerate(i)) continue; // 末行的自连管线（零尺寸）
@@ -208,8 +231,6 @@ export class WaterVirtualDoc implements VirtualChildSource {
         for (let cx = cx0; cx <= cx1; cx++) this.__addNode(cy * this.gw + cx, i);
       }
     }
-
-    this.__mintSprites();
   }
 
   // ------------------------------------------------------------------ 空间索引
@@ -338,6 +359,15 @@ export class WaterVirtualDoc implements VirtualChildSource {
   /** 绑定虚拟层：标注的物化 / 回收要用引擎的助手（幂等物化 + 回收）。 */
   public attachLayer(layer: any): void {
     this.layer = layer;
+    /**
+     * 从快照读回时，引擎已经把物化子项与下标一起还原了 —— 应用要据此重建自己的"活对象"表，
+     * 否则那些组件再被拖动时，`syncEditsFromComponents()` 看不到它们（编辑写不回列存）。
+     */
+    for (const i of materializedIndices(layer)) {
+      if (this.type[i] !== ITEM_SYMBOL) continue;
+      const comp = materializedChild(layer, i);
+      if (comp) this.liveComponents.set(i, comp);
+    }
   }
 
   /**
@@ -415,6 +445,8 @@ export class WaterVirtualDoc implements VirtualChildSource {
         name: this.nameOf(i),
         tag: this.tagOf(i),
       });
+      // 记下引用：存盘 / 导出前要把**拖过的位置**写回列存（文档是唯一真相）
+      this.liveComponents.set(i, node);
       return node;
     }
     if (t === ITEM_LABEL) {
@@ -482,6 +514,165 @@ export class WaterVirtualDoc implements VirtualChildSource {
     );
   }
 
+  // ------------------------------------------------------------------ P2：序列化 / 导出
+
+  /**
+   * **文档载荷**：只存"参数 + 少量编辑"（不存整份列存）。
+   *
+   * 为什么不是整份列存：列存是**确定性生成**的（参数一样 → 内容一样），所以载荷只需要
+   * `params` + `edits`（被拖过的那几个符号的坐标）。实测一份 6 万条目的文档载荷约几 KB，
+   * 而不是 3MB 的列存 —— 快照文件因此仍然是"可读、可 diff"的。
+   */
+  public serializeDocument(): any {
+    // 存盘前把**已物化组件的编辑**写回列存（文档是唯一真相；物化组件只是投影）
+    this.syncEditsFromComponents();
+    return {
+      v: 1,
+      params: {
+        symbols: this.symbolCount,
+        cols: this.cols,
+        worldW: this.worldW,
+        worldH: this.worldH,
+        pipes: this.count > this.symbolCount * 2,
+      },
+      edits: this.edits.map(([i, x, y]) => [i, Math.round(x * 100) / 100, Math.round(y * 100) / 100]),
+    };
+  }
+
+  /** 编辑过的符号（`[下标, x, y]`）：物化组件被拖动后与列存的差异。 */
+  private readonly edits: Array<[number, number, number]> = [];
+  /** 物化组件的引用（写回与差异检测用）：下标 → 组件。 */
+  public readonly liveComponents = new Map<number, any>();
+
+  /** 把已物化组件的坐标与列存对齐（拖过的写回列存，没动的记进 `edits`）。 */
+  public syncEditsFromComponents(): void {
+    for (const [i, comp] of this.liveComponents) {
+      const x = comp.state.left;
+      const y = comp.state.top;
+      if (Math.abs(x - this.x[i]) > 0.01 || Math.abs(y - this.y[i]) > 0.01) {
+        this.x[i] = x;
+        this.y[i] = y;
+        this.recordEdit(i, x, y);
+      }
+    }
+  }
+
+  private recordEdit(i: number, x: number, y: number): void {
+    for (let k = 0; k < this.edits.length; k++) {
+      if (this.edits[k][0] === i) {
+        this.edits[k] = [i, x, y];
+        return;
+      }
+    }
+    this.edits.push([i, x, y]);
+  }
+
+  /** 由载荷重建（工厂用）。列存按参数确定性重建，再把 `edits` 贴回去。 */
+  public static fromPayload(payload: any, ice: any): WaterVirtualDoc {
+    const params = (payload && payload.params) || {};
+    const doc = new WaterVirtualDoc(ice, {
+      symbols: params.symbols,
+      cols: params.cols,
+      worldW: params.worldW,
+      worldH: params.worldH,
+      pipes: params.pipes !== false,
+    });
+    const edits: any[] = (payload && payload.edits) || [];
+    for (const e of edits) {
+      const i = Number(e[0]);
+      if (!(i >= 0) || i >= doc.symbolCount) continue;
+      doc.x[i] = Number(e[1]);
+      doc.y[i] = Number(e[2]);
+      const li = doc.symbolCount + i;
+      doc.x[li] = doc.x[i];
+      doc.y[li] = doc.y[i] + doc.h[i];
+      doc.recordEdit(i, doc.x[i], doc.y[i]);
+    }
+    doc.rebuildIndex();
+    return doc;
+  }
+
+  /** 文档包围盒（导出 / 适应视图用）。 */
+  public documentBounds(out: Float64Array): boolean {
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = this.worldW;
+    out[3] = this.worldH;
+    return true;
+  }
+
+  /**
+   * **全量 SVG 导出**（P2 第 1 条）：把整份文档写进 sink。
+   *
+   * 复合符号的矢量表示用"每 kind 一份 def + 每个实例一条 `<use>`"：def 由引擎的
+   * `exportSvg([模板组件])` 生成（**与画布同源**，不会两套几何），2 万个符号因此只有
+   * 21 份 def + 2 万条 use。标注与管线直接写（它们是纯文本 / 折线）。
+   */
+  public paintToSvg(sink: any): boolean {
+    // ① 每 kind 的 def（惰性生成一次）
+    for (let k = 0; k < KIND_NAMES.length; k++) {
+      const id = `${WATER_VIRTUAL_DOC_TYPE}-${KIND_NAMES[k]}`;
+      if (!this.svgDefs[k]) {
+        this.svgDefs[k] = this.__svgFragmentOfKind(KIND_NAMES[k]);
+      }
+      if (this.svgDefs[k]) sink.define(id, this.svgDefs[k]);
+    }
+    // ② 符号 + 管线（按文档顺序：先符号后管线，与画布一致）
+    for (let i = 0; i < this.symbolCount; i++) {
+      if (this.done[i]) continue; // 已物化的由引擎自己导出（它更准）
+      const id = `${WATER_VIRTUAL_DOC_TYPE}-${KIND_NAMES[this.kind[i]]}`;
+      sink.use(id, this.x[i], this.y[i]);
+    }
+    for (let pi = this.symbolCount * 2; pi < this.count; pi++) {
+      if (this.type[pi] !== ITEM_PIPE || this.pipeFrom[pi] === this.pipeTo[pi]) continue;
+      const a = this.pipeFrom[pi];
+      const b = this.pipeTo[pi];
+      const ax = this.x[a] + this.w[a] / 2;
+      const ay = this.y[a] + this.h[a] / 2;
+      const bx = this.x[b] + this.w[b] / 2;
+      const by = this.y[b] + this.h[b] / 2;
+      const midX = ax + (bx - ax) * 0.5;
+      const style = WATER_MEDIUM_STYLES[MEDIUM_NAMES[this.pipeMedium[pi]]];
+      const dash =
+        style.lineType === 'dashed'
+          ? ' stroke-dasharray="5 5"'
+          : style.lineType === 'dashdot'
+          ? ' stroke-dasharray="9 4 2 4"'
+          : '';
+      sink.raw(
+        `<polyline points="${ax},${ay} ${midX},${ay} ${midX},${by} ${bx},${by}" fill="none" stroke="${style.color}" stroke-width="1.4"${dash}/>`
+      );
+    }
+    // ③ 标注（文本）
+    for (let i = 0; i < this.symbolCount; i++) {
+      const li = this.symbolCount + i;
+      if (this.done[li]) continue; // 物化过的由引擎导出
+      const text = `${this.tagOf(i)} ${this.nameOf(i)}`;
+      sink.raw(
+        `<text x="${this.x[i]}" y="${this.y[li] + WATER_STYLE.tagFontSize}" font-size="${
+          WATER_STYLE.tagFontSize
+        }" fill="${WATER_STYLE.tagColor}">${escapeXml(text)}</text>`
+      );
+    }
+    return true;
+  }
+
+  /** 用引擎导出**一个模板组件**的 SVG 片段（去掉 `<svg>` 外壳与 `<defs>`）。 */
+  private __svgFragmentOfKind(kind: string): string | null {
+    const tpl: any = new WaterSymbol({ kind: kind as any, left: 0, top: 0, name: '', tag: '' } as any);
+    this.ice.addChild(tpl);
+    try {
+      const svg = exportSvg([tpl], { area: 'content' });
+      const body = svg
+        .replace(/^<svg[^>]*>/, '')
+        .replace(/<\/svg>$/, '')
+        .replace(/<defs>[\s\S]*?<\/defs>/, '');
+      return body || null;
+    } finally {
+      this.ice.removeChild(tpl);
+    }
+  }
+
   // ------------------------------------------------------------------ 精灵
   /**
    * 每种 kind 渲染一张离屏位图（**rs=2**，缩放贴图时不至于太糊）。
@@ -517,3 +708,22 @@ export class WaterVirtualDoc implements VirtualChildSource {
 }
 
 export default WaterVirtualDoc;
+
+/** XML 文本转义（标注里可能有 `&` / `<`）。 */
+function escapeXml(s: string): string {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'
+  );
+}
+
+/**
+ * **注册虚拟文档工厂**（进程级，模块加载即注册）。
+ *
+ * 放在模块作用域：任何 import 了 `WaterVirtualDoc` 的应用（页面 / e2e / 宿主）**自动获得**
+ * 反序列化能力，不用各自记着注册 —— 漏注册的症状是"存盘再打开只剩窗口里那点"，
+ * 属于最难查的一类（不报错、只是内容少了）。
+ */
+registerVirtualSource(WATER_VIRTUAL_DOC_TYPE, (payload: any, ctx: any) => {
+  if (!ctx || !ctx.ice) return null;
+  return WaterVirtualDoc.fromPayload(payload, ctx.ice);
+});
