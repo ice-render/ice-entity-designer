@@ -106,6 +106,15 @@ export default class WaterProcessDesigner extends FlowDesigner {
     return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === WaterSymbol.typeId);
   }
 
+  /**
+   * 选中判据：水务的符号不是 `FlowNode` 的分支（`WaterSymbol extends ICEGroup`），
+   * 所以必须在这里把它（与管线）补进"可点选"的集合 —— 否则点符号选不中，
+   * 属性面板永远显示不出来（2026-09-21 实测确认的既有缺陷，与虚拟化无关）。
+   */
+  protected isSelectableComponent(component: any): boolean {
+    return component instanceof WaterSymbol || component instanceof WaterPipe || super.isSelectableComponent(component);
+  }
+
   public get edges(): any[] {
     return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === WaterPipe.typeId);
   }

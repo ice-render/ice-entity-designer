@@ -875,15 +875,30 @@ export default class FlowDesigner {
     }
     // 取「最近的领域图元祖先」：嵌套在池/泳道里的节点被点中时，选中的应该是它自己，
     // 而不是最外层容器（容器的拖动仍然通过点它的空白区域触发）。
+    //
+    // 判据走 `isSelectableComponent()`（可覆盖）：默认认 `FlowNode`/`FlowEdge`**及其子类**，
+    // 领域包（如水务）里的图元不是它们的分支，自行覆盖即可（见 `WaterProcessDesigner`）。
+    //
+    // 2026-09-21 修：原先比的是**精确 typeId**（`=== FlowNode.typeId`），子类一律点不中 ——
+    // 实测既有 `water-editor.html` 点符号时 `selectedId` 恒为 null（只有工具栏新建时才被程序化选中）。
     let current = component;
     while (current) {
-      const typeId = current.constructor && current.constructor.typeId;
-      if (typeId === FlowNode.typeId || typeId === FlowEdge.typeId) {
+      if (this.isSelectableComponent(current)) {
         this.select(current.state.id);
         return;
       }
       current = current.parentNode;
     }
+  }
+
+  /**
+   * 这个组件算不算"可以被点选的领域图元"（选中判据的唯一入口，领域包可覆盖）。
+   *
+   * 默认认 `FlowNode` / `FlowEdge` 及其子类；**不是它们分支的领域图元**要在子类里补
+   * （水务的 `WaterSymbol extends ICEGroup`、`WaterPipe extends FlowEdge` 就是这么回事）。
+   */
+  protected isSelectableComponent(component: any): boolean {
+    return component instanceof FlowNode || component instanceof FlowEdge;
   }
 
   public dispose(): void {
