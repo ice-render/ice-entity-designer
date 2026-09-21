@@ -80,7 +80,7 @@ test('虚拟文档：画得出来、点得中、选得上、拖得动', async ({
   expect(afterDrag.left, '拖动后位置必须改变').not.toBe(afterDrag.left === null ? null : afterPress.left);
   expect(Math.abs(afterDrag.left - afterPress.left), '位移应当是"看得见"的量级').toBeGreaterThan(20);
 
-  // ④ 当前边界（P2 之前的事实）：校验/导出/序列化只看见物化出来的子集，看不见整份文档
+  // ④ 能力边界（P2 第 1+2 条落地之后）：**导出与存盘看整份文档**，校验/undo 仍是应用侧的事
   const boundary: any = await page.evaluate(() => {
     const p = (window as any).__page;
     document.getElementById('btn-validate')?.click();
@@ -88,6 +88,7 @@ test('虚拟文档：画得出来、点得中、选得上、拖得动', async ({
     document.getElementById('btn-json')?.click();
     return {
       docCount: p.doc.count,
+      docSymbols: p.doc.symbolCount,
       designerNodes: p.designer.nodes.length,
       designerEdges: p.designer.edges.length,
       svg: (window as any).__exportedSvg ? (window as any).__exportedSvg.length : 0,
@@ -95,13 +96,58 @@ test('虚拟文档：画得出来、点得中、选得上、拖得动', async ({
     };
   });
   expect(boundary.docCount, '文档条目数（万级）').toBeGreaterThan(1000);
+  /**
+   * 导出走**全量通道**（`VirtualChildSource.paintToSvg`）：6,000 条目的文档导出成矢量 SVG，
+   * 每符号一条 `<use>`、每管线一条 `<polyline>`、每标注一条 `<text>`。
+   * 只导出"窗口里那点"时这个数字会小一个数量级（实测 102.9KB vs 2MB+）。
+   */
+  expect(boundary.svg, 'SVG 必须覆盖整份文档（不是窗口）').toBeGreaterThan(boundary.docCount * 30);
   expect(boundary.designerNodes + boundary.designerEdges, '设计器只看得见物化出来的那一小部分').toBeLessThan(
     boundary.docCount / 10
   );
-  expect(boundary.svg).toBeGreaterThan(0);
+  // 序列化：只写"参数 + 编辑"（不含整份列存）—— 所以它比 SVG 小得多，但不该小到看不见
   expect(boundary.json).toBeGreaterThan(0);
+  expect(boundary.json, '快照里是文档载荷（参数+编辑），不是整份列存').toBeLessThan(boundary.docCount * 200);
 
   expect(errors, '页面不应有任何未捕获错误').toEqual([]);
+});
+
+test('虚拟文档：存盘 → 读盘（文档由工厂重建，编辑保留）', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/examples/water-large.html?n=2000', { waitUntil: 'load' });
+  await page.waitForFunction(() => !!(window as any).__page, undefined, { timeout: 60_000 });
+
+  const res: any = await page.evaluate(async () => {
+    const p = (window as any).__page;
+    const vt = (window as any).__vt;
+    // 造一处编辑：把下标 5 的符号挪到一个显眼的坐标
+    const comp = vt.materializeVirtualChild(p.layer, 5);
+    comp.setState({ left: 12345, top: 678 });
+    p.ice.dirty = true;
+    p.ice.renderer.frameEvtHandler();
+    document.getElementById('btn-save')!.click();
+    const saved = { kb: +((window as any).__saved.length / 1024).toFixed(1), count: p.doc.count };
+
+    // 清空重来 → 读盘
+    document.getElementById('btn-rebuild')!.click();
+    await new Promise((r) => setTimeout(r, 300));
+    document.getElementById('btn-load')!.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      saved,
+      afterCount: p.doc.count,
+      afterX5: p.doc.x[5],
+      materialized: vt.materializedIndices(p.layer).length,
+      documentType: p.doc.documentType,
+    };
+  });
+
+  expect(res.saved.kb, '快照应当是"参数 + 编辑"的量级，不是整份列存').toBeLessThan(200);
+  expect(res.afterCount, '读盘后文档规模不变（由工厂按参数重建）').toBe(res.saved.count);
+  expect(res.afterX5, '被拖过的符号坐标必须保留').toBe(12345);
+  expect(res.materialized, '窗口内的物化子项照旧存在').toBeGreaterThan(0);
+  expect(res.documentType, '容器里带着文档类型键（反序列化按它找工厂）').toBe('ied:water-virtual-doc');
 });
 
 test('虚拟文档：平移帧率与"窗口内物化"的稳定性', async ({ page }) => {

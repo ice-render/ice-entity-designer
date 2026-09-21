@@ -62,30 +62,53 @@
 修法：抽出可覆盖的 `isSelectableComponent(component)`（默认 `instanceof FlowNode/FlowEdge`），
 `WaterProcessDesigner` 覆盖为再加 `WaterSymbol` / `WaterPipe`。
 
-## 4. 能力边界（P2 之前的事实，`e2e/water-large.spec.ts` 已钉住）
+## 4. 能力边界（P2 第 1+2 条落地之后）
+
+### 4.1 已解决：导出与存盘现在看**整份文档**
+
+| 通道 | 实现 | 实测（5,000 符号 / 15,000 条目） |
+|---|---|---|
+| 导出 SVG | `WaterVirtualDoc.paintToSvg`：每 kind 一份 def（由引擎 `exportSvg([模板])` 生成，**与画布同源**）+ 每实例一条 `<use>` + 管线 `<polyline>` + 标注 `<text>` | 20,000 符号档 **7.46 MB**（21 def + 2 万 use + 2 万 polyline + 2 万 text）；此前只有窗口里那点 = 102.9KB |
+| 存盘 / 读盘 | `serializeDocument()` 只写**参数 + 编辑**（列存是确定性生成的，不必存整份）；引擎的 `virtual` 块 + `virtualIndex` 负责把文档与物化子项一起还原 | 快照 **133.6 KB**（不是 3MB 列存）；**存盘 → 清空 → 读盘**后：文档规模 15,000 ✓、被拖过的坐标 `left=12345` ✓、物化子项 ✓、`liveComponents` 重新挂上 ✓ |
+
+两条经验（写进了引擎 AGENTS 的虚拟子源铁律）：
+
+1. **`virtualIndex` 不能少**：物化子项在树上、文档以为它没物化 → 批量层再画一遍（画面上
+   "看起来只是粗了一点"）。引擎现在把下标写进快照并在读回时重登"已物化"表。
+2. **导出次序**：批量内容 → 容器自身 → 物化子项。顺序错了会出现"拖过的那个被旧的批量内容盖住"。
+
+### 4.2 仍是应用侧的事 / 待 P2 后续
+
+| 工具 | 现状 | 归属 |
+|---|---|---|
+| `designer.nodes` / `edges` | 只含物化出来的子集（组件树就是投影） | 应用：要遍历文档就直接读列存（`doc.symbolCount` 等） |
+| `validateWater()` | 只对物化子集判定 | 应用：校验应当读**文档**（列存）而不是组件树 |
+| undo / redo | 记在物化组件上，物化/回收会丢 | 引擎 P2 第 3 条：文档补丁入口 `applyPatch(i, patch)` |
+| 窗口内物化循环 | 应用自己写（`syncLabels`） | 引擎 P2 第 4 条：`syncWindow(container, { needs(i), pad })` |
+| 盒子跨度过大 | 应用自己小心（第一版踩过：跨行长管线 → 索引节点 3,000 万） | 引擎 P2 第 5 条：自检告警 |
+
+## 4.3 历史记录（P2 之前的边界，供对照）
 
 文档 60,000 条目，但**设计器只看得见物化出来的那一小部分**：
 
-| 工具 | 实测 | 原因 |
+| 工具 | 当时的实测 | 原因 |
 |---|---|---|
 | `designer.nodes` / `edges` | 0 / 0（只有 400 个物化标注在树上） | 遍历的是组件树 |
 | `validateWater()` | 只对"物化出来的那几个"判定（实测 1 条无关提示） | 同上 |
-| `toSvg()` | 102.9 KB —— **只有窗口内那点内容** | 导出遍历组件树 |
-| `serialize()` | 499.7 KB —— 同上 | 快照遍历组件树 |
-| undo / redo | 记录在物化组件上；物化/回收时会丢 | 历史建立在组件树上 |
+| `toSvg()` | 102.9 KB —— 只有窗口内那点内容 | 导出遍历组件树（**已在 4.1 解决**） |
+| `serialize()` | 499.7 KB —— 同上 | 快照遍历组件树（**已在 4.1 解决**） |
+| undo / redo | 记录在物化组件上；物化/回收时会丢 | 历史建立在组件树上（待 P2 第 3 条） |
 
 ## 5. 给引擎 P2 的需求清单（IED 视角，按重要性）
 
-1. **全量导出通道**：`VirtualChildSource` 增加"描述单项"的可选方法（`describe(i)` 返回
-   几何 + 样式 + 文本，或由应用提供 `paintToSvg?(sink)`）—— 导出要的是**整份文档**，不是窗口。
-2. **序列化契约**：容器序列化时输出 `virtual: { count, version }` + 已物化子项；
-   并提供一对"文档载荷"钩子（`getDocumentPayload()` / `loadDocumentPayload(payload)`），
-   让应用的文档本体能进同一个快照文件（否则"存下来再打开"就只剩窗口里那点）。
-3. **文档补丁入口**：`applyPatch(i, patch)`（唯一写入口）+ `version++`，
+1. ✅ **全量导出通道**（已落地）：`paintToSvg?(sink, bounds)` —— 导出要的是**整份文档**。
+2. ✅ **序列化契约**（已落地）：`virtual: { type, count, version, payload }` + `virtualIndex` +
+   `registerVirtualSource(type, factory)`。
+3. **文档补丁入口**（待做）：`applyPatch(i, patch)`（唯一写入口）+ `version++`，
    这样 undo/redo 记的是"文档补丁"而不是"物化组件的 state 变化" —— 物化/回收不再丢历史。
-4. **窗口同步助手**：`syncWindow(container, { needs(i), pad })` 的引擎级实现
+4. **窗口同步助手**（待做）：`syncWindow(container, { needs(i), pad })` 的引擎级实现
    （现在每个应用都要自己写一遍物化/回收循环）。
-5. **自检与提示**：① 盒子跨度过大时 warn；② `virtual` 容器在 a11y / worker 镜像里
+5. **自检与提示**（待做）：① 盒子跨度过大时 warn；② `virtual` 容器在 a11y / worker 镜像里
    "只暴露物化子项"要写进文档并给一个开关（镜像要不要跟随窗口）。
 
 ## 6. 结论
