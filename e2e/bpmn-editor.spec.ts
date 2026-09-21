@@ -92,6 +92,38 @@ test('像素：池的底不盖泳道内容（任务矩形真的画出来了）',
   expect(pixel, `任务「${target.title}」中心应画在自己的填充色上`).toBe(target.taskFill);
 });
 
+/**
+ * **像素级回归：池 / 泳道的框真的画出来了（自定义形状必须带原生 `Path2D`）。**
+ *
+ * 池、泳道、事件圆、网关菱形这些是**自定义 `ICEPath` 子类**：路径由应用自己造一条
+ * `Path2DRecorder`。原生 `Path2D` 在 `Path2DRecorder` 里是**构造参数**，而引擎 3.0.0 起
+ * "没有原生 Path2D 就不上屏"（不再把命令重放到 ctx）—— 于是只 clone 构造函数（`new PathCtor()`）
+ * 的写法会变成：命令流、SVG 导出、单测断言全都正常，**屏幕上却一个轮廓都没有**，
+ * 只剩标题文字（2026-09-21 真机复现：泳池/泳道"消失"）。
+ *
+ * 断言口径与配色解耦：取池**标题带里避开标题文字**的一点，它必须等于池自己的填充色；
+ * 轮廓没画出来时那里是画布底色（`#000000`），一眼可辨。
+ */
+test('像素：池 / 泳道的框真的画出来了（自定义形状要有原生 Path2D）', async ({ page }) => {
+  const target = await page.evaluate(() => {
+    const designer = (window as any).__designer;
+    const pool = designer.nodes.find((node: any) => node.state.kind === 'bpmnPool');
+    const shape = pool.shapeComponent;
+    const box = pool.getMinBoundingBox(true);
+    const width = box.br[0] - box.tl[0];
+    const bandSize = Math.min(Number(shape.state.bandSize) || 30, width * 0.4, (box.br[1] - box.tl[1]) * 0.4);
+    return {
+      title: pool.state.title,
+      point: [box.tl[0] + width * 0.8, box.tl[1] + bandSize / 2],
+      poolFill: shape.state.style.fillStyle,
+      hasNative: !!(shape.path2D && shape.path2D.native),
+    };
+  });
+  expect(target.hasNative, '池的路径必须带原生 Path2D，否则引擎不会上屏').toBe(true);
+  const pixel = await pixelAtWorld(page, target.point[0], target.point[1]);
+  expect(pixel, `池「${target.title}」的标题带里应画着池自己的底色`).toBe(target.poolFill);
+});
+
 test('容器：拖动池会带着泳道与里面的节点一起走（引擎容器能力）', async ({ page }) => {
   const before = await page.evaluate(() => {
     const designer = (window as any).__designer;

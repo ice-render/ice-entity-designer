@@ -16,10 +16,19 @@ import { ICEPath } from 'ice-render';
  *
  * 图标/标记统一用「描边」表达（`fill` 是元件底色、`stroke` 是 BPMN 边框色），
  * 需要实心效果时用「粗描边圆」这种技巧（如终止事件的实心圆），避免在同一路径里混合两种填充色。
+ *
+ * ⚠️ 造路径时**必须带上原生 `Path2D`**：`Path2DRecorder` 的原生对象是构造参数，
+ * 而引擎 3.0.0 起"没有原生 `Path2D` 就不上屏"（不再把命令重放到 ctx）。
+ * 只 clone 构造函数会让池/泳道/事件/网关全部消失、只剩标题文字（2026-09-21 真机复现）。
  */
 function createEmptyPath(component: any): any {
-  const PathCtor = component.path2D && component.path2D.constructor;
-  return PathCtor ? new PathCtor() : null;
+  const current = component.path2D;
+  const PathCtor = current && current.constructor;
+  if (!PathCtor) {
+    return null;
+  }
+  const native = current.native ? new current.native.constructor() : null;
+  return new PathCtor(native);
 }
 
 /** 以组件中心为原点的局部坐标工具 */
