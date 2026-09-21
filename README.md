@@ -6,6 +6,8 @@
 
 <p align="center">基于 ice-render 的可视化建模工具集：一套引擎承载 9 个域包 —— ER、流程图、BPMN 2.0、UML 类图、状态机、甘特、电力一次、电力二次、给水排水。</p>
 
+> 变更日志见 [CHANGELOG.md](./CHANGELOG.md)。
+
 <p align="center">
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-047857.svg" /></a>
   <img alt="engine bundled" src="https://img.shields.io/badge/engine-bundled-047857.svg" />
