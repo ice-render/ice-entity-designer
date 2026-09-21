@@ -115,6 +115,7 @@
         materializeVirtualChild: iceMaterializeChild,
         releaseVirtualChild: iceReleaseChild,
         materializedIndices: iceMaterializedIndices,
+        diagnoseVirtualSource,
       } = IED;
 
       class WaterLargePage {
@@ -169,6 +170,12 @@
             this.ice.addChild(this.layer);
             this.ice.dirty = true;
             this.ice.renderer.frameEvtHandler();
+            /**
+             * **开发期自检**（P2 第 5 条）：扫一遍盒子的跨度。跨满全图的盒子会让空间索引
+             * 按格子数爆炸（本项目第一版就踩过：跨行长管线 → 3,000 万节点 / 236MB / 11.8fps），
+             * 而它不报任何异常。这里在重建场景时跑一次，结果进 stats。
+             */
+            this.diagnose = diagnoseVirtualSource(this.doc, { spanRatio: 0.5 });
           }
           this.viewport.fitViewport();
           this.ice.dirty = true;
@@ -363,13 +370,22 @@
           this.stats.docBytes = this.doc ? this.doc.bytes : 0;
           this.stats.drawn = this.doc ? this.doc.drawCalls : 0;
           this.stats.materialized = materialized;
-          window.__stats = { ...this.stats, heapMB: mem, childNodes: this.ice.childNodes.length };
+          window.__stats = {
+            ...this.stats,
+            heapMB: mem,
+            childNodes: this.ice.childNodes.length,
+            version: this.doc ? this.doc.version : 0,
+            spanOffenders: this.diagnose ? this.diagnose.offenders.length : null,
+            maxSpan: this.diagnose ? this.diagnose.maxSpan : null,
+          };
           this.statsEl.textContent =
             `模式        ${this.mode}\n` +
             `符号        ${this.n}\n` +
             `文档列存    ${(this.stats.docBytes / 1048576).toFixed(2)} MB\n` +
             `本帧落墨    ${this.stats.drawn}\n` +
             `物化组件    ${materialized}\n` +
+            `文档版本    ${this.doc ? this.doc.version : 0}\n` +
+            `跨度自检    ${this.diagnose ? (this.diagnose.offenders.length ? '⚠️ ' + this.diagnose.offenders.length + ' 条异常' : '✅ 通过') : '—'}\n` +
             `JS 堆       ${mem} MB`;
         }
       }

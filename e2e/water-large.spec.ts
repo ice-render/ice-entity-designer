@@ -62,7 +62,13 @@ test('虚拟文档：画得出来、点得中、选得上、拖得动', async ({
     const p = (window as any).__page;
     const sel = p.designer.selectedId;
     const node = p.designer.nodes.find((c: any) => c.state.id === sel);
-    return { selectedId: sel, tag: node ? node.state.tag : null, left: node ? node.state.left : null };
+    return {
+      selectedId: sel,
+      tag: node ? node.state.tag : null,
+      left: node ? node.state.left : null,
+      // 命中路径物化的条目不该被窗口同步回收（引擎只管自己建的那些）
+      materialized: (window as any).__vt.materializedIndices(p.layer).length,
+    };
   });
   expect(afterPress.selectedId, '按下应当选中"物化出来的那个真组件"').toBeTruthy();
   expect(afterPress.tag, '选中的应当是刚被点到的那一个（位号对得上）').toBe(pt.tag);
@@ -75,10 +81,21 @@ test('虚拟文档：画得出来、点得中、选得上、拖得动', async ({
   const afterDrag: any = await page.evaluate(() => {
     const p = (window as any).__page;
     const node = p.designer.nodes.find((c: any) => c.state.id === p.designer.selectedId);
-    return { left: node ? node.state.left : null };
+    return { left: node ? node.state.left : null, docVersion: p.doc.version };
   });
   expect(afterDrag.left, '拖动后位置必须改变').not.toBe(afterDrag.left === null ? null : afterPress.left);
   expect(Math.abs(afterDrag.left - afterPress.left), '位移应当是"看得见"的量级').toBeGreaterThan(20);
+  /**
+   * **P2 第 3 条**：拖完文档**立刻**跟着变（`onChildPatched` 回流），不是等存盘才写回 ——
+   * 这是 undo/redo 与"文档是唯一真相"的前提。
+   */
+  const docSync: any = await page.evaluate(() => {
+    const p = (window as any).__page;
+    const sel = p.designer.nodes.find((c: any) => c.state.id === p.designer.selectedId);
+    return { docX: p.doc.x[Number(String(sel?.state.id).replace('vs-', ''))], docVersion: p.doc.version };
+  });
+  expect(docSync.docX, '文档列存必须已经跟着改（与组件位置一致）').toBeCloseTo(afterDrag.left, 3);
+  expect(afterDrag.docVersion, 'version 必须递增（宿主据此重算派生内容）').toBeGreaterThan(1);
 
   // ④ 能力边界（P2 第 1+2 条落地之后）：**导出与存盘看整份文档**，校验/undo 仍是应用侧的事
   const boundary: any = await page.evaluate(() => {
@@ -171,4 +188,16 @@ test('虚拟文档：平移帧率与"窗口内物化"的稳定性', async ({ pag
     return (window as any).__vt.materializedIndices(p.layer).length;
   });
   expect(materialized, '窗口内物化的标注数量应当稳定在几百量级').toBeLessThan(3000);
+
+  /**
+   * **P2 第 5 条：跨度自检**。跨满全图的盒子会让空间索引按格子数爆炸（本项目第一版踩过：
+   * 跨行长管线 → 3,000 万节点 / 236MB / 11.8fps），而且它不报任何异常 —— 所以场景重建时跑一次自检，
+   * 这里把"健康文档不报 offender"钉住。
+   */
+  const diag: any = await page.evaluate(() => {
+    const p = (window as any).__page;
+    return { offenders: p.diagnose.offenders.length, maxSpan: p.diagnose.maxSpan, worldW: p.doc.worldW };
+  });
+  expect(diag.offenders, '健康文档不该有跨度异常的条目').toBe(0);
+  expect(diag.maxSpan, '单个图元的跨度应当是符号尺寸量级').toBeLessThan(diag.worldW * 0.1);
 });
