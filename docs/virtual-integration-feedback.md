@@ -77,17 +77,31 @@
    "看起来只是粗了一点"）。引擎现在把下标写进快照并在读回时重登"已物化"表。
 2. **导出次序**：批量内容 → 容器自身 → 物化子项。顺序错了会出现"拖过的那个被旧的批量内容盖住"。
 
-### 4.2 仍是应用侧的事 / 待 P2 后续
+### 4.2 也解决了：文档补丁 / 窗口同步 / 自检（P2 第 3~5 条）
+
+| 能力 | 引擎给的 | IED 怎么用 | 实测 |
+|---|---|---|---|
+| **文档补丁入口** | `applyVirtualPatch(container, i, patch)`（先写文档、再同步物化组件）＋ 物化组件改动经 `onChildPatched(i, patch)` 回流 | `WaterVirtualDoc.applyPatch/onChildPatched`：写列存 + `version++` + 位置变了就重建索引 | 拖 30 步 → 文档列存**立刻**等于组件位置、`version` 1 → 91（不再是"存盘时才写回"） |
+| **窗口同步助手** | `syncVirtualWindow(container, { needs, map, pad, budget })` | `syncLabels` 从"手写 40 行循环"变成一次调用：`needs` 判符号、`map` 映射到标注、`pad` 300 滞后带、`budget` 128 | 每帧进出几百个标注，平移仍 120fps / 0 长任务 |
+| **跨度自检** | `diagnoseVirtualSource(source, { spanRatio })` | 场景重建时跑一次，结果进统计面板 | ✅ 通过（`maxSpan 178`，文档跨度 12,000）—— 第一版那条跨行长管线（`maxSpan 12014`）会被当场报出来 |
+| **镜像口径** | 虚拟容器进镜像树时**告警一次** | — | 现状：镜像只含物化子项；文档下发是 P2 之后的事 |
+
+两个"实现里才发现的坑"（已进引擎回归与文档）：
+
+1. **`map` 不能省**：IED 是"扫符号、物化它的标注"，不写映射时窗口同步会 `created 104 / released 104 / live 0`
+   —— 建完立刻全回收。
+2. **回收只管自己物化的那些**：命中路径（用户点一下）物化的条目曾被窗口同步一刀切回收，
+   症状是"点中的符号当场被拆、属性面板找不到节点"。引擎现在只回收自己建的，其余交给应用。
+
+### 4.3 仍是应用侧的事
 
 | 工具 | 现状 | 归属 |
 |---|---|---|
 | `designer.nodes` / `edges` | 只含物化出来的子集（组件树就是投影） | 应用：要遍历文档就直接读列存（`doc.symbolCount` 等） |
 | `validateWater()` | 只对物化子集判定 | 应用：校验应当读**文档**（列存）而不是组件树 |
-| undo / redo | 记在物化组件上，物化/回收会丢 | 引擎 P2 第 3 条：文档补丁入口 `applyPatch(i, patch)` |
-| 窗口内物化循环 | 应用自己写（`syncLabels`） | 引擎 P2 第 4 条：`syncWindow(container, { needs(i), pad })` |
-| 盒子跨度过大 | 应用自己小心（第一版踩过：跨行长管线 → 索引节点 3,000 万） | 引擎 P2 第 5 条：自检告警 |
+| undo / redo | 现在可以用文档补丁重写（引擎已给 `applyPatch` + 回流） | 应用：把补丁记进自己的历史（IED 下一步） |
 
-## 4.3 历史记录（P2 之前的边界，供对照）
+## 4.4 历史记录（P2 之前的边界，供对照）
 
 文档 60,000 条目，但**设计器只看得见物化出来的那一小部分**：
 
@@ -104,12 +118,12 @@
 1. ✅ **全量导出通道**（已落地）：`paintToSvg?(sink, bounds)` —— 导出要的是**整份文档**。
 2. ✅ **序列化契约**（已落地）：`virtual: { type, count, version, payload }` + `virtualIndex` +
    `registerVirtualSource(type, factory)`。
-3. **文档补丁入口**（待做）：`applyPatch(i, patch)`（唯一写入口）+ `version++`，
-   这样 undo/redo 记的是"文档补丁"而不是"物化组件的 state 变化" —— 物化/回收不再丢历史。
-4. **窗口同步助手**（待做）：`syncWindow(container, { needs(i), pad })` 的引擎级实现
-   （现在每个应用都要自己写一遍物化/回收循环）。
-5. **自检与提示**（待做）：① 盒子跨度过大时 warn；② `virtual` 容器在 a11y / worker 镜像里
-   "只暴露物化子项"要写进文档并给一个开关（镜像要不要跟随窗口）。
+3. ✅ **文档补丁入口**（已落地）：`applyVirtualPatch` + `applyPatch` / `onChildPatched` 回流。
+4. ✅ **窗口同步助手**（已落地）：`syncVirtualWindow(container, { needs, map, pad, budget })`。
+5. ✅ **自检与提示**（已落地）：`diagnoseVirtualSource` + 镜像告警 + a11y 口径写进 AGENTS。
+
+> **下一步（IED 自己）**：把 undo/redo 改成"文档补丁"历史（引擎的入口已经就绪）；
+> 校验改成读列存（`validateWater()` 现在只看组件树）。
 
 ## 6. 结论
 

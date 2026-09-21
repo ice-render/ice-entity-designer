@@ -31,6 +31,7 @@ import {
   materializedIndices,
   materializedChild,
   registerVirtualSource,
+  syncVirtualWindow,
 } from 'ice-render';
 import type { VirtualChildSource, VirtualChildView } from 'ice-render';
 import WaterSymbol, { WATER_SYMBOL_PRESETS, WATER_MEDIUM_STYLES, WATER_STYLE } from '../water/water_shapes';
@@ -379,21 +380,58 @@ export class WaterVirtualDoc implements VirtualChildSource {
    */
   public syncLabels(view: VirtualChildView = this.lastView as VirtualChildView): void {
     if (!view || !this.layer) return;
-    const keep = new Set<number>();
     /**
-     * **从符号反推它的标注下标**（`labelIndexOfSymbol`）：标注自己不进空间索引
-     * （点到标注要归它的符号，不该把标注当成可命中的独立图元），所以这里不能"扫窗口里的标注"。
+     * **走引擎的窗口同步助手**（P2 第 4 条）：`needs` 决定"哪些条目要真组件"，
+     * `pad` 是滞后带（滚出窗口 400 以内的先留着，避免边界抖动反复建/拆），
+     * `budget` 把"滚进一大片新内容"的尖峰摊到几帧上。
+     *
+     * 注意：标注自己**不进空间索引**（点到标注要归它的符号），所以 `needs` 要按**符号**判断，
+     * 物化的下标则用 `mapIndex` 换成它的标注。
      */
-    this.windowItems(view, (i) => {
-      if (this.type[i] !== ITEM_SYMBOL) return;
-      const li = this.labelIndexOfSymbol(i);
-      if (li < 0) return;
-      keep.add(li);
-      materializeVirtualChild(this.layer, li);
+    syncVirtualWindow(this.layer, {
+      pad: this.labelSyncPad,
+      budget: 128,
+      needs: (i: number) => this.type[i] === ITEM_SYMBOL,
+      // 扫到的是**符号**，要物化的是它的**标注**（不写 map 会建完立刻被回收，见引擎的说明）
+      map: (i: number) => this.labelIndexOfSymbol(i),
     });
-    for (const i of materializedIndices(this.layer)) {
-      if (this.type[i] === ITEM_LABEL && !keep.has(i)) releaseVirtualChild(this.layer, i);
+  }
+
+  /**
+   * **文档的唯一写入口**（P2 第 3 条）：undo/redo、属性面板这类程序化写都走它。
+   * 返回 false = 补丁不认识（引擎会原样返回 false，调用方自己决定怎么办）。
+   */
+  public applyPatch(index: number, patch: Record<string, any>): boolean {
+    if (!(index >= 0) || index >= this.count) return false;
+    let moved = false;
+    if (typeof patch.left === 'number') {
+      this.x[index] = patch.left;
+      moved = true;
     }
+    if (typeof patch.top === 'number') {
+      this.y[index] = patch.top;
+      moved = true;
+    }
+    // 符号的标注跟着走（与 `materialize` 的布局口径一致）
+    if (this.type[index] === ITEM_SYMBOL) {
+      const li = this.labelIndexOfSymbol(index);
+      if (li >= 0) {
+        this.x[li] = this.x[index];
+        this.y[li] = this.y[index] + this.h[index];
+      }
+    }
+    if (moved) this.rebuildIndex();
+    this.version++;
+    this.recordEdit(index, this.x[index], this.y[index]);
+    return true;
+  }
+
+  /**
+   * **物化组件被改动后的回流**（P2 第 3 条）：引擎在用户拖完 / 属性面板改完后回调到这里，
+   * 文档立刻跟着变（不必等存盘）。
+   */
+  public onChildPatched(index: number, patch: Record<string, any>): void {
+    this.applyPatch(index, patch);
   }
 
   /** 符号下标 → 它的标注下标（-1 = 这个文档没给标注留位）。 */
