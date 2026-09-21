@@ -8,6 +8,49 @@
  */
 import { expect, test } from '@playwright/test';
 
+/**
+ * **像素级回归：批量精灵真的画出来了（"只有管线、没有符号"的事故）。**
+ *
+ * 虚拟文档的符号走**批量精灵**：每种 kind 先用模板组件烤一张离屏位图（`__mintSprites`），
+ * 运行时逐实例 `drawImage`。而引擎的 `renderTo()` 只画「组件自己」—— 子组件是渲染器按队列
+ * 遍历的（见 `ICEComponent.renderTo` 的注释），所以对复合组件（`WaterSymbol` 是 `ICEGroup`）
+ * 只调一次 `renderTo` 会烤出**全空白**的位图：画面上只剩 `source.paint` 直接用 ctx 画的管线，
+ * 一个符号都没有（2026-09-21 真机复现：初始画面全是折线）。
+ *
+ * 口径与配色解耦：直接量精灵画布里的**墨迹像素**——空位图必为 0；顺便要求"不是只有一两种
+ * kind 的精灵有内容"，避免修了一半。
+ */
+test('虚拟文档：批量精灵有内容（符号不是空白位图）', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/examples/water-large.html?n=2000', { waitUntil: 'load' });
+  await page.waitForFunction(() => !!(window as any).__page && !!(window as any).__ready(), undefined, {
+    timeout: 60_000,
+  });
+
+  const sprites = await page.evaluate(() => {
+    const doc = (window as any).__page.doc;
+    const inkOf = (canvas: HTMLCanvasElement) => {
+      const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let ink = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 8) ink++;
+      return ink;
+    };
+    const inks: number[] = doc.sprites.map((sprite: any) => inkOf(sprite.canvas));
+    return {
+      count: inks.length,
+      totalInk: inks.reduce((a: number, b: number) => a + b, 0),
+      withInk: inks.filter((ink: number) => ink > 0).length,
+      minInk: Math.min(...inks),
+    };
+  });
+
+  expect(sprites.count, '每一种 kind 都该有一张精灵').toBeGreaterThan(10);
+  expect(sprites.totalInk, '精灵位图里必须有墨迹（全 0 = 符号全是空白位图）').toBeGreaterThan(1000);
+  expect(sprites.withInk, '不该只修好个别 kind').toBeGreaterThan(sprites.count * 0.8);
+});
+
 test('虚拟文档：画得出来、点得中、选得上、拖得动', async ({ page }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
