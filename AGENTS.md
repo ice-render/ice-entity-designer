@@ -92,6 +92,15 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
 
 ## 引擎契约
 
+**离屏出图（2026-09-21 确立，引擎 4.3.0 起）**：把**一棵子树**画进离屏画布（批量精灵 / 导出缩略图）
+**必须**用引擎的 `renderSubtreeTo(component, ctx, baseMatrix)`，**不要**对复合组件只调一次
+`component.renderTo(ctx, base)` —— 后者只画「组件自己」（子组件由渲染队列逐组件绘制），
+对 `ICEGroup` 子类会烤出**全空白**位图且不报错。本仓踩过两次：虚拟文档的批量精灵
+（`WaterVirtualDoc.__mintSprites`，21 张位图全空 → "初始画面只有管线、一个图元都没有"）、
+自定义形状自己造路径（`new Path2DRecorder()` 现在默认按平台造原生 Path2D，**显式 `null`** 才是纯记录器；
+见 `src/flow/flow_shapes.ts` / `src/bpmn/bpmn_shapes.ts` 的 `createEmptyPath`）。回归：
+`e2e/water-large.spec.ts` 的「批量精灵有内容」、`e2e/bpmn-editor.spec.ts` 的「池 / 泳道的框真的画出来了」。
+
 仿真 / 动画等应用层逐帧逻辑必须遵守引擎的帧调度契约：自行监听 `ICE_FRAME_EVENT` 做计算时，
 要 `ice.setContinuousFrames(true)`（用完归还），否则引擎空闲停帧会让逻辑停摆
 （见 `src/bpmn/BpmnSimulator.ts` 的 `__acquireContinuousFrames`）。
