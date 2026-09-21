@@ -2,6 +2,8 @@
 /node_modules
 /coverage
 *log*
+# *log* 会误伤 CHANGELOG.md —— 它是发布物的一部分（package.json 的 files 里已列入），显式放行。
+!CHANGELOG.md
 .history
 *lock*
 # *lock* 会误伤 package-lock.json —— 它因此从未被跟踪，每次安装都重新解析依赖、不可复现。
