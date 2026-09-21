@@ -32,6 +32,7 @@ import {
   materializedChild,
   registerVirtualSource,
   syncVirtualWindow,
+  paintOrderChildrenOf,
 } from 'ice-render';
 import type { VirtualChildSource, VirtualChildView } from 'ice-render';
 import WaterSymbol, { WATER_SYMBOL_PRESETS, WATER_MEDIUM_STYLES, WATER_STYLE } from '../water/water_shapes';
@@ -738,7 +739,24 @@ export class WaterVirtualDoc implements VirtualChildSource {
       canvas.height = ph;
       const ctx = canvas.getContext('2d')!;
       // world → bitmap：先按 rs 缩放再平移到以 (dx,dy) 为原点（与引擎 ObjectCache 同一套约定）
-      tpl.renderTo(ctx, [rs, 0, 0, rs, -dx, -dy]);
+      const base = [rs, 0, 0, rs, -dx, -dy];
+      /**
+       * ⚠️ **`renderTo()` 只画「组件自己」**：子组件是渲染队列遍历着画的（见引擎
+       * `ICEComponent.renderTo()` 的注释），而 `WaterSymbol` 是复合组件（`ICEGroup`），
+       * 它自身不落墨。只调一次 `tpl.renderTo(ctx, base)` 会烤出一张**全空白**的位图，
+       * 运行时逐实例 `drawImage` 的结果就是"画面上只有管线、一个符号都没有"（真机复现）。
+       *
+       * 这里用引擎导出的 `paintOrderChildrenOf()`（渲染队列 / SVG 导出用的同一套绘制次序口径）
+       * 把模板这棵树自己走一遍 —— 次序必须是"先父后子、同级派生件在前"，不能简单倒序。
+       */
+      const paintSubtree = (node: any): void => {
+        node.renderTo(ctx, base);
+        const children = paintOrderChildrenOf(node);
+        for (let i = 0; i < children.length; i++) {
+          paintSubtree(children[i]);
+        }
+      };
+      paintSubtree(tpl);
       this.ice.removeChild(tpl);
       this.sprites[k] = { canvas, w: preset.width, h: preset.height, ox: (0 - dx) / rs, oy: (0 - dy) / rs };
     }
