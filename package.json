@@ -37,7 +37,8 @@
   "files": [
     "dist",
     "react.js",
-    "react.d.ts"
+    "react.d.ts",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "start": "rollup -c -w  --environment NODE_ENV:development",
