@@ -103,7 +103,7 @@ export default class WaterProcessDesigner extends FlowDesigner {
   }
 
   public get nodes(): any[] {
-    return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === WaterSymbol.typeId);
+    return this.__flatten().filter((item: any) => this.isNodeComponent(item));
   }
 
   /**
@@ -116,7 +116,15 @@ export default class WaterProcessDesigner extends FlowDesigner {
   }
 
   public get edges(): any[] {
-    return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === WaterPipe.typeId);
+    return this.__flatten().filter((item: any) => this.isEdgeComponent(item));
+  }
+
+  protected isNodeComponent(component: any): boolean {
+    return component instanceof WaterSymbol;
+  }
+
+  protected isEdgeComponent(component: any): boolean {
+    return component instanceof WaterPipe;
   }
 
   /** 建一个符号（处理单元 / 设备 / 边界） */

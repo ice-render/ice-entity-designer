@@ -136,6 +136,21 @@ export default class FlowDesigner {
   private __redoStack: string[] = [];
   private __historyEnabled = true;
   private __maxHistory = 100;
+  /**
+   * 历史栈**按留存字节**的封顶（默认 32 MB）。
+   *
+   * 为什么不能只按条数封顶：历史里存的是**整份文档快照**，而快照大小随文档规模涨 ——
+   * 真机实测（2026-09-21，水务编辑器用本应用 API 造 2,020 个符号 + 2,020 条管线）：
+   * 100 条快照 ≈ **874 MB**（编辑器堆 932.8 MB 里 94% 是它），`resetHistory()` 之后只剩 58.4 MB。
+   * 按字节封顶后：小文档仍然能撤销很多步（条数上限照旧 100），大文档则自动收敛到几十步 ——
+   * 用户能感知的是"撤销变浅了一点"，而不是"标签页吃掉 1 GB"。
+   */
+  private __maxHistoryBytes = 32 * 1024 * 1024;
+  /** undo / redo 两栈里**留存的字符串字节数**（快照是字符串，长度即字节量级）。 */
+  private __historyBytes = 0;
+  /** 批量改动嵌套深度（见 `beginBatch`）：>0 时批内不记历史，批末统一记"批前状态"。 */
+  private __batchDepth = 0;
+  private __batchStart: string | null = null;
   private __listeners: Array<(snapshot: string, designer: FlowDesigner) => void> = [];
   private __mousedownHandler = (evt: any) => this.__handleMouseDown(evt);
   /** 画布拖拽节点时会话：BEFORE_MOVE 记一次历史，mouseup 结束会话 */
@@ -186,11 +201,31 @@ export default class FlowDesigner {
   }
 
   public get nodes(): any[] {
-    return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === FlowNode.typeId);
+    // 判据走可覆盖的谓词（见 `isNodeComponent`）：领域包的节点不是 `FlowNode` 的分支时自行覆盖
+    return this.__flatten().filter((item: any) => this.isNodeComponent(item));
   }
 
   public get edges(): any[] {
-    return this.__flatten().filter((item: any) => item.constructor && item.constructor.typeId === FlowEdge.typeId);
+    return this.__flatten().filter((item: any) => this.isEdgeComponent(item));
+  }
+
+  /**
+   * 判"这是不是本设计器认的**节点** / **连线**"（选中、更新、删除、快照收集都用它）。
+   *
+   * 默认认 `FlowNode` / `FlowEdge`**及其子类**；**不是它们分支的领域图元**要在子类里覆盖
+   * （水务的 `WaterSymbol extends ICEGroup`、`WaterPipe extends FlowEdge` 就是这种情况，
+   * 见 `WaterProcessDesigner`）。
+   *
+   * 2026-09-21 修：原先这些地方比的是**精确 `typeId`**，于是领域图元在
+   * 「点选 / `updateNode` / `updateEdge`」四处**静默失效**（不报错、只是没反应）——
+   * 实测既有 `water-editor.html` 点符号选不中就是这个根因。
+   */
+  protected isNodeComponent(component: any): boolean {
+    return component instanceof FlowNode;
+  }
+
+  protected isEdgeComponent(component: any): boolean {
+    return component instanceof FlowEdge;
   }
 
   /**
@@ -470,7 +505,7 @@ export default class FlowDesigner {
 
   public updateNode(id: string, patch: Record<string, any>): any {
     const node = this.ice.findComponent(id);
-    if (node && node.constructor.typeId === FlowNode.typeId) {
+    if (node && this.isNodeComponent(node)) {
       this.__captureHistory();
       this.__applyPatch(node, patch);
       this.__emitChange();
@@ -480,7 +515,7 @@ export default class FlowDesigner {
 
   public updateEdge(id: string, patch: Record<string, any>): any {
     const edge = this.ice.findComponent(id);
-    if (edge && edge.constructor.typeId === FlowEdge.typeId) {
+    if (edge && this.isEdgeComponent(edge)) {
       this.__captureHistory();
       this.__applyPatch(edge, patch);
       this.__emitChange();
@@ -799,17 +834,100 @@ export default class FlowDesigner {
   public resetHistory(): void {
     this.__undoStack.length = 0;
     this.__redoStack.length = 0;
+    this.__historyBytes = 0;
+    this.__batchStart = null;
+  }
+
+  /**
+   * **批量改动**：批内不逐条记历史，整批算**一条**（撤销时整批回退）。
+   *
+   * 什么时候用：程序化建图 / 导入 / 一次性铺一批图元。不用它的话每个图元都会
+   * **整份序列化一次**，实测 2,020 个符号花 **58.5 秒**（≈29 ms/个），历史里还留下 100 份大快照。
+   *
+   * ```ts
+   * designer.beginBatch();
+   * for (const item of docs) designer.createSymbol(...);
+   * designer.endBatch();
+   * ```
+   */
+  public beginBatch(): void {
+    if (this.__batchDepth === 0 && this.__historyEnabled) {
+      this.__batchStart = this.serialize();
+    }
+    this.__batchDepth++;
+  }
+
+  public endBatch(): void {
+    if (this.__batchDepth === 0) {
+      return;
+    }
+    this.__batchDepth--;
+    if (this.__batchDepth === 0) {
+      const start = this.__batchStart;
+      this.__batchStart = null;
+      if (start !== null && this.__historyEnabled) {
+        this.__pushHistory(start);
+      }
+    }
+  }
+
+  /**
+   * **历史预算**（给宿主 / 测试用）：条数上限与**留存字节**上限。
+   *
+   * 默认 100 条 / 32 MB。大文档（几万个图元）下快照很大，字节上限会先把老条目挤掉 ——
+   * 这是刻意的取舍：宁可"撤销浅一点"，也不要"标签页吃掉 1 GB"（实测 2,020 符号 × 100 条 = 874 MB）。
+   */
+  public setHistoryBudget(budget: { maxEntries?: number; maxBytes?: number } = {}): void {
+    if (Number(budget.maxEntries) > 0) this.__maxHistory = Math.floor(Number(budget.maxEntries));
+    if (Number(budget.maxBytes) > 0) this.__maxHistoryBytes = Math.floor(Number(budget.maxBytes));
+    this.__recountHistory();
+  }
+
+  /** 当前历史占用的规模（诊断 / 断言用）：`{ undo, redo, bytes }`。 */
+  public getHistoryStats(): { undo: number; redo: number; bytes: number } {
+    return { undo: this.__undoStack.length, redo: this.__redoStack.length, bytes: this.__historyBytes };
   }
 
   protected __captureHistory(): void {
     if (!this.__historyEnabled) {
       return;
     }
-    this.__undoStack.push(this.serialize());
-    if (this.__undoStack.length > this.__maxHistory) {
-      this.__undoStack.shift();
+    if (this.__batchDepth > 0) {
+      return; // 批内不记：批末用 `__batchStart` 记一条
     }
+    this.__pushHistory(this.serialize());
+  }
+
+  /** 入栈 + 双重封顶（条数 + 留存字节）+ 清空 redo。 */
+  private __pushHistory(snapshot: string): void {
+    this.__undoStack.push(snapshot);
+    // redo 被新的改动作废
     this.__redoStack.length = 0;
+    this.__recountHistory();
+    while (
+      this.__undoStack.length > 0 &&
+      (this.__undoStack.length > this.__maxHistory || this.__historyBytes > this.__maxHistoryBytes)
+    ) {
+      if (this.__undoStack.length === 1) {
+        break; // 至少留一条：否则"撤销"没有目标
+      }
+      this.__undoStack.shift();
+      this.__recountHistory();
+    }
+  }
+
+  /**
+   * 重算两栈的留存字节。
+   *
+   * 为什么"重算"而不是"加减"：`undo` / `redo` 里快照在两栈之间搬家，还有回放失败的回滚分支 ——
+   * 加减法只要漏一条分支就会越记越偏，而重算是 O(栈深) 的字符串长度求和（≤100 条），
+   * 属于"慢一点但永远对"的那一类。这个量只用于**封顶判断**，不进任何热路径（每帧）。
+   */
+  private __recountHistory(): void {
+    let bytes = 0;
+    for (const s of this.__undoStack) bytes += s.length;
+    for (const s of this.__redoStack) bytes += s.length;
+    this.__historyBytes = bytes;
   }
 
   private __applySnapshot(json: string): void {
@@ -834,6 +952,7 @@ export default class FlowDesigner {
     const current = this.serialize();
     const previous = this.__undoStack.pop() as string;
     this.__redoStack.push(current);
+    this.__recountHistory();
     this.__historyEnabled = false;
     try {
       this.__applySnapshot(previous);
@@ -855,6 +974,7 @@ export default class FlowDesigner {
     const current = this.serialize();
     const next = this.__redoStack.pop() as string;
     this.__undoStack.push(current);
+    this.__recountHistory();
     this.__historyEnabled = false;
     try {
       this.__applySnapshot(next);
