@@ -1,7 +1,7 @@
 {
   "author": "大漠穷秋",
   "name": "ice-entity-designer",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "An entity designer based on ice-render.",
   "repository": {
     "type": "git",
@@ -56,7 +56,9 @@
     "lint:fix": "eslint . --ext .ts,.tsx,.js,.cjs --fix",
     "pretty": "prettier src/**/* --write",
     "types:check": "tsc --noEmit",
-    "types:watch": "npm run types:check -- --watch"
+    "types:watch": "npm run types:check -- --watch",
+    "verify": "npm run types:check && npm run build && npm test",
+    "prepublishOnly": "npm run verify"
   },
   "peerDependencies": {
     "ice-render": "^4.3.0",
