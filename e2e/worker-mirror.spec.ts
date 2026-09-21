@@ -105,11 +105,32 @@ test('worker 镜像（IED 流程图）：画面与主线程逐像素一致，主
   );
   expect(mismatchRatio, `基准后几何必须逐项一致：${JSON.stringify(treesAfter)}`).toBe(0);
 
-  // ⑤ 像素差异：几何一致 ⇒ 像素也应当一致（含节点标题与连线标签的文字栅格化）
+  /**
+   * ⑤ 像素差异：几何一致 ⇒ 像素也应当一致（含节点标题与连线标签的文字栅格化）。
+   *
+   * ⚠️ **口径（2026-09-21 收紧过的"严格 0"改为"位图容差"）**：参考侧
+   * （`compareWithMainView` 里的主线程那台）是**强制直绘**的真值（关静态层 + 全组件重画），
+   * 而镜像侧比的是 **worker 的最后一帧** —— 视口负载跑完之后，那一帧可能来自**静态层位图合成**
+   * （位图是 8bit 预乘存储，贴回不透明底多一次量化往返，这是位图路径的**既定容差**，见引擎
+   * `docs/architecture/04-rendering-performance.md`：「差异像素 ≤1.4%、alpha 差占比 ≤0.5%、
+   * 最大预乘差 ≤2」）。
+   *
+   * 这条以前是严格 0，靠的是一个**隐式前提**：视口变化会清掉静态层，于是镜像侧最后一帧必然是直绘。
+   * 2026-09-21 引擎修正了"视口变化不清队列/快照/静态层"（官方 API 平移 9.9 → 116.6fps），
+   * 这个隐式前提不再成立 —— 严格 0 就变成了"要求位图合成与直绘逐位相同"，那是不可能守住的契约。
+   * 于是按引擎自己的两档口径验收：**覆盖率（几何）必须严格一致**（几何对账那两条），
+   * 像素只允许落在位图路径的既定容差内；初始态（无静态层历史）仍然要求**逐像素 0 差异**（①）。
+   */
   const pixel: any = await page.evaluate(() => (window as any).__compareWithMainView());
   const diffRatio = pixel.diff / pixel.total;
-  console.log(`[ied-mirror] 基准后像素差 ${pixel.diff}/${pixel.total}（${(diffRatio * 100).toFixed(2)}%）`);
-  expect(diffRatio, `基准后像素应当逐像素一致：${JSON.stringify(pixel)}`).toBe(0);
+  const alphaRatio = pixel.alphaDiff / pixel.total;
+  console.log(
+    `[ied-mirror] 基准后像素差 ${pixel.diff}/${pixel.total}（${(diffRatio * 100).toFixed(2)}%）· ` +
+      `alpha 差 ${pixel.alphaDiff}（${(alphaRatio * 100).toFixed(3)}%）· 最大预乘差 ${pixel.maxPremult}`
+  );
+  expect(pixel.maxPremult, `最大预乘通道差必须落在位图容差内：${JSON.stringify(pixel)}`).toBeLessThanOrEqual(2);
+  expect(alphaRatio, `alpha（覆盖率）差占比必须落在位图容差内：${JSON.stringify(pixel)}`).toBeLessThanOrEqual(0.005);
+  expect(diffRatio, `差异像素占比必须落在位图容差内：${JSON.stringify(pixel)}`).toBeLessThanOrEqual(0.014);
 
   // ⑥ 派生通路（改标题 / 改类型 / 改位置）：镜像必须**重放**应用层补丁，而不是靠全量重同步兜底
   const derived: any = await page.evaluate(() => (window as any).__derivedScenario());
