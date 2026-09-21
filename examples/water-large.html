@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title>IED · 给排水工艺图（虚拟文档：几万符号 / 几万管线）</title>
+  <style>
+    body {
+      font: 13px/1.7 -apple-system, "PingFang SC", sans-serif;
+      margin: 0;
+      padding: 10px;
+      background: #f6f7f9;
+    }
+    #toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    button,
+    input,
+    select {
+      font: inherit;
+      padding: 3px 8px;
+    }
+    #wrap {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    canvas {
+      background: #fff;
+      border: 1px solid #d7dbe0;
+      display: block;
+    }
+    aside {
+      width: 280px;
+      background: #fff;
+      border: 1px solid #d7dbe0;
+      border-radius: 6px;
+      padding: 10px;
+    }
+    aside h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+    }
+    #stats {
+      white-space: pre-wrap;
+      font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #334155;
+    }
+    .row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .row label {
+      width: 56px;
+      color: #64748b;
+    }
+    .hint {
+      color: #0f766e;
+    }
+  </style>
+  <body>
+    <div id="toolbar">
+      <label>符号数 <input id="in-n" type="number" value="20000" min="1000" max="400000" step="1000" style="width: 96px" /></label>
+      <button id="btn-rebuild">重建</button>
+      <button id="btn-objects">切到对象模式（同几何）</button>
+      <button id="btn-frame">跑帧率探针（3s 平移）</button>
+      <button id="btn-fit">适应视图</button>
+      <button id="btn-reset">复位</button>
+      <button id="btn-validate">工艺校验</button>
+      <button id="btn-svg">导出 SVG</button>
+      <button id="btn-json">序列化</button>
+      <button id="btn-gc">强制 GC</button>
+    </div>
+    <div id="wrap">
+      <canvas id="canvas-1" width="1280" height="800"></canvas>
+      <aside>
+        <h3>实时统计</h3>
+        <div id="stats">—</div>
+        <h3 style="margin-top: 12px">属性面板（选中项）</h3>
+        <div id="panel">点击符号 / 管线进行编辑</div>
+        <h3 style="margin-top: 12px">工艺校验</h3>
+        <div id="issues" class="hint">—</div>
+      </aside>
+    </div>
+    <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+    <script src="../dist/index.umd.js"></script>
+    <script src="./canvas-interactions.js"></script>
+    <script type="text/javascript">
+      /**
+       * **IED 侧的虚拟化接入**（引擎虚拟子源 P0/P1/P3 的真实业务验证页）。
+       *
+       * 这一页要回答的是：把"几万个符号 + 几万条管线"的厂站图换成虚拟文档之后，
+       * IED 既有的交互（点选、属性面板、拖动、适应视图）与工具（工艺校验、导出）还成不成立、
+       * 缺什么。页面代码刻意保持最小：**交互一行胶水都没写** —— 引擎的"命中即物化 + 事件重定向"
+       * 让选中与拖动直接落在物化出来的真组件上（见 `ice-render/plans/virtual-child-source.md` 的 P1）。
+       */
+      /**
+       * ⚠️ `IED.ICE` 是**引擎的 ICE 类**（`export * from 'ice-render'` 再导出），不是 UMD 命名空间 ——
+       * 所以虚拟化的那套 API 要从 `IED` 上单独解构，不能写 `ICE.ICEVirtualLayer`。
+       */
+      const {
+        ICE,
+        ICEVirtualLayer,
+        ICEGroup,
+        WaterProcessDesigner,
+        WATER_SYMBOL_PRESETS,
+        WaterVirtualDoc,
+        materializeVirtualChild: iceMaterializeChild,
+        releaseVirtualChild: iceReleaseChild,
+        materializedIndices: iceMaterializedIndices,
+      } = IED;
+
+      class WaterLargePage {
+        constructor() {
+          this.ice = new ICE().init('canvas-1');
+          this.designer = new WaterProcessDesigner(this.ice);
+          this.canvasEl = document.getElementById('canvas-1');
+          this.viewport = IedCanvasViewport.install({ ice: this.ice, canvas: this.canvasEl, designer: this.designer });
+          this.panel = document.getElementById('panel');
+          this.statsEl = document.getElementById('stats');
+          this.issuesEl = document.getElementById('issues');
+          window.__ice = this.ice;
+          window.__designer = this.designer;
+
+          this.mode = 'virtual';
+          this.stats = { mode: 'virtual', symbols: 0, docBytes: 0, drawn: 0, labels: 0, fps: 0 };
+          // e2e / 分享链接用：`?n=2000` 直接决定初始规模
+          const qs = new URLSearchParams(location.search);
+          if (qs.get('n')) {
+            document.getElementById('in-n').value = qs.get('n');
+          }
+
+          this.__wireToolbar();
+          this.build();
+          this.onUpdate();
+          /**
+           * 文档变更（增删 / 拖动落点 / 属性补丁）都经 `subscribe` 回流 —— 这是 IED 既有的
+           * "唯一刷新入口"约定；**选中**（`designer.select`）不走它，所以还要监听一次画布按下。
+           */
+          this.designer.subscribe(() => this.onUpdate());
+          // 选中不走 subscribe（`designer.select` 只写字段）→ 在总线上补一次刷新。
+          // 注册次序保证它在 designer 自己的 mousedown 处理器**之后**执行（先选中、再刷新）。
+          this.ice.evtBus.on('mousedown', () => this.onUpdate());
+        }
+
+        /* ---------------------------------------------------------------- 建场景 */
+        build() {
+          this.n = Math.max(1000, Math.min(400000, Number(document.getElementById('in-n').value) || 20000));
+          this.__clear();
+          if (this.mode === 'objects') {
+            this.__buildObjects();
+          } else {
+            this.doc = new WaterVirtualDoc(this.ice, { symbols: this.n });
+            this.layer = new ICEVirtualLayer({
+              left: 0,
+              top: 0,
+              width: this.doc.worldW,
+              height: this.doc.worldH,
+              childSource: this.doc,
+            });
+            this.doc.attachLayer(this.layer); // 标注的窗口内物化 / 回收由文档自己在 paint 里做
+            this.ice.addChild(this.layer);
+            this.ice.dirty = true;
+            this.ice.renderer.frameEvtHandler();
+          }
+          this.viewport.fitViewport();
+          this.ice.dirty = true;
+          this.ice.renderer.frameEvtHandler();
+          this.__refreshStats();
+        }
+
+        __clear() {
+          const nodes = [...this.ice.childNodes];
+          nodes.forEach((c) => this.ice.removeChild(c));
+          this.designer.select(null);
+          this.designer.resetHistory();
+          this.doc = null;
+          this.layer = null;
+          this.labelItems = new Map();
+        }
+
+        /** 对照组：**同几何**的真对象树（内存 / 帧率的基线）。 */
+        __buildObjects() {
+          const doc = new WaterVirtualDoc(this.ice, { symbols: this.n });
+          const root = new ICEGroup({ left: 0, top: 0, width: doc.worldW, height: doc.worldH, origin: 'top-left' });
+          this.ice.addChild(root);
+          const batch = [];
+          for (let i = 0; i < doc.count; i++) {
+            batch.push(doc.materialize(i));
+          }
+          root.addChildren(batch);
+          this.doc = doc;
+          this.objRoot = root;
+        }
+
+        /* ---------------------------------------------------------------- 属性面板 / 校验 / 工具 */
+        onUpdate() {
+          this.panel.innerHTML = '';
+          const node = this.designer.nodes.find((item) => item.state.id === this.designer.selectedId);
+          const edge = this.designer.edges.find((item) => item.state.id === this.designer.selectedId);
+          const row = (label, control) => {
+            const div = document.createElement('div');
+            div.className = 'row';
+            const span = document.createElement('label');
+            span.textContent = label;
+            div.appendChild(span);
+            div.appendChild(control);
+            this.panel.appendChild(div);
+          };
+          if (edge) {
+            row('类型', Object.assign(document.createElement('span'), { textContent: '工艺管线' }));
+            row('介质', Object.assign(document.createElement('span'), { textContent: edge.state.label || edge.state.medium || '' }));
+            return;
+          }
+          if (!node) {
+            this.panel.textContent = '点击符号 / 管线进行编辑';
+            return;
+          }
+          const preset = WATER_SYMBOL_PRESETS[node.state.kind];
+          row('类型', Object.assign(document.createElement('span'), { textContent: preset ? preset.label : node.state.kind }));
+          row('位号', Object.assign(document.createElement('span'), { textContent: node.state.tag || '' }));
+          const pos = document.createElement('span');
+          pos.textContent = `${Math.round(node.state.left)}, ${Math.round(node.state.top)}`;
+          row('位置', pos);
+          const del = document.createElement('button');
+          del.textContent = '删除';
+          del.addEventListener('click', () => {
+            this.designer.remove(node.state.id);
+            this.designer.select(null);
+            this.onUpdate();
+          });
+          row('操作', del);
+        }
+
+        __wireToolbar() {
+          document.getElementById('btn-rebuild').addEventListener('click', () => this.build());
+          document.getElementById('btn-objects').addEventListener('click', () => {
+            this.mode = this.mode === 'virtual' ? 'objects' : 'virtual';
+            document.getElementById('btn-objects').textContent =
+              this.mode === 'virtual' ? '切到对象模式（同几何）' : '切回虚拟模式';
+            this.build();
+          });
+          document.getElementById('btn-fit').addEventListener('click', () => this.viewport.fitViewport());
+          document.getElementById('btn-reset').addEventListener('click', () => this.viewport.reset());
+          document.getElementById('btn-validate').addEventListener('click', () => {
+            const issues = this.designer.validateWater();
+            window.__issues = issues;
+            this.issuesEl.className = issues.length ? '' : 'hint';
+            this.issuesEl.textContent = issues.length
+              ? `${issues.length} 条：${issues
+                  .slice(0, 3)
+                  .map((i) => i.message)
+                  .join(' / ')}`
+              : '✅ 未发现问题';
+          });
+          document.getElementById('btn-svg').addEventListener('click', () => {
+            window.__exportedSvg = this.designer.toSvg({ padding: 16, background: '#ffffff' });
+            this.issuesEl.className = 'hint';
+            this.issuesEl.textContent = `SVG ${(window.__exportedSvg.length / 1024).toFixed(0)}KB`;
+          });
+          document.getElementById('btn-json').addEventListener('click', () => {
+            window.__exportedJson = this.designer.serialize();
+            this.issuesEl.className = 'hint';
+            this.issuesEl.textContent = `JSON ${(window.__exportedJson.length / 1024).toFixed(0)}KB`;
+          });
+          document.getElementById('btn-gc').addEventListener('click', () => {
+            if (window.gc) window.gc();
+            this.__refreshStats();
+          });
+          document.getElementById('btn-frame').addEventListener('click', async () => {
+            this.issuesEl.textContent = '跑帧率…';
+            const fps = await this.__probePan(3000);
+            window.__fps = fps;
+            this.issuesEl.textContent = `平移 ${fps.fps}fps（p50 ${fps.p50}ms，长任务 ${fps.longTasks}）`;
+            this.__refreshStats();
+          });
+        }
+
+        /** 3 秒真实 rAF 平移（走官方 setViewport），量 fps / 分位 / 长任务。 */
+        __probePan(ms) {
+          return new Promise((resolve) => {
+            let longTasks = 0;
+            let longTaskMs = 0;
+            let po = null;
+            if (typeof PerformanceObserver === 'function') {
+              po = new PerformanceObserver((list) => {
+                for (const e of list.getEntries()) {
+                  longTasks++;
+                  longTaskMs += e.duration;
+                }
+              });
+              try {
+                po.observe({ entryTypes: ['longtask'] });
+              } catch (e) {}
+            }
+            const times = [];
+            const t0 = performance.now();
+            let last = t0;
+            let frames = 0;
+            let tx = 0;
+            const tick = () => {
+              const now = performance.now();
+              times.push(now - last);
+              last = now;
+              tx += 3;
+              this.ice.setViewport(this.ice.viewport.scale, tx % 2000, 0);
+              this.ice.renderer.frameEvtHandler();
+              frames++;
+              if (now - t0 >= ms) {
+                if (po) po.disconnect();
+                const sorted = times.slice().sort((a, b) => a - b);
+                resolve({
+                  frames,
+                  fps: +((frames * 1000) / (now - t0)).toFixed(1),
+                  p50: +sorted[(sorted.length / 2) | 0].toFixed(2),
+                  p95: +sorted[Math.floor(sorted.length * 0.95)].toFixed(2),
+                  longTasks,
+                  longTaskMs: +longTaskMs.toFixed(0),
+                });
+                return;
+              }
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          });
+        }
+
+        __refreshStats() {
+          const mem = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) : 'n/a';
+          const materialized = this.layer ? iceMaterializedIndices(this.layer).length : 0;
+          this.stats.symbols = this.n;
+          this.stats.docBytes = this.doc ? this.doc.bytes : 0;
+          this.stats.drawn = this.doc ? this.doc.drawCalls : 0;
+          this.stats.materialized = materialized;
+          window.__stats = { ...this.stats, heapMB: mem, childNodes: this.ice.childNodes.length };
+          this.statsEl.textContent =
+            `模式        ${this.mode}\n` +
+            `符号        ${this.n}\n` +
+            `文档列存    ${(this.stats.docBytes / 1048576).toFixed(2)} MB\n` +
+            `本帧落墨    ${this.stats.drawn}\n` +
+            `物化组件    ${materialized}\n` +
+            `JS 堆       ${mem} MB`;
+        }
+      }
+
+      const page = new WaterLargePage();
+      /** 探针钩子：引擎的虚拟化 API + 页面状态（e2e / CDP 探针用）。 */
+      window.__vt = {
+        materializeVirtualChild: iceMaterializeChild,
+        releaseVirtualChild: iceReleaseChild,
+        materializedIndices: iceMaterializedIndices,
+      };
+      window.__page = page;
+      window.__ready = () => true;
+      window.__onUpdate = () => page.onUpdate();
+    </script>
+  </body>
+</html>

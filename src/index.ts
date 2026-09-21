@@ -123,3 +123,7 @@ export { registerDesignerTypes, designerTypeIds } from './utils/register-types';
  * 运行时仍然是宿主提供的那一份 ice-render 模块，不会产生第二份内核。
  */
 export * from 'ice-render';
+
+// 虚拟文档（引擎虚拟子源的 IED 侧参考实现）：几万符号 / 几万管线的厂站图
+export { default as WaterVirtualDoc, ITEM_SYMBOL, ITEM_LABEL, ITEM_PIPE } from './virtual/WaterVirtualDoc';
+export type { WaterVirtualDocOptions } from './virtual/WaterVirtualDoc';
