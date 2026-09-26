@@ -100,11 +100,22 @@ export default class WaterProcessDesigner extends FlowDesigner {
     super(ice);
     registerIEDType(this.ice, WaterSymbol);
     registerIEDType(this.ice, WaterPipe);
+    // 端点被拖到别的端口上（在画布上松开鼠标）也要重算 —— 引擎没有"连接变了"的事件，
+    // 而 `ICELinkSlotManager` 改写 `links` 走的是 `linkLine.setState()`，谁也通知不到设计器。
+    // 松手时整体重算一次最省事：符号那边没变就不重建（见 `WaterSymbol.setOccupiedPorts`）。
+    this.ice.evtBus.on('mouseup', this.__portOccupancyHandler, this);
+  }
+
+  public dispose(): void {
+    this.ice.evtBus.off('mouseup', this.__portOccupancyHandler, this);
+    super.dispose();
   }
 
   public get nodes(): any[] {
     return this.__flatten().filter((item: any) => this.isNodeComponent(item));
   }
+
+  private __portOccupancyHandler = () => this.refreshPortOccupancy();
 
   /**
    * 选中判据：水务的符号不是 `FlowNode` 的分支（`WaterSymbol extends ICEGroup`），
@@ -171,9 +182,64 @@ export default class WaterProcessDesigner extends FlowDesigner {
       pipe.applyMediumStyle();
     }
     this.ice.addChild(pipe);
+    // 管线落上去之后，两端的符号要重算"哪条边被占了"（位号 / 名称据此让开端口柱）
+    this.refreshPortOccupancy();
     this.selectedId = pipe.state.id;
     this.__emitChange();
     return pipe;
+  }
+
+  /**
+   * 端口占用 → 位号 / 名称侧移（见 `water_shapes.ts` 的 `syncShape()`）。
+   *
+   * **边是唯一真相**：管线两端写着 `links.start/end = {id, position}`，所以这里整体重算一遍，
+   * 只把**变了**的推给符号（`setOccupiedPorts()` 自己比对，没变不重建）。
+   *
+   * 为什么不让符号自己问引擎：`syncShape()` 在**构造期**就会跑（那时还没有边），
+   * 而且符号拿不到"边变了"的通知 —— 边在设计器手里，由它推最省事也最准。
+   *
+   * 谁需要调用：增删管线与载入快照都由本类内部调了；**交互式改接**（把端点拖到另一个端口）
+   * 由构造期挂的 `mouseup` 兜住；宿主自己搬动组件树之后也可以显式调一次。
+   */
+  public refreshPortOccupancy(): void {
+    const occupied = new Map<string, string[]>();
+    for (const edge of this.edges) {
+      const links = (edge && edge.state && edge.state.links) || {};
+      for (const end of ['start', 'end'] as const) {
+        const link = links[end];
+        const id = link && link.id ? String(link.id) : '';
+        const port = link && link.position ? String(link.position) : '';
+        if (!id || !port) continue;
+        const list = occupied.get(id) || [];
+        list.push(port);
+        occupied.set(id, list);
+      }
+    }
+    for (const node of this.nodes) {
+      if (typeof node.setOccupiedPorts !== 'function') continue;
+      node.setOccupiedPorts(occupied.get(String((node.state && node.state.id) || '')) || []);
+    }
+  }
+
+  /**
+   * 删除之后重算端口占用：基类的 `remove()` 会**级联删掉**挂在被删图元上的连线，
+   * 所以这里必须整体重算，而不是只盯"被删的那条边"。
+   */
+  public remove(id: string): void {
+    super.remove(id);
+    this.refreshPortOccupancy();
+  }
+
+  public clear(): void {
+    super.clear();
+    this.refreshPortOccupancy();
+  }
+
+  /** 载入快照之后重算：快照里不带端口占用（那是派生数据，不进 codec 的完整性约束）。 */
+  public load(json: string): any {
+    const report = super.load(json);
+    this.refreshPortOccupancy();
+    return report;
   }
 
   /** 阀门开 / 闭（运行工况：关阀 → 流径断开） */

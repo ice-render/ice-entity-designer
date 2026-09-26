@@ -13,6 +13,8 @@ import WaterSymbol, {
   WATER_UNIT_KINDS,
   WATER_EQUIPMENT_KINDS,
   WATER_VALVE_KINDS,
+  WATER_STYLE,
+  estimateWaterTextWidth,
   isWaterValveKind,
 } from '../../src/water/water_shapes';
 import { composePipeLabel, dashPatternOf } from '../../src/water/WaterProcessDesigner';
@@ -195,5 +197,60 @@ describe('给水排水符号库 · 组件契约', () => {
       // 符号本体仍然可以连线（管线端点就是它）
       expect(symbol.state.linkable).toBe(true);
     });
+  });
+
+  /**
+   * ★ **顶边 / 底边被连线占用时，位号与名称要让开端口柱**。
+   *
+   * 端口取的是形状盒**边中点**（`FlowDesigner.__slotPoint()` → `box.tc` / `box.bc`），
+   * 而位号 / 名称也居中画在同一条中轴线上 —— 谁都没错，合起来就是
+   * "上下进线连着箭头一起穿过文字"（实测：缺氧池 A 的 `AX-101` 被穿成 `AX⊥01`）。
+   * 让开的量按**估算字宽**算（`V-101` 与 `混凝沉淀池` 差好几倍，拍常数必然一头松一头紧）。
+   *
+   * 水平端口（L / R）不受影响 —— 它们不在标签那条中轴线上，位号 / 名称照旧居中。
+   */
+  it('★ 顶边 / 底边被占用 → 位号与名称右移让开；水平端口不影响；松开后回位', () => {
+    const symbol: any = new WaterSymbol({
+      kind: 'anoxicTank',
+      id: 'anx',
+      name: '缺氧池 A',
+      tag: 'AX-101',
+    });
+    const boxLeft = (text: string) => symbol.part(`text:${text}`).state.left;
+    const tag0 = boxLeft('AX-101');
+    const name0 = boxLeft('缺氧池 A');
+    // 没连线的位置 = 标签盒居中（`labelLeft = cx - labelWidth / 2`）
+    const w = symbol.state.width;
+    expect(tag0).toBeCloseTo(w / 2 - Math.max(w + 24, 90) / 2);
+
+    // 水平进出线：不在中轴线上 → 一动不动
+    symbol.setOccupiedPorts(['L', 'R']);
+    expect(boxLeft('AX-101')).toBeCloseTo(tag0);
+    expect(boxLeft('缺氧池 A')).toBeCloseTo(name0);
+
+    // 顶边被占（例如混合液回流从上面下来）→ 位号让开，名称不动
+    symbol.setOccupiedPorts(['L', 'T']);
+    const tagShift = boxLeft('AX-101') - tag0;
+    expect(tagShift).toBeCloseTo(estimateWaterTextWidth('AX-101', WATER_STYLE.tagFontSize) / 2 + 8);
+    expect(tagShift).toBeGreaterThan(0);
+    expect(boxLeft('缺氧池 A')).toBeCloseTo(name0);
+
+    // 底边也被占（下方进线）→ 名称同样让开
+    symbol.setOccupiedPorts(['T', 'B']);
+    expect(boxLeft('缺氧池 A') - name0).toBeCloseTo(
+      estimateWaterTextWidth('缺氧池 A', WATER_STYLE.nameFontSize) / 2 + 8
+    );
+
+    // 边拆掉之后回位（不是"只挪不还"）
+    symbol.setOccupiedPorts([]);
+    expect(boxLeft('AX-101')).toBeCloseTo(tag0);
+    expect(boxLeft('缺氧池 A')).toBeCloseTo(name0);
+  });
+
+  it('估算字宽：CJK / 全角按一个字宽，拉丁数字按 0.55 个字宽（用于让开量）', () => {
+    expect(estimateWaterTextWidth('', 10)).toBe(0);
+    expect(estimateWaterTextWidth('ABC', 10)).toBeCloseTo(16.5);
+    expect(estimateWaterTextWidth('缺氧池', 10)).toBeCloseTo(30);
+    expect(estimateWaterTextWidth('AX-101', 9.5)).toBeCloseTo(9.5 * 0.55 * 6);
   });
 });
