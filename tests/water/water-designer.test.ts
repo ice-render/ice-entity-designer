@@ -253,4 +253,75 @@ describe('给水排水应用层 · 端口占用与标签让位', () => {
     expect(tagLeft(restored, 'aer', 'AE-101')).toBeCloseTo(before);
     expect(restored.nodes.find((node: any) => node.state.id === 'aer').getOccupiedPorts()).toEqual(['T']);
   });
+
+  /**
+   * ★ **过路折线压字**（2026-09-26 补）：别人的管线从我的位号 / 名称上方经过 ——
+   * 那根线跟我没有连接关系，所以"端口被占"那条规则管不到它。
+   * 实测下游（ice-agent-console）线上残留 4 处就是这一类，且放大图元间距无效
+   * （折线与符号的相对位置是尺度无关的）。
+   *
+   * 判据是纯几何：逐条折线与符号的**文字带**（`labelBands()`）做线段 × 矩形相交。
+   */
+  it('★ 过路管线穿过某符号的位号带 → 那个符号的位号让开（与它自己有没有连线无关）', () => {
+    const d = makeDesigner();
+    d.createSymbol('anoxicTank', { id: 'anx', name: '缺氧池 A', tag: 'AX-101' });
+    d.createSymbol('pump', { id: 'p1', name: '泵', tag: 'P-1', left: 2000, top: 2000 });
+    d.createSymbol('pump', { id: 'p2', name: '泵', tag: 'P-2', left: 2600, top: 2000 });
+    const anx = d.nodes.find((node: any) => node.state.id === 'anx');
+    const centered = anx.part('text:AX-101').state.left;
+    expect(anx.getLabelBlocked()).toEqual({ tag: false, name: false });
+
+    // 一条**跟 anx 毫无连接**的管线，把它的折线改到"横穿 anx 位号带"的位置
+    const pipe = d.createPipe({ id: 'far', sourceId: 'p1', targetId: 'p2', medium: 'sewage', dn: 'DN300' });
+    const band = anx.labelBands().tag;
+    expect(band).toBeTruthy();
+    const y = (band.minY + band.maxY) / 2;
+    // ⚠️ `state.points` 是**边的局部坐标**，而 `labelBands()` 是世界坐标 —— 要减掉边的 left/top
+    const px = Number(pipe.state.left) || 0;
+    const py = Number(pipe.state.top) || 0;
+    pipe.setState({
+      points: [
+        [band.minX - 50 - px, y - py],
+        [band.maxX + 50 - px, y - py],
+      ],
+    });
+    d.refreshLabelPlacement();
+
+    expect(anx.getLabelBlocked()).toEqual({ tag: true, name: false });
+    expect(anx.part('text:AX-101').state.left).toBeGreaterThan(centered);
+
+    // 折线挪走（不再经过）→ 回位
+    pipe.setState({
+      points: [
+        [band.minX - 50 - px, band.maxY + 200 - py],
+        [band.maxX + 50 - px, band.maxY + 200 - py],
+      ],
+    });
+    d.refreshLabelPlacement();
+    expect(anx.getLabelBlocked()).toEqual({ tag: false, name: false });
+    expect(anx.part('text:AX-101').state.left).toBeCloseTo(centered);
+  });
+
+  it('不经过文字带的折线不触发让位（别把正常的管线当成压字）', () => {
+    const d = makeDesigner();
+    d.createSymbol('aerobicTank', { id: 'aer', name: '好氧池 A', tag: 'AE-101' });
+    d.createSymbol('pump', { id: 'p1', name: '泵', tag: 'P-1', left: 2000, top: 2000 });
+    d.createSymbol('pump', { id: 'p2', name: '泵', tag: 'P-2', left: 2600, top: 2000 });
+    const aer = d.nodes.find((node: any) => node.state.id === 'aer');
+    const centered = aer.part('text:AE-101').state.left;
+    const pipe = d.createPipe({ id: 'far', sourceId: 'p1', targetId: 'p2', medium: 'sewage', dn: 'DN300' });
+    const band = aer.labelBands().tag;
+    // 放在位号带**下方 400px**（完全够不着）；points 是局部坐标，要减掉边的 left/top
+    const px = Number(pipe.state.left) || 0;
+    const py = Number(pipe.state.top) || 0;
+    pipe.setState({
+      points: [
+        [band.minX - 50 - px, band.maxY + 400 - py],
+        [band.maxX + 50 - px, band.maxY + 400 - py],
+      ],
+    });
+    d.refreshLabelPlacement();
+    expect(aer.getLabelBlocked()).toEqual({ tag: false, name: false });
+    expect(aer.part('text:AE-101').state.left).toBeCloseTo(centered);
+  });
 });
