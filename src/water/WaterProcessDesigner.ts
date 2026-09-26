@@ -23,6 +23,7 @@ import FlowEdge from '../flow/FlowEdge';
 import WaterSymbol, { isWaterValveKind, WATER_MEDIUM_STYLES, WATER_SYMBOL_PRESETS } from './water_shapes';
 import type { WaterMedium, WaterSymbolKind, WaterValveState } from './water_shapes';
 import { registerIEDType } from '../utils/type-registry';
+import { segmentHitsBox } from '../utils/segment-box';
 
 export type WaterIssue = {
   level: 'error' | 'warning';
@@ -115,7 +116,7 @@ export default class WaterProcessDesigner extends FlowDesigner {
     return this.__flatten().filter((item: any) => this.isNodeComponent(item));
   }
 
-  private __portOccupancyHandler = () => this.refreshPortOccupancy();
+  private __portOccupancyHandler = () => this.refreshLabelPlacement();
 
   /**
    * 选中判据：水务的符号不是 `FlowNode` 的分支（`WaterSymbol extends ICEGroup`），
@@ -182,8 +183,8 @@ export default class WaterProcessDesigner extends FlowDesigner {
       pipe.applyMediumStyle();
     }
     this.ice.addChild(pipe);
-    // 管线落上去之后，两端的符号要重算"哪条边被占了"（位号 / 名称据此让开端口柱）
-    this.refreshPortOccupancy();
+    // 管线落上去之后重算标签排版：两端"哪条边被占了"，以及沿途"有没有穿过谁的标签带"
+    this.refreshLabelPlacement();
     this.selectedId = pipe.state.id;
     this.__emitChange();
     return pipe;
@@ -201,7 +202,54 @@ export default class WaterProcessDesigner extends FlowDesigner {
    * 谁需要调用：增删管线与载入快照都由本类内部调了；**交互式改接**（把端点拖到另一个端口）
    * 由构造期挂的 `mouseup` 兜住；宿主自己搬动组件树之后也可以显式调一次。
    */
+  /**
+   * 重算**标签排版**：① 端口占用（自己的线上来压字）；② **过路折线**穿过文字带
+   * （别人的管线从我的位号 / 名称上方经过 —— 那根线跟我没有连接关系）。
+   *
+   * 两类都由设计器算，因为**边是唯一真相**、而且折线也在它手里（`edge.state.points`）。
+   * 判据是纯几何：逐条折线与符号的两个文字带做**线段 × 矩形**相交。
+   *
+   * 代价量级：78 符号 × 100 管线 × 几段 ≈ 十万次整数级判定，只在增删管线 / 载入 / 松手时跑，
+   * 可忽略。别把它挂到逐帧路径上。
+   */
+  public refreshLabelPlacement(): void {
+    this.__refreshPortOccupancy();
+    // ---- 过路折线压字 ----
+    for (const node of this.nodes) {
+      if (typeof node.labelBands !== 'function') continue;
+      const bands = node.labelBands();
+      if (!bands.tag && !bands.name) continue;
+      const blocked = { tag: false, name: false };
+      for (const edge of this.edges) {
+        const points = this.__edgeWorldPoints(edge);
+        for (let i = 1; i < points.length; i++) {
+          const a = points[i - 1];
+          const b = points[i];
+          // 自己两端接在这个符号上的最后 / 最先一段不算"过路"（那是端口占用那条规则管的事）
+          if (bands.tag && !blocked.tag && segmentHitsBox(a, b, bands.tag)) blocked.tag = true;
+          if (bands.name && !blocked.name && segmentHitsBox(a, b, bands.name)) blocked.name = true;
+          if (blocked.tag && blocked.name) break;
+        }
+        if (blocked.tag && blocked.name) break;
+      }
+      if (typeof node.setLabelBlocked === 'function') node.setLabelBlocked(blocked);
+    }
+  }
+
+  /** 一条边的折线顶点（**世界坐标**：局部点 + 边的 left/top）。 */
+  private __edgeWorldPoints(edge: any): Array<{ x: number; y: number }> {
+    const raw = Array.isArray(edge && edge.state && edge.state.points) ? edge.state.points : [];
+    const left = Number(edge && edge.state && edge.state.left) || 0;
+    const top = Number(edge && edge.state && edge.state.top) || 0;
+    return raw.map((pt: any) => ({ x: (Number(pt[0]) || 0) + left, y: (Number(pt[1]) || 0) + top }));
+  }
+
+  /** @deprecated 用 `refreshLabelPlacement()` —— 标签让位的判据已经从"端口被占"扩到"过路折线压字"。 */
   public refreshPortOccupancy(): void {
+    this.__refreshPortOccupancy();
+  }
+
+  private __refreshPortOccupancy(): void {
     const occupied = new Map<string, string[]>();
     for (const edge of this.edges) {
       const links = (edge && edge.state && edge.state.links) || {};
@@ -227,18 +275,18 @@ export default class WaterProcessDesigner extends FlowDesigner {
    */
   public remove(id: string): void {
     super.remove(id);
-    this.refreshPortOccupancy();
+    this.refreshLabelPlacement();
   }
 
   public clear(): void {
     super.clear();
-    this.refreshPortOccupancy();
+    this.refreshLabelPlacement();
   }
 
   /** 载入快照之后重算：快照里不带端口占用（那是派生数据，不进 codec 的完整性约束）。 */
   public load(json: string): any {
     const report = super.load(json);
-    this.refreshPortOccupancy();
+    this.refreshLabelPlacement();
     return report;
   }
 

@@ -218,6 +218,21 @@ export const WATER_STYLE = {
  */
 export const WATER_LABEL_PORT_GAP = 8;
 
+/** 位号文字带：符号顶边**外侧**居中，top = 形状盒顶边 - 18，高度按字号行高算。 */
+export const TAG_TOP_OFFSET = 18;
+export const TAG_BOX_HEIGHT = Math.round(WATER_STYLE.tagFontSize * 1.4);
+/** 名称文字带：形状盒底边外侧，top = 底边 + 14。 */
+export const NAME_TOP_PAD = 14;
+export const NAME_BOX_HEIGHT = Math.round(WATER_STYLE.nameFontSize * 1.4);
+
+/** 一段文字带的世界矩形（`WaterSymbol.labelBands()` 用）。 */
+export interface LabelBand {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 /**
  * 估算一段文字占多宽（世界像素，不给 ctx 也能算）。
  *
@@ -290,6 +305,13 @@ export default class WaterSymbol extends ICEGroup {
    */
   private occupiedPorts: string[] = [];
 
+  /**
+   * 位号 / 名称的**文字带被别的折线穿过**（不是"自己的端口被占"，见 `setLabelBlocked`）。
+   *
+   * 与 `occupiedPorts` 同性质：派生数据、不进 state，由设计器推过来。
+   */
+  private labelBlocked: { tag: boolean; name: boolean } = { tag: false, name: false };
+
   public hasDerivedChildren(): boolean {
     return true;
   }
@@ -305,6 +327,51 @@ export default class WaterSymbol extends ICEGroup {
   /** 当前被占用的端口（测试 / 属性面板用）。 */
   public getOccupiedPorts(): string[] {
     return this.occupiedPorts.slice();
+  }
+
+  /**
+   * 设计器把"有没有**过路折线**穿过我的位号 / 名称文字带"推过来。
+   *
+   * 为什么需要它（与端口占用分开）：端口占用管的是"**我自己**的线上来压我的字"，
+   * 而图纸里还有另一类 —— **别人的管线从我的标签上方 / 下方经过**（那根线跟我没有连接关系）。
+   * 实测下游（ice-agent-console）线上残留 4 处就属于这一类，且放大图元间距无效
+   * （折线与符号的相对位置是尺度无关的）。判据是纯几何，由设计器算（它手里有全部折线）。
+   */
+  public setLabelBlocked(blocked: { tag?: boolean; name?: boolean }): void {
+    const next = { tag: !!blocked?.tag, name: !!blocked?.name };
+    if (next.tag === this.labelBlocked.tag && next.name === this.labelBlocked.name) return;
+    this.labelBlocked = next;
+    this.syncShape();
+  }
+
+  /** 当前的两个标签带判定（测试 / 诊断用）。 */
+  public getLabelBlocked(): { tag: boolean; name: boolean } {
+    return { ...this.labelBlocked };
+  }
+
+  /**
+   * 位号 / 名称**文字带的世界矩形**（没有那行文字时为 null）。
+   *
+   * 用途：设计器拿它跟折线做"过路管线压字"的几何判定（见 `setLabelBlocked`）。
+   * 口径与 `syncShape()` 的排版**同源**（同一批常量），别在别处再抄一份。
+   * 为什么从 `getMinBoundingBox(true)` 取形状盒：它是**世界坐标**且**不含子节点**
+   * （位号 / 名称就在子节点里），正好是文字带的对齐基准。
+   */
+  public labelBands(): { tag: LabelBand | null; name: LabelBand | null } {
+    const box = this.getMinBoundingBox(true).getMinAndMaxPoint();
+    const w = box.maxX - box.minX;
+    const labelWidth = Math.max(w + 24, 90);
+    const left = (box.minX + box.maxX) / 2 - labelWidth / 2;
+    const band = (top: number, height: number): LabelBand => ({
+      minX: left,
+      minY: top,
+      maxX: left + labelWidth,
+      maxY: top + height,
+    });
+    return {
+      tag: this.state.tag ? band(box.minY - TAG_TOP_OFFSET, TAG_BOX_HEIGHT) : null,
+      name: this.state.name ? band(box.maxY + NAME_TOP_PAD, NAME_BOX_HEIGHT) : null,
+    };
   }
 
   public getSerializableChildren(): any[] {
@@ -678,13 +745,15 @@ export default class WaterSymbol extends ICEGroup {
      */
     const labelWidth = Math.max(w + 24, 90);
     const labelLeft = cx - labelWidth / 2;
-    const shiftFor = (port: 'T' | 'B', text: string, fontSize: number): number =>
-      this.occupiedPorts.indexOf(port) >= 0 ? estimateWaterTextWidth(text, fontSize) / 2 + WATER_LABEL_PORT_GAP : 0;
+    const shiftFor = (port: 'T' | 'B', blocked: boolean, text: string, fontSize: number): number =>
+      this.occupiedPorts.indexOf(port) >= 0 || blocked
+        ? estimateWaterTextWidth(text, fontSize) / 2 + WATER_LABEL_PORT_GAP
+        : 0;
     if (this.state.tag) {
       const tagText = String(this.state.tag);
       this.__text(
-        labelLeft + shiftFor('T', tagText, WATER_STYLE.tagFontSize),
-        -18,
+        labelLeft + shiftFor('T', this.labelBlocked.tag, tagText, WATER_STYLE.tagFontSize),
+        -TAG_TOP_OFFSET,
         labelWidth,
         tagText,
         WATER_STYLE.tagFontSize,
@@ -695,8 +764,8 @@ export default class WaterSymbol extends ICEGroup {
     const name = String(this.state.name || '');
     if (name) {
       this.__text(
-        labelLeft + shiftFor('B', name, WATER_STYLE.nameFontSize),
-        h + 14,
+        labelLeft + shiftFor('B', this.labelBlocked.name, name, WATER_STYLE.nameFontSize),
+        h + NAME_TOP_PAD,
         labelWidth,
         name,
         WATER_STYLE.nameFontSize,

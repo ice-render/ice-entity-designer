@@ -11,6 +11,30 @@
 
 ### 修复
 
+- **过路管线压住别人的位号 / 名称**（给排水符号）：0.12.3 建立了"符号知道自己被什么挡了 →
+  标签让位"这套机制，但那时的判据只有"**自己的**端口被占"。图纸里还有另一类：
+  **别人的管线从我的标签上方 / 下方经过** —— 那根线跟我没有连接关系，端口占用判据管不到它
+  （下游 `ice-agent-console` 线上残留 4 处，且放大图元间距无效：折线与符号的相对位置尺度无关）。
+
+  判据扩成"**有折线穿过我的文字带**"，纯几何、由设计器算（边是唯一真相，折线也在它手里）：
+
+  - `WaterSymbol.labelBands()` 给出位号 / 名称**文字带的世界矩形**（与 `syncShape()` 的排版同源：
+    同一批常量 `TAG_TOP_OFFSET` / `NAME_TOP_PAD`，不再各抄一份）；
+  - `WaterSymbol.setLabelBlocked({ tag, name })` —— 与端口占用**并列**的第二个让位理由；
+  - `src/utils/segment-box.ts` 的 `segmentHitsBox()`（Liang–Barsky 夹逼）：折线每一段与两个文字带
+    做"线段 × 矩形"判定；
+  - `WaterProcessDesigner.refreshLabelPlacement()`（`refreshPortOccupancy()` 保留为弃用别名）
+    在增删管线 / 删图元 / 载入快照 / 松手之后各跑一遍。
+
+  量级：78 符号 × 100 管线 × 几段 ≈ 十万次整数级判定，只在上述路径跑，不进逐帧循环。
+
+  回归：`tests/water/segment-box.test.ts`（横穿 / 贴边 / 平行在外侧 / 零长度）、
+  `tests/water/water-designer.test.ts`（过路折线经过 → 让位；挪走 → 回位；不经过 → 不触发）。
+
+## [0.12.3] - 2026-09-26
+
+### 修复
+
 - **位号 / 名称被进线穿过**（给排水符号）：端口取的是形状盒**边中点**
   （`FlowDesigner.__slotPoint()` → `box.tc` / `box.bc`，且 `getMinBoundingBox(refresh)` 不含子节点），
   而位号（顶边外侧居中）与名称（底边外侧居中）也画在**同一条中轴线**上 —— 两者各自都对，
