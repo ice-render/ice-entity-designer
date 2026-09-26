@@ -209,6 +209,31 @@ export const WATER_STYLE = {
   idleColor: '#94a3b8',
 };
 
+/**
+ * 标签与端口柱之间的最小间隙（世界像素）。
+ *
+ * 端口（`T` / `B`）落在形状盒的**边中点**上，而位号 / 名称也居中画在那条中轴线上 ——
+ * 于是"从上 / 下进线"的那一小段必然扫过文字（见 `syncShape()` 里的说明）。
+ * 8px 是让文字避开那条线（连同箭头）的余量，与线宽 / 箭头半宽同量级。
+ */
+export const WATER_LABEL_PORT_GAP = 8;
+
+/**
+ * 估算一段文字占多宽（世界像素，不给 ctx 也能算）。
+ *
+ * 为什么要自己估：`syncShape()` 在**构造期**就会跑，那时还没有画布上下文；
+ * 而"标签要让开端口柱"这件事只需要一个够用的宽度（宁可略宽，不要压住线）。
+ * 口径：CJK / 全角按 1 个字宽算，其余（拉丁、数字、标点）按 0.55 个字宽 ——
+ * 与引擎自己的降级估算（`label.length * fontSize`）同思路，只是更贴近实际字宽。
+ */
+export function estimateWaterTextWidth(text: string, fontSize: number): number {
+  let width = 0;
+  for (const ch of String(text || '')) {
+    width += ch.charCodeAt(0) > 0x2e80 ? fontSize : fontSize * 0.55;
+  }
+  return width;
+}
+
 /** 污泥线单元（配色与校验都要用） */
 export const WATER_SLUDGE_KINDS: WaterSymbolKind[] = [
   'sludgeThickener',
@@ -256,8 +281,30 @@ export default class WaterSymbol extends ICEGroup {
   private __originX = 0;
   private __originY = 0;
 
+  /**
+   * 本符号**被连线占用**的端口（`T` / `R` / `B` / `L` / `C`）。
+   *
+   * 只影响位号 / 名称的排版（让开端口柱，见 `syncShape()`），**不进 state** ——
+   * 它是从边推出来的派生数据，进了 state 反而要过 codec 那套完整性约束与快照往返。
+   * 由 `WaterProcessDesigner.__syncPortOccupancy()` 在增删连线 / 载入快照之后推进来。
+   */
+  private occupiedPorts: string[] = [];
+
   public hasDerivedChildren(): boolean {
     return true;
+  }
+
+  /** 设计器把"这个符号的哪几条边上有连线"推过来；变了才重建（避免无谓重绘）。 */
+  public setOccupiedPorts(ports: string[]): void {
+    const next = Array.from(new Set(ports.map((p) => String(p || '')).filter(Boolean))).sort();
+    if (next.join() === this.occupiedPorts.join()) return;
+    this.occupiedPorts = next;
+    this.syncShape();
+  }
+
+  /** 当前被占用的端口（测试 / 属性面板用）。 */
+  public getOccupiedPorts(): string[] {
+    return this.occupiedPorts.slice();
   }
 
   public getSerializableChildren(): any[] {
@@ -620,15 +667,26 @@ export default class WaterSymbol extends ICEGroup {
      * - **位号在上**：符号顶边外侧居中；
      * - **名称在下**：符号底边外侧居中。
      * 图形内部只保留符号自身的构成要素（流量计的 F、在线仪表的 A 之类）。
+     *
+     * ⚠️ **顶边 / 底边被连线占用时，对应那行文字要往右让开**：
+     * 端口取的是形状盒**边中点**（`FlowDesigner.__slotPoint()` → `box.tc` / `box.bc`），
+     * 而这两行文字也居中画在同一条中轴线上 —— 谁都没错，合起来就是
+     * "上下进线连着箭头一起穿过文字"（`AX-101` 被穿成 `AX⊥01` 那种）。
+     * 让开的量按**估算字宽**算（不要拍一个常数：`V-101` 与 `混凝沉淀池` 差好几倍），
+     * 正好让文字的左缘落在端口柱右侧 `WATER_LABEL_PORT_GAP` 处。
+     * 占用的端口由 `WaterProcessDesigner.__syncPortOccupancy()` 推过来（边是唯一真相）。
      */
     const labelWidth = Math.max(w + 24, 90);
     const labelLeft = cx - labelWidth / 2;
+    const shiftFor = (port: 'T' | 'B', text: string, fontSize: number): number =>
+      this.occupiedPorts.indexOf(port) >= 0 ? estimateWaterTextWidth(text, fontSize) / 2 + WATER_LABEL_PORT_GAP : 0;
     if (this.state.tag) {
+      const tagText = String(this.state.tag);
       this.__text(
-        labelLeft,
+        labelLeft + shiftFor('T', tagText, WATER_STYLE.tagFontSize),
         -18,
         labelWidth,
-        String(this.state.tag),
+        tagText,
         WATER_STYLE.tagFontSize,
         WATER_STYLE.tagColor,
         'center'
@@ -636,7 +694,15 @@ export default class WaterSymbol extends ICEGroup {
     }
     const name = String(this.state.name || '');
     if (name) {
-      this.__text(labelLeft, h + 14, labelWidth, name, WATER_STYLE.nameFontSize, WATER_STYLE.nameColor, 'center');
+      this.__text(
+        labelLeft + shiftFor('B', name, WATER_STYLE.nameFontSize),
+        h + 14,
+        labelWidth,
+        name,
+        WATER_STYLE.nameFontSize,
+        WATER_STYLE.nameColor,
+        'center'
+      );
     }
   }
 

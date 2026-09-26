@@ -173,3 +173,84 @@ describe('给水排水应用层 · 快照往返', () => {
     expect(kinds).toContain('analyzer');
   });
 });
+
+/**
+ * ★ **端口占用 → 位号 / 名称侧移**的应用层接线（2026-09-26）
+ *
+ * 符号层只管"被占用的端口是哪些"（见 `water-symbols.test.ts`），**谁把占用推给它**是这一层的事：
+ * 边是唯一真相，所以增删管线 / 删图元（基类会级联删连线）/ 载入快照之后都要重算。
+ * 这三条路各自踩过的坑不同 —— 尤其是"删管线"，只盯被删的那条边会漏掉级联删掉的那些。
+ */
+describe('给水排水应用层 · 端口占用与标签让位', () => {
+  const tagLeft = (d: any, symbolId: string, tag: string) =>
+    d.nodes.find((node: any) => node.state.id === symbolId).part(`text:${tag}`).state.left;
+
+  it('★ 管线接到顶边 → 那一端位号让开；删掉管线（含级联）之后回位', () => {
+    const d = makeDesigner();
+    d.createSymbol('aerobicTank', { id: 'aer', name: '好氧池 A', tag: 'AE-101' });
+    d.createSymbol('blower', { id: 'blower', name: '鼓风机', tag: 'B-201' });
+    const centered = tagLeft(d, 'aer', 'AE-101');
+
+    const pipe = d.createPipe({
+      id: 'air1',
+      sourceId: 'blower',
+      targetId: 'aer',
+      medium: 'air',
+      dn: 'DN200',
+      targetPort: 'T',
+    });
+    const shifted = tagLeft(d, 'aer', 'AE-101');
+    expect(shifted).toBeGreaterThan(centered);
+    // 占用照实记在符号上（属性面板 / 测试都能问）
+    expect(d.nodes.find((node: any) => node.state.id === 'aer').getOccupiedPorts()).toEqual(['T']);
+
+    d.remove(pipe.state.id);
+    expect(tagLeft(d, 'aer', 'AE-101')).toBeCloseTo(centered);
+    expect(d.nodes.find((node: any) => node.state.id === 'aer').getOccupiedPorts()).toEqual([]);
+  });
+
+  it('★ 删掉**图元**（基类会级联删掉两端管线）之后也要回位，不能残留让位', () => {
+    const d = makeDesigner();
+    d.createSymbol('aerobicTank', { id: 'aer', name: '好氧池 A', tag: 'AE-101' });
+    d.createSymbol('blower', { id: 'blower', name: '鼓风机', tag: 'B-201' });
+    const centered = tagLeft(d, 'aer', 'AE-101');
+    d.createPipe({ id: 'air1', sourceId: 'blower', targetId: 'aer', medium: 'air', dn: 'DN200', targetPort: 'T' });
+    expect(tagLeft(d, 'aer', 'AE-101')).toBeGreaterThan(centered);
+
+    d.remove('blower'); // 级联带走 air1
+    expect(d.edges.length).toBe(0);
+    expect(tagLeft(d, 'aer', 'AE-101')).toBeCloseTo(centered);
+  });
+
+  it('水平进出线（L / R）不让位 —— 标签本来就不在端口那条中轴线上', () => {
+    const d = makeDesigner();
+    d.createSymbol('anaerobicTank', { id: 'ana', name: '厌氧池 A', tag: 'AT-101' });
+    d.createSymbol('anoxicTank', { id: 'anx', name: '缺氧池 A', tag: 'AX-101' });
+    const centered = tagLeft(d, 'anx', 'AX-101');
+    // ⚠️ 端口必须显式给：本设计器 `createPipe` 自己的默认是 `B → T`（下游 DSL 才兜 R → L）
+    d.createPipe({
+      id: 'p1',
+      sourceId: 'ana',
+      targetId: 'anx',
+      medium: 'sewage',
+      dn: 'DN700',
+      sourcePort: 'R',
+      targetPort: 'L',
+    });
+    expect(tagLeft(d, 'anx', 'AX-101')).toBeCloseTo(centered);
+    expect(d.nodes.find((node: any) => node.state.id === 'anx').getOccupiedPorts()).toEqual(['L']);
+  });
+
+  it('快照往返之后让位照旧：占用是派生数据，载入时从管线重算出来', () => {
+    const d = makeDesigner();
+    d.createSymbol('aerobicTank', { id: 'aer', name: '好氧池 A', tag: 'AE-101' });
+    d.createSymbol('blower', { id: 'blower', name: '鼓风机', tag: 'B-201' });
+    d.createPipe({ id: 'air1', sourceId: 'blower', targetId: 'aer', medium: 'air', dn: 'DN200', targetPort: 'T' });
+    const before = tagLeft(d, 'aer', 'AE-101');
+
+    const restored = makeDesigner();
+    restored.load(d.serialize());
+    expect(tagLeft(restored, 'aer', 'AE-101')).toBeCloseTo(before);
+    expect(restored.nodes.find((node: any) => node.state.id === 'aer').getOccupiedPorts()).toEqual(['T']);
+  });
+});
