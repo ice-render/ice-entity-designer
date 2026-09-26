@@ -13,6 +13,7 @@ import WaterSymbol, {
   WATER_UNIT_KINDS,
   WATER_EQUIPMENT_KINDS,
   WATER_VALVE_KINDS,
+  WATER_ANALYZER_CODES,
   WATER_STYLE,
   estimateWaterTextWidth,
   isWaterValveKind,
@@ -55,6 +56,14 @@ describe('给水排水符号库 · 预设', () => {
       'storageTank',
       'sludgeSilo',
       'deodorizer',
+      // 2026-09-26 第二批：闸门 / 堰门 / 拍门 / 巴氏计量槽 / 紫外消毒 / 砂水分离器 / 栅渣压榨
+      'gate',
+      'weirGate',
+      'flapGate',
+      'parshallFlume',
+      'uvDisinfection',
+      'gritSeparator',
+      'screeningsUnit',
     ];
     extra.forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
     // 串联在管线上的要标 inline（画法与端口都用它）：电动阀 / 止回阀是通路上的元件
@@ -69,6 +78,49 @@ describe('给水排水符号库 · 预设', () => {
     expect(WATER_SYMBOL_PRESETS.levelGauge.tag).toBe('LT');
     expect(WATER_SYMBOL_PRESETS.pressureGauge.tag).toBe('PT');
     expect(WATER_SYMBOL_PRESETS.vfd.tag).toBe('VFD');
+  });
+
+  it('第二批补充图元齐备：闸门 / 堰门 / 拍门 / 巴氏槽 / 紫外 / 砂水分离器 / 栅渣压榨', () => {
+    const batch2 = [
+      'gate',
+      'weirGate',
+      'flapGate',
+      'parshallFlume',
+      'uvDisinfection',
+      'gritSeparator',
+      'screeningsUnit',
+    ];
+    batch2.forEach((kind) => {
+      expect(WATER_SYMBOL_KINDS).toContain(kind);
+      const preset = (WATER_SYMBOL_PRESETS as any)[kind];
+      expect(preset).toBeTruthy();
+      expect(preset.label.length).toBeGreaterThan(0);
+      expect(preset.width).toBeGreaterThan(0);
+      expect(preset.height).toBeGreaterThan(0);
+    });
+    // 位号代号按行业习惯：闸门 GT / 堰门 WG / 拍门 FG / 巴氏槽 FM / 紫外 UV / 砂水分离器 GS / 栅渣 SP
+    expect(WATER_SYMBOL_PRESETS.gate.tag).toBe('GT');
+    expect(WATER_SYMBOL_PRESETS.weirGate.tag).toBe('WG');
+    expect(WATER_SYMBOL_PRESETS.flapGate.tag).toBe('FG');
+    expect(WATER_SYMBOL_PRESETS.parshallFlume.tag).toBe('FM');
+    expect(WATER_SYMBOL_PRESETS.uvDisinfection.tag).toBe('UV');
+    expect(WATER_SYMBOL_PRESETS.gritSeparator.tag).toBe('GS');
+    expect(WATER_SYMBOL_PRESETS.screeningsUnit.tag).toBe('SP');
+    // 串联在渠道 / 管线上的才标 inline（闸门、堰门、拍门、巴氏槽、紫外都是过流件）
+    ['gate', 'weirGate', 'flapGate', 'parshallFlume', 'uvDisinfection'].forEach((kind) =>
+      expect((WATER_SYMBOL_PRESETS as any)[kind].inline).toBe(true)
+    );
+    ['gritSeparator', 'screeningsUnit'].forEach((kind) =>
+      expect((WATER_SYMBOL_PRESETS as any)[kind].inline).toBe(false)
+    );
+    // 分类表：巴氏槽 / 紫外是主流上的构筑物，闸门类与预处理附属设备算设备
+    ['parshallFlume', 'uvDisinfection'].forEach((kind) => expect(WATER_UNIT_KINDS).toContain(kind));
+    ['gate', 'weirGate', 'flapGate', 'gritSeparator', 'screeningsUnit'].forEach((kind) =>
+      expect(WATER_EQUIPMENT_KINDS).toContain(kind)
+    );
+    // 位号代号全库唯一（下游目录也有同一条断言）
+    const tags = WATER_SYMBOL_KINDS.map((kind) => WATER_SYMBOL_PRESETS[kind].tag);
+    expect(new Set(tags).size).toBe(tags.length);
   });
 
   it('新增图元都画得出来（派生形状 ≥ 2 个），且泥线单元走污泥配色', () => {
@@ -101,6 +153,50 @@ describe('给水排水符号库 · 预设', () => {
     expect(JSON.stringify(filled)).toContain('fef3c7');
   });
 
+  it('在线分析仪的"功能代号"：默认画 A，可换成 DO / MLSS，字号随代号长度收缩', () => {
+    const ice: any = new ICE();
+    ice.evtBus = new EventBus();
+    ice.childNodes = [];
+    ice.toolNodes = [];
+
+    const glyphOf = (symbol: any): { text: string; fontSize: number } => {
+      const part = symbol.parts.filter((item: any) => item.role.indexOf('text:') === 0)[0];
+      return { text: part.role.slice('text:'.length), fontSize: part.component.state.style.fontSize };
+    };
+
+    // 代号字典给的是行业习惯的功能字母
+    ['DO', 'TU', 'CL', 'pH', 'ML', 'AN', 'COD', 'ORP'].forEach((code) =>
+      expect(WATER_ANALYZER_CODES.map((item) => item.code)).toContain(code)
+    );
+
+    // 不设代号 → 与今天完全一致（老快照没有这个键，取默认空串）
+    const plain: any = new WaterSymbol({ kind: 'analyzer', name: '在线监测', tag: 'AIT-101' });
+    ice.addChild(plain);
+    expect(plain.state.analyzerCode).toBe('');
+    expect(glyphOf(plain).text).toBe('A');
+
+    // 设了代号 → 圆圈里就是那个代号
+    const doMeter: any = new WaterSymbol({ kind: 'analyzer', name: '溶解氧', tag: 'AIT-102', analyzerCode: 'DO' });
+    ice.addChild(doMeter);
+    expect(glyphOf(doMeter).text).toBe('DO');
+    const twoChar = glyphOf(doMeter).fontSize;
+
+    // 长代号（4 字符）要缩字号，否则塞不进默认 36×36 的圆
+    const mlss: any = new WaterSymbol({ kind: 'analyzer', name: '污泥浓度', tag: 'AIT-103', analyzerCode: 'MLSS' });
+    ice.addChild(mlss);
+    expect(glyphOf(mlss).text).toBe('MLSS');
+    expect(glyphOf(mlss).fontSize).toBeLessThan(twoChar);
+
+    // 改代号会重建派生形状（`__shapeKeys` 里必须有它）
+    doMeter.setState({ analyzerCode: 'TU' });
+    expect(glyphOf(doMeter).text).toBe('TU');
+
+    // 别的 kind 带这个键也不报错、不改变自己的画法
+    const pump: any = new WaterSymbol({ kind: 'pump', name: '水泵', tag: 'P-101', analyzerCode: 'DO' });
+    ice.addChild(pump);
+    expect(pump.parts.length).toBeGreaterThan(0);
+  });
+
   it('处理单元 / 设备 / 边界三类分得开（校验规则要用）', () => {
     WATER_UNIT_KINDS.forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
     WATER_EQUIPMENT_KINDS.forEach((kind) => expect(WATER_SYMBOL_KINDS).toContain(kind));
@@ -108,27 +204,47 @@ describe('给水排水符号库 · 预设', () => {
     expect(WATER_EQUIPMENT_KINDS).toContain('pump');
   });
 
-  it('阀门类图元：手动阀与电动阀在"通不通"上等价（流径分析与开闭都按它判）', () => {
-    expect(WATER_VALVE_KINDS).toEqual(['valve', 'motorValve']);
+  it('阀门类图元：手动阀 / 电动阀 / 闸门 / 堰门在"通不通"上等价（流径分析与开闭都按它判）', () => {
+    expect(WATER_VALVE_KINDS).toEqual(['valve', 'motorValve', 'gate', 'weirGate']);
     expect(isWaterValveKind('valve')).toBe(true);
     expect(isWaterValveKind('motorValve')).toBe(true);
+    // 闸门 / 堰门关到底同样断流 —— 只加图元不加这条，就会出现"闸门关着、流径却报通"
+    expect(isWaterValveKind('gate')).toBe(true);
+    expect(isWaterValveKind('weirGate')).toBe(true);
     expect(isWaterValveKind('checkValve')).toBe(false); // 止回阀不可开闭（只有单向）
+    expect(isWaterValveKind('flapGate')).toBe(false); // 拍门靠水流自动开闭，同止回阀口径
     expect(isWaterValveKind('pump')).toBe(false);
   });
 
   it('介质样式齐备：污水 / 污泥 / 空气 / 药剂 / 出水 / 回流 / 信号 / 动力', () => {
-    ['sewage', 'sludge', 'air', 'chemical', 'effluent', 'recycle', 'returnSludge', 'signal', 'power'].forEach(
-      (medium) => {
-        const style = (WATER_MEDIUM_STYLES as any)[medium];
-        expect(style).toBeTruthy();
-        expect(style.color).toMatch(/^#/);
-        expect(['solid', 'dashed', 'dashdot']).toContain(style.lineType);
-      }
-    );
+    [
+      'sewage',
+      'sludge',
+      'air',
+      'chemical',
+      'effluent',
+      'recycle',
+      'returnSludge',
+      'signal',
+      'power',
+      // 2026-09-26 第二批：反冲洗水 / 中水回用
+      'backwash',
+      'reclaimed',
+    ].forEach((medium) => {
+      const style = (WATER_MEDIUM_STYLES as any)[medium];
+      expect(style).toBeTruthy();
+      expect(style.color).toMatch(/^#/);
+      expect(['solid', 'dashed', 'dashdot']).toContain(style.lineType);
+    });
     // 信号与动力是电气/信号回路：点划线，且颜色和水管明显区分
     expect(WATER_MEDIUM_STYLES.signal.lineType).toBe('dashdot');
     expect(WATER_MEDIUM_STYLES.power.lineType).toBe('dashdot');
     expect(WATER_MEDIUM_STYLES.signal.color).not.toBe(WATER_MEDIUM_STYLES.sewage.color);
+    // 反冲洗水 / 中水都是**水流**（实线），且与既有的内回流 / 出水不撞色
+    expect(WATER_MEDIUM_STYLES.backwash.lineType).toBe('solid');
+    expect(WATER_MEDIUM_STYLES.reclaimed.lineType).toBe('solid');
+    const colors = Object.keys(WATER_MEDIUM_STYLES).map((key) => (WATER_MEDIUM_STYLES as any)[key].color);
+    expect(new Set(colors).size).toBe(colors.length);
   });
 
   it('线型映射：点划线给的是「长划 + 点」，实线给空数组', () => {

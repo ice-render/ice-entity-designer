@@ -236,7 +236,7 @@ npm run build
 | `examples/statechart-editor.html` | 状态机编辑器：伪状态 / 普通状态 / 复合状态容器、转移标签 `事件 [守卫] / 动作` |
 | `examples/gantt-editor.html` | 甘特编辑器：时间轴与按天吸附、依赖线、自动排程、关键路径、资源冲突校验、矢量导出 |
 | `examples/power-editor.html` | 电力一次系统图（单线图）编辑器：110kV 变电站案例（**110kV 双母线 + 10kV 单母线分段**两级电压，两回进线 / 两台主变 / 母联 / 母线 PT / 4 条 10kV 出线 / 电容器组 / 站用变，共 69 台设备），开关分合、带电分析与色标、五防相关校验 |
-| `examples/water-symbols.html` | 给排水符号图例：21 种符号一页看全（位号在上 / 名称在下 / 图形居中），可导出 SVG 作交底或评审用 |
+| `examples/water-symbols.html` | 给排水符号图例：38 种符号一页看全（位号在上 / 名称在下 / 图形居中），可导出 SVG 作交底或评审用 |
 | `examples/water-editor.html` | 给水排水工艺流程图：市政污水厂 AAO 工艺（19 个符号 / 21 条管线），介质 + 管径标注、工艺校验（进出线 / 在线监测 / 污泥出路 / 内回流）、流径分析与阀门工况、矢量导出 |
 | `examples/secondary-editor.html` | 电力**二次回路**（简化版）：110kV 线路保护电流回路 —— CT 三个二次绕组 → 三相电流回路（A411/B411/C411 + N411）→ 端子排（201～204）→ 线路保护装置，N 侧接地；二次校验（回路编号 / 三相成组 / 端子号唯一 / 必须接地） |
 | `examples/power-symbols.html` | 电力符号表：23 种一次设备符号（记法对齐 JB/T 5872-1991 与 GB/T 4728.1/3/4/6），可缩放平移、导出 SVG |
@@ -816,7 +816,7 @@ src/
 │   ├── secondary_shapes.ts        # 10 种二次元件符号（GB/T 4728.7，文字符号用 C37.2 功能编号）
 │   └── SecondaryDesigner.ts       # 应用层：回路编号 / 端子排容器 / 二次语义校验
 ├── water/                         # 给水排水工艺流程图（水厂 / 污水厂：AAO 主线 + 污泥线）
-│   ├── water_shapes.ts            # 21 种符号（GB/T 50106 图例；水线蓝 / 污泥线黄）
+│   ├── water_shapes.ts            # 38 种符号（GB/T 50106 图例；水线蓝 / 污泥线黄）
 │   └── WaterProcessDesigner.ts    # 应用层：介质 + 管径、工艺校验、流径分析（关阀断流）
 ├── er-component/
 │   ├── Entity.ts                  # 实体：表头 + 字段列表 + 约束标记 + TypeORM 序列化

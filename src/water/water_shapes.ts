@@ -37,6 +37,8 @@ export const WATER_SYMBOL_KINDS = [
   'disinfectionTank',
   'storageTank',
   'deodorizer',
+  'parshallFlume',
+  'uvDisinfection',
   // ---- 处理单元（污泥线）----
   'sludgeThickener',
   'dewateringMachine',
@@ -51,6 +53,11 @@ export const WATER_SYMBOL_KINDS = [
   'valve',
   'motorValve',
   'checkValve',
+  'gate',
+  'weirGate',
+  'flapGate',
+  'gritSeparator',
+  'screeningsUnit',
   'flowMeter',
   'levelGauge',
   'pressureGauge',
@@ -80,6 +87,8 @@ export const WATER_UNIT_KINDS: WaterSymbolKind[] = [
   'sludgeSilo',
   'storageTank',
   'deodorizer',
+  'parshallFlume',
+  'uvDisinfection',
 ];
 
 /** 设备与仪表：只参与连接，不要求"进出各一条" */
@@ -93,6 +102,11 @@ export const WATER_EQUIPMENT_KINDS: WaterSymbolKind[] = [
   'valve',
   'motorValve',
   'checkValve',
+  'gate',
+  'weirGate',
+  'flapGate',
+  'gritSeparator',
+  'screeningsUnit',
   'flowMeter',
   'levelGauge',
   'pressureGauge',
@@ -116,7 +130,11 @@ export type WaterMedium =
   /** 仪表信号线（点划线）：在线仪表 / 液位计 / 压力表与 PLC 的连线 */
   | 'signal'
   /** 动力线（点划线、更粗）：变频器等电气回路 */
-  | 'power';
+  | 'power'
+  /** 滤池反冲洗水（实线）：厂内回用水，是水流、不是空气或药剂 */
+  | 'backwash'
+  /** 中水 / 回用水（实线）：出厂复用的再生水 */
+  | 'reclaimed';
 
 /**
  * 介质样式：**颜色与线型区分介质**，是给排水图纸的通行做法（具体色值各院略有差异，可覆盖）。
@@ -139,6 +157,8 @@ export const WATER_MEDIUM_STYLES: Record<
   chemical: { label: '药剂', color: '#7c3aed', lineType: 'dashed' },
   signal: { label: '仪表信号', color: '#9333ea', lineType: 'dashdot' },
   power: { label: '动力回路', color: '#b45309', lineType: 'dashdot' },
+  backwash: { label: '反冲洗水', color: '#0e7490', lineType: 'solid' },
+  reclaimed: { label: '中水回用', color: '#4d7c0f', lineType: 'solid' },
 };
 
 export type WaterSymbolPreset = {
@@ -166,6 +186,8 @@ export const WATER_SYMBOL_PRESETS: Record<WaterSymbolKind, WaterSymbolPreset> = 
   disinfectionTank: { label: '消毒接触池', tag: 'DT', width: 130, height: 60, shape: 'tank', inline: false },
   storageTank: { label: '调节 / 事故池', tag: 'EQ', width: 130, height: 70, shape: 'tank', inline: false },
   deodorizer: { label: '除臭装置', tag: 'OD', width: 120, height: 60, shape: 'tank', inline: false },
+  parshallFlume: { label: '巴氏计量槽', tag: 'FM', width: 96, height: 44, shape: 'tank', inline: true },
+  uvDisinfection: { label: '紫外消毒装置', tag: 'UV', width: 110, height: 56, shape: 'tank', inline: true },
   sludgeThickener: { label: '污泥浓缩池', tag: 'ST', width: 100, height: 100, shape: 'round', inline: false },
   dewateringMachine: { label: '污泥脱水机', tag: 'DW', width: 110, height: 60, shape: 'tank', inline: false },
   sludgeSilo: { label: '污泥料仓', tag: 'SIL', width: 90, height: 80, shape: 'tank', inline: false },
@@ -175,9 +197,14 @@ export const WATER_SYMBOL_PRESETS: Record<WaterSymbolKind, WaterSymbolPreset> = 
   blower: { label: '鼓风机', tag: 'B', width: 48, height: 48, shape: 'device', inline: false },
   vfd: { label: '变频器', tag: 'VFD', width: 56, height: 40, shape: 'device', inline: false },
   dosingUnit: { label: '加药装置', tag: 'DU', width: 60, height: 70, shape: 'device', inline: false },
+  gritSeparator: { label: '砂水分离器', tag: 'GS', width: 72, height: 60, shape: 'device', inline: false },
+  screeningsUnit: { label: '栅渣压榨机', tag: 'SP', width: 76, height: 56, shape: 'device', inline: false },
   valve: { label: '阀门', tag: 'V', width: 32, height: 32, shape: 'device', inline: true },
   motorValve: { label: '电动阀', tag: 'MOV', width: 34, height: 46, shape: 'device', inline: true },
   checkValve: { label: '止回阀', tag: 'CV', width: 32, height: 32, shape: 'device', inline: true },
+  gate: { label: '闸门', tag: 'GT', width: 56, height: 44, shape: 'device', inline: true },
+  weirGate: { label: '堰门 / 调节堰', tag: 'WG', width: 72, height: 40, shape: 'device', inline: true },
+  flapGate: { label: '拍门', tag: 'FG', width: 40, height: 36, shape: 'device', inline: true },
   flowMeter: { label: '流量计', tag: 'FIT', width: 36, height: 36, shape: 'device', inline: true },
   levelGauge: { label: '液位计', tag: 'LT', width: 32, height: 32, shape: 'device', inline: false },
   pressureGauge: { label: '压力表', tag: 'PT', width: 32, height: 32, shape: 'device', inline: false },
@@ -205,6 +232,8 @@ export const WATER_STYLE = {
   letterFontSize: 14,
   /** 空心符号的填充（必须是合法色值：fillStyle=false/'none' 会退化成实色） */
   hollowFill: '#ffffff',
+  /** 阀门 / 闸门画"关位"竖杠的颜色（水工艺的关位标记沿用电力的红） */
+  closedColor: '#dc2626',
   /** 明确停用/旁通时的颜色 */
   idleColor: '#94a3b8',
 };
@@ -261,17 +290,40 @@ export const WATER_SLUDGE_KINDS: WaterSymbolKind[] = [
 export type WaterValveState = 'open' | 'closed';
 
 /**
- * **可开闭的阀门类图元**：手动阀与电动阀。
+ * **可开闭的阀门类图元**：手动阀、电动阀、闸门、堰门 / 调节堰。
  *
- * 流径分析（关阀即断流）与开 / 闭操作都按这个集合判 —— 电动阀只是驱动方式不同，
- * 在"通不通"这件事上和手动阀完全等价；漏了它就会出现"电动阀关着，流径却报通"。
- * 图纸上要表达"能远程联锁的阀"就用 `motorValve`，不要因为它长得不一样就当成设备。
+ * 流径分析（关阀即断流）与开 / 闭操作都按这个集合判 —— 驱动方式、外形与安装位置都不影响
+ * "通不通"这件事：电动阀与手动阀等价，**闸门 / 堰门关到底同样断流**（它们是启闭水道的构筑物，
+ * 不是管道上的阀门，但在拓扑上是同一类"可控断点"）。漏了谁就会出现"它关着，流径却报通"。
+ * 图纸上要表达"能远程联锁的阀"就用 `motorValve`；表达渠道上的启闭就用 `gate` / `weirGate`。
+ * **拍门（`flapGate`）不在这个集合里**：它靠水流自动开闭，与止回阀同属单向件。
  */
-export const WATER_VALVE_KINDS: WaterSymbolKind[] = ['valve', 'motorValve'];
+export const WATER_VALVE_KINDS: WaterSymbolKind[] = ['valve', 'motorValve', 'gate', 'weirGate'];
 
 export function isWaterValveKind(kind: string): boolean {
   return WATER_VALVE_KINDS.indexOf(kind as WaterSymbolKind) !== -1;
 }
+
+/**
+ * 在线分析仪的**功能代号字典**（`analyzer` 的 `state.analyzerCode`）。
+ *
+ * 给排水图纸上的仪表本来就画成"圆圈 + 功能字母"（不像电力有强制的文字符号体系），
+ * 所以在线仪表不再按仪表种类拆成多个图元，而是**一种画法 + 可配代号**：
+ * 不配代号就画 `A`（与旧快照逐像素一致），配了就在圆圈里写那个代号。
+ * 位号（`tag`，例如 `AIT-101`）仍然独立显示在符号上方。
+ */
+export const WATER_ANALYZER_CODES: Array<{ code: string; label: string }> = [
+  { code: 'DO', label: '溶解氧' },
+  { code: 'TU', label: '浊度' },
+  { code: 'CL', label: '余氯' },
+  { code: 'pH', label: 'pH' },
+  { code: 'ML', label: '污泥浓度 MLSS' },
+  { code: 'AN', label: '氨氮' },
+  { code: 'COD', label: 'COD' },
+  { code: 'ORP', label: 'ORP' },
+  { code: 'TP', label: '总磷' },
+  { code: 'TN', label: '总氮' },
+];
 
 /**
  * @class WaterSymbol 给水排水工艺流程图图元（复合组件）
@@ -402,6 +454,11 @@ export default class WaterSymbol extends ICEGroup {
         tagStyle: { fontSize: WATER_STYLE.tagFontSize, textColor: WATER_STYLE.tagColor },
         /** 阀门开 / 闭（运行工况：关阀 → 流径断开） */
         valveState: 'open' as WaterValveState,
+        /**
+         * 在线分析仪的功能代号（仅 `kind === 'analyzer'` 时参与绘制）。
+         * 空串 = 画默认的 `A`，与加了这个字段之前的渲染完全一致（老快照读进来就是这个值）。
+         */
+        analyzerCode: '',
         /** 停用 / 旁通：整符号画成灰色 */
         idle: false,
         /**
@@ -414,7 +471,17 @@ export default class WaterSymbol extends ICEGroup {
     );
   }
 
-  private static readonly __shapeKeys = ['kind', 'tag', 'name', 'width', 'height', 'style', 'idle', 'valveState'];
+  private static readonly __shapeKeys = [
+    'kind',
+    'tag',
+    'name',
+    'width',
+    'height',
+    'style',
+    'idle',
+    'valveState',
+    'analyzerCode',
+  ];
 
   public setState(patch: any): void {
     const needsSync =
@@ -572,7 +639,7 @@ export default class WaterSymbol extends ICEGroup {
         this.__closedPoly([9, -8, 9, 8, 0, 0], strokeStyle, lw, baseZ);
         if (this.state.valveState === 'closed') {
           // 关位：加一条竖杠，一眼看出关断
-          this.__poly([0, -10, 0, 10], '#dc2626', 2, baseZ);
+          this.__poly([0, -10, 0, 10], WATER_STYLE.closedColor, 2, baseZ);
         }
         break;
       case 'flowMeter':
@@ -587,18 +654,22 @@ export default class WaterSymbol extends ICEGroup {
           'center'
         );
         break;
-      case 'analyzer':
-        this.__circle(0, 0, Math.min(w, h) / 2, 'none', strokeStyle, lw, baseZ);
-        this.__text(
-          cx - 7,
-          cy - WATER_STYLE.letterFontSize * 0.7,
-          14,
-          'A',
-          WATER_STYLE.letterFontSize,
-          strokeStyle,
-          'center'
-        );
+      case 'analyzer': {
+        // 在线分析仪：圆圈 + **功能代号**（不配代号时画 A —— 与老快照逐像素一致）
+        const r = Math.min(w, h) / 2;
+        this.__circle(0, 0, r, 'none', strokeStyle, lw, baseZ);
+        const code = String(this.state.analyzerCode || '') || 'A';
+        // 默认圆是 36×36：代号越长越要缩字号，否则 MLSS 这类 4 字符塞不进去
+        const glyphSize =
+          code.length <= 2
+            ? WATER_STYLE.letterFontSize
+            : code.length === 3
+            ? WATER_STYLE.letterFontSize * 0.8
+            : WATER_STYLE.letterFontSize * 0.62;
+        const glyphBox = r * 1.7;
+        this.__text(cx - glyphBox / 2, cy - glyphSize * 0.7, glyphBox, code, glyphSize, strokeStyle, 'center');
         break;
+      }
       case 'storageTank':
         // 调节 / 事故池：池体 + 水位线 + 液面波纹
         this.__box(0, 0, w, h, fillStyle, strokeStyle, lw, baseZ);
@@ -627,6 +698,22 @@ export default class WaterSymbol extends ICEGroup {
           }
         }
         this.__poly([-w / 2, -h / 2, -w / 2, -h / 4], strokeStyle, lw, baseZ);
+        break;
+      case 'parshallFlume':
+        // 巴氏计量槽：渠壁渐缩 → 喉部 → 渐扩，喉部两壁用细线标出
+        this.__poly([-w / 2, -h / 2, -w * 0.15, -h / 4, w * 0.15, -h / 4, w / 2, -h / 2], strokeStyle, lw, baseZ);
+        this.__poly([-w / 2, h / 2, -w * 0.15, h / 4, w * 0.15, h / 4, w / 2, h / 2], strokeStyle, lw, baseZ);
+        this.__poly([-w * 0.15, -h / 4, -w * 0.15, h / 4], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__poly([w * 0.15, -h / 4, w * 0.15, h / 4], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        break;
+      case 'uvDisinfection':
+        // 紫外消毒装置：机箱 + 一排紫外灯管 + 灯管接线
+        this.__box(0, 0, w, h, fillStyle, strokeStyle, lw, baseZ);
+        for (let i = 0; i < 5; i++) {
+          const lampX = -w / 2 + 16 + i * ((w - 32) / 4);
+          this.__poly([lampX, -h / 2 + 14, lampX, h / 2 - 18], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        }
+        this.__poly([-w / 2 + 16, -h / 2 + 8, w / 2 - 16, -h / 2 + 8], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
         break;
       case 'sludgeSilo':
         // 污泥料仓：仓体 + 锥斗 + 卸料口 + 顶部进料
@@ -660,6 +747,44 @@ export default class WaterSymbol extends ICEGroup {
         }
         this.__poly([-w / 3, h / 2 - 4, w / 3, h / 2 - 4], strokeStyle, lw, baseZ);
         break;
+      case 'gritSeparator': {
+        // 砂水分离器：斜置螺旋筒 + 筒内螺旋 + 砂斗 + 溢流出水口
+        this.__poly([-w / 2 + 6, h / 2 - 10, w / 4, -h / 2 + 16], strokeStyle, lw, baseZ);
+        this.__poly([-w / 2 + 6, h / 2 - 24, w / 4, -h / 2 + 2], strokeStyle, lw, baseZ);
+        for (let i = 1; i <= 3; i++) {
+          const t = i / 4;
+          const x = -w / 2 + 6 + w * 0.75 * t;
+          const y = h / 2 - 10 - (h - 30) * t;
+          this.__poly([x - 6, y - 6, x + 6, y + 6], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        }
+        // 砂斗（底部小梯形）
+        this.__closedPoly(
+          [-w / 2 + 4, h / 2 - 14, -w / 2 + 30, h / 2 - 14, -w / 2 + 17, h / 2 - 3],
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
+        // 溢流出水口
+        this.__poly([w / 4 - 2, -h / 2 + 12, w / 2 - 6, -h / 2 + 12], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        break;
+      }
+      case 'screeningsUnit':
+        // 栅渣压榨机：斜向输送筒 + 压榨段 + 出渣口 + 渗滤液回流口
+        this.__poly([-w / 2 + 6, h / 2 - 10, w / 4, -h / 2 + 16], strokeStyle, lw, baseZ);
+        this.__poly([-w / 2 + 6, h / 2 - 24, w / 4, -h / 2 + 2], strokeStyle, lw, baseZ);
+        this.__box(
+          w / 4,
+          -h / 2 + 9,
+          Math.max(12, w * 0.18),
+          14,
+          WATER_STYLE.hollowFill,
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
+        this.__poly([w / 2 - 18, -h / 2 + 9, w / 2 - 6, -h / 2 + 9], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__poly([-w / 4, h / 2 - 16, -w / 4, h / 2 - 6], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        break;
       case 'vfd':
         // 变频器：机箱 + 输出波形（调速 → 电耗）
         this.__box(0, 0, w, h, fillStyle, strokeStyle, lw, baseZ);
@@ -677,7 +802,7 @@ export default class WaterSymbol extends ICEGroup {
         this.__poly([0, 8, 0, 2], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
         this.__box(0, -6, 22, 16, 'none', strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
         if (this.state.valveState === 'closed') {
-          this.__poly([0, 6, 0, 26], '#dc2626', 2, baseZ);
+          this.__poly([0, 6, 0, 26], WATER_STYLE.closedColor, 2, baseZ);
         }
         break;
       case 'checkValve':
@@ -685,6 +810,52 @@ export default class WaterSymbol extends ICEGroup {
         this.__box(0, 0, w - 6, h - 14, 'none', strokeStyle, lw, baseZ);
         this.__closedPoly([-5, -6, 6, 0, -5, 6], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
         this.__poly([-w / 2 + 3, 0, w / 2 - 3, 0], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        break;
+      case 'gate': {
+        // 闸门：渠道断面 + 闸板（启闭件）+ 螺杆与手轮
+        this.__box(0, 0, w, h, fillStyle, strokeStyle, lw, baseZ);
+        const plateX = -w / 8;
+        const plateW = Math.max(9, w * 0.16);
+        const plateH = h * 0.5;
+        this.__box(plateX, h * 0.1, plateW, plateH, WATER_STYLE.hollowFill, strokeStyle, lw, baseZ);
+        this.__poly(
+          [plateX, h * 0.1 - plateH / 2, plateX, -h / 2 + 9],
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
+        this.__circle(plateX, -h / 2 + 6, 4, WATER_STYLE.hollowFill, strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        if (this.state.valveState === 'closed') {
+          this.__poly([plateX, -h / 2 + 12, plateX, h / 2 - 6], WATER_STYLE.closedColor, 2, baseZ);
+        }
+        break;
+      }
+      case 'weirGate':
+        // 堰门 / 调节堰：渠底 + 可调堰板 + 堰顶横线 + 溢流方向
+        this.__box(0, h / 2 - 4, w, 8, WATER_STYLE.hollowFill, strokeStyle, lw, baseZ);
+        this.__box(-w / 8, 0, Math.max(9, w * 0.12), h * 0.5, WATER_STYLE.hollowFill, strokeStyle, lw, baseZ);
+        this.__poly([-w / 4, -h / 4, w / 4, -h / 4], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__closedPoly(
+          [w / 2 - 14, -6, w / 2 - 4, 0, w / 2 - 14, 6],
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
+        if (this.state.valveState === 'closed') {
+          this.__poly([-w / 8, -h / 4, -w / 8, h / 2 - 8], WATER_STYLE.closedColor, 2, baseZ);
+        }
+        break;
+      case 'flapGate':
+        // 拍门：阀座 + 单向翻板（靠水流自动开闭，与止回阀同一"单向"口径）
+        this.__box(0, 0, w - 6, h - 12, 'none', strokeStyle, lw, baseZ);
+        this.__poly([-w / 2 + 3, 0, w / 2 - 3, 0], strokeStyle, WATER_STYLE.detailLineWidth, baseZ);
+        this.__poly([-6, 8, 8, -8], strokeStyle, lw, baseZ);
+        this.__closedPoly(
+          [w / 2 - 16, -5, w / 2 - 6, 0, w / 2 - 16, 5],
+          strokeStyle,
+          WATER_STYLE.detailLineWidth,
+          baseZ
+        );
         break;
       case 'levelGauge': {
         // 液位计：圆 + 液面波纹 + 字母 L

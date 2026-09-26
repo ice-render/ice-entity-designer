@@ -297,7 +297,7 @@ export default class WaterProcessDesigner extends FlowDesigner {
       throw new Error('找不到该符号：' + id);
     }
     if (!isWaterValveKind(node.state.kind)) {
-      throw new Error('只有阀门（手动阀 / 电动阀）能改开 / 闭状态');
+      throw new Error('只有可开闭的阀门类图元（手动阀 / 电动阀 / 闸门 / 堰门）能改开 / 闭状态');
     }
     node.applyPatch({ valveState });
     this.ice.dirty = true;

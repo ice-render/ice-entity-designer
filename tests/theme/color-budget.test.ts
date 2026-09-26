@@ -17,7 +17,9 @@ const SRC = path.resolve(__dirname, '..', '..', 'src');
 /** 每个文件的写死色值预算（**当前实测值**，只能下调）。 */
 const BUDGET: Record<string, number> = {
   'flow/FlowNode.ts': 25,
-  'water/water_shapes.ts': 19,
+  // 19 → 20（2026-09-26 第二批）：+2 是两种新介质色（反冲洗水 / 中水回用，领域色板），
+  // 同时把散落的关位红抽成 `WATER_STYLE.closedColor`（−2 处字面量 +1 处常量），净 +1。
+  'water/water_shapes.ts': 20,
   'gantt/GanttRuler.ts': 17,
   'theme/designerTheme.ts': 16,
   'secondary/secondary_shapes.ts': 9,

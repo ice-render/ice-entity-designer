@@ -91,6 +91,7 @@ export {
   WATER_EQUIPMENT_KINDS,
   WATER_BOUNDARY_KINDS,
   WATER_SLUDGE_KINDS,
+  WATER_ANALYZER_CODES,
   WATER_STYLE,
 } from './water/water_shapes';
 export type { WaterSymbolKind, WaterMedium, WaterValveState, WaterSymbolPreset } from './water/water_shapes';

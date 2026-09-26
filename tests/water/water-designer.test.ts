@@ -157,6 +157,31 @@ describe('给水排水应用层 · 流径分析（运行工况）', () => {
     expect(trace.connected).toBe(false);
     expect(trace.blockedAt).toBe('v1');
   });
+
+  it('关闸门 / 关堰门同样断流（闸门是启闭水道的构筑物，与阀门同一口径）', () => {
+    const d = buildMinimalPlant(makeDesigner());
+    d.createSymbol('gate', { id: 'g1', name: '出水闸门', tag: 'GT-101' });
+    d.remove('p6');
+    d.createPipe({ id: 'p6a', sourceId: 'sec', targetId: 'g1', medium: 'effluent', dn: 'DN500' });
+    d.createPipe({ id: 'p6b', sourceId: 'g1', targetId: 'cod', medium: 'effluent', dn: 'DN500' });
+    expect(d.traceFlow().connected).toBe(true);
+
+    d.setValveState('g1', 'closed');
+    const trace = d.traceFlow();
+    expect(trace.connected).toBe(false);
+    expect(trace.blockedAt).toBe('g1');
+  });
+
+  it('拍门是单向件：不参与"人为开闭"', () => {
+    const d = buildMinimalPlant(makeDesigner());
+    d.createSymbol('flapGate', { id: 'f1', name: '出水拍门', tag: 'FG-101' });
+    d.remove('p6');
+    d.createPipe({ id: 'p6a', sourceId: 'sec', targetId: 'f1', medium: 'effluent', dn: 'DN500' });
+    d.createPipe({ id: 'p6b', sourceId: 'f1', targetId: 'cod', medium: 'effluent', dn: 'DN500' });
+    // 拍门不阻塞流径（它跟着水流开），也不能被"关"
+    expect(d.traceFlow().connected).toBe(true);
+    expect(() => d.setValveState('f1', 'closed')).toThrow();
+  });
 });
 
 describe('给水排水应用层 · 快照往返', () => {
@@ -171,6 +196,28 @@ describe('给水排水应用层 · 快照往返', () => {
     const kinds = restored.nodes.map((node: any) => node.state.kind).sort();
     expect(kinds).toContain('aerobicTank');
     expect(kinds).toContain('analyzer');
+  });
+
+  it('快照往返保留仪表功能代号与第二批新增介质', () => {
+    const d = makeDesigner();
+    d.createSymbol('inlet', { id: 'in', name: '进水', tag: 'IN' });
+    d.createSymbol('analyzer', { id: 'do1', name: '溶解氧', tag: 'AIT-101', analyzerCode: 'DO' });
+    d.createSymbol('outlet', { id: 'out', name: '出水', tag: 'OUT' });
+    const backwash = d.createPipe({ id: 'x1', sourceId: 'in', targetId: 'do1', medium: 'backwash', dn: 'DN200' });
+    const reclaimed = d.createPipe({ id: 'x2', sourceId: 'do1', targetId: 'out', medium: 'reclaimed', dn: 'DN200' });
+    // 两种新介质各自按自己的样式着色（不是 fallback 到污水）
+    expect(backwash.state.style.strokeStyle).not.toBe(reclaimed.state.style.strokeStyle);
+    expect(backwash.state.label).toContain('反冲洗水');
+    expect(reclaimed.state.label).toContain('中水');
+
+    const restored = makeDesigner();
+    restored.load(d.serialize());
+    const analyzer = restored.nodes.filter((node: any) => node.state.id === 'do1')[0];
+    expect(analyzer.state.analyzerCode).toBe('DO');
+    const media = restored.edges.map((edge: any) => edge.state.medium).sort();
+    expect(media).toEqual(['backwash', 'reclaimed']);
+    const restoredBackwash = restored.edges.filter((edge: any) => edge.state.medium === 'backwash')[0];
+    expect(restoredBackwash.state.style.strokeStyle).toBe(backwash.state.style.strokeStyle);
   });
 });
 

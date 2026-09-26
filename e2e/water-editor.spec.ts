@@ -150,7 +150,7 @@ test('记法不可变换：符号只允许拖动（transformable=false，拖完�
   expect((page as any).__errors).toEqual([]);
 });
 
-test('符号库：31 种符号都能新建、都能渲染（派生形状非空）', async ({ page }) => {
+test('符号库：38 种符号都能新建、都能渲染（派生形状非空）', async ({ page }) => {
   const result = await page.evaluate(() => {
     const designer = (window as any).__designer;
     const kinds = Object.keys((window as any).IED.WATER_SYMBOL_PRESETS);
@@ -165,7 +165,7 @@ test('符号库：31 种符号都能新建、都能渲染（派生形状非空�
     return { tested: kinds.length, empty };
   });
 
-  expect(result.tested).toBe(31);
+  expect(result.tested).toBe(38);
   expect(result.empty).toEqual([]);
   expect((page as any).__errors).toEqual([]);
 });
